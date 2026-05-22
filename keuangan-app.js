@@ -4152,20 +4152,32 @@ async function renderApprovalCenter() {
 
   if (myPD.length) {
     const pdRows = myPD.map(function(p) {
-      return '<tr><td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||'-') + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + (p.namaBank||'-') + '<br><span class="text-muted">' + (p.noRekening||'') + '</span></td><td>' + statusBadge(p.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'permohonan\',\'' + p.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'permohonan\',\'' + p.id + '\')">Tolak</button></td></tr>';
+      return '<tr><td><input type="checkbox" class="appr-check" data-col="permohonan" data-id="' + p.id + '"></td><td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||'-') + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + (p.namaBank||'-') + '<br><span class="text-muted">' + (p.noRekening||'') + '</span></td><td>' + statusBadge(p.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'permohonan\',\'' + p.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'permohonan\',\'' + p.id + '\')">Tolak</button></td></tr>';
     }).join('');
     html += '<div class="card"><div class="card-header"><h2>Permohonan Dana — Menunggu Approval Anda (' + myPD.length + ')</h2>'
       + '<div class="flex-row" style="gap:6px"><button class="btn btn-sm btn-success" onclick="approveSemuaItem(\'permohonan\')">✅ Approve Semua</button><button class="btn btn-sm btn-danger" onclick="rejectSemuaItem(\'permohonan\')">❌ Reject Semua</button></div></div>'
-      + '<div class="table-wrap"><table><thead><tr><th>Tgl</th><th>Pemohon</th><th>No. PO/Inv</th><th>Nominal</th><th>Keterangan</th><th>Bank / Rekening</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + pdRows + '</tbody></table></div></div>';
+      + '<div style="padding:8px 12px;background:#f0f4ff;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      + '<label style="font-size:0.82rem;font-weight:600"><input type="checkbox" onchange="toggleSelectAll(this,\'permohonan\')"> Pilih Semua</label>'
+      + '<button class="btn btn-xs btn-success" onclick="approveSelected(\'permohonan\')">✅ Approve Terpilih</button>'
+      + '<button class="btn btn-xs btn-danger" onclick="rejectSelected(\'permohonan\')">❌ Reject Terpilih</button>'
+      + '<span id="selected-count-permohonan" style="font-size:0.8rem;color:#555">0 dipilih</span>'
+      + '</div>'
+      + '<div class="table-wrap"><table><thead><tr><th style="width:30px">✓</th><th>Tgl</th><th>Pemohon</th><th>No. PO/Inv</th><th>Nominal</th><th>Keterangan</th><th>Bank / Rekening</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + pdRows + '</tbody></table></div></div>';
   }
 
   if (myDM.length) {
     const dmRows = myDM.map(function(d) {
-      return '<tr><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.keterangan||'-') + '</td><td>' + statusBadge(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'danamasuk\',\'' + d.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'danamasuk\',\'' + d.id + '\')">Tolak</button></td></tr>';
+      return '<tr><td><input type="checkbox" class="appr-check" data-col="danamasuk" data-id="' + d.id + '"></td><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.keterangan||'-') + '</td><td>' + statusBadge(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'danamasuk\',\'' + d.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'danamasuk\',\'' + d.id + '\')">Tolak</button></td></tr>';
     }).join('');
     html += '<div class="card"><div class="card-header"><h2>Dana Masuk — Menunggu Konfirmasi Anda (' + myDM.length + ')</h2>'
       + '<div class="flex-row" style="gap:6px"><button class="btn btn-sm btn-success" onclick="approveSemuaItem(\'danamasuk\')">✅ Approve Semua</button><button class="btn btn-sm btn-danger" onclick="rejectSemuaItem(\'danamasuk\')">❌ Reject Semua</button></div></div>'
-      + '<div class="table-wrap"><table><thead><tr><th>Tgl</th><th>Sumber</th><th>No. Ref</th><th>Nominal</th><th>Kategori</th><th>Keterangan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + dmRows + '</tbody></table></div></div>';
+      + '<div style="padding:8px 12px;background:#f0fff4;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      + '<label style="font-size:0.82rem;font-weight:600"><input type="checkbox" onchange="toggleSelectAll(this,\'danamasuk\')"> Pilih Semua</label>'
+      + '<button class="btn btn-xs btn-success" onclick="approveSelected(\'danamasuk\')">✅ Approve Terpilih</button>'
+      + '<button class="btn btn-xs btn-danger" onclick="rejectSelected(\'danamasuk\')">❌ Reject Terpilih</button>'
+      + '<span id="selected-count-danamasuk" style="font-size:0.8rem;color:#555">0 dipilih</span>'
+      + '</div>'
+      + '<div class="table-wrap"><table><thead><tr><th style="width:30px">✓</th><th>Tgl</th><th>Sumber</th><th>No. Ref</th><th>Nominal</th><th>Kategori</th><th>Keterangan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + dmRows + '</tbody></table></div></div>';
   }
 
   if (hasRole('admin')) {
@@ -4202,11 +4214,20 @@ function renderAllApprovalTable(list, col) {
   const rows = sorted.map(function(x) {
     const isPending = x.status && x.status.startsWith('Pending');
     const approveBtn = isPending && hasRole('leader') ? '<button class="btn btn-xs btn-success" onclick="approveItem(\'' + col + '\',\'' + x.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'' + col + '\',\'' + x.id + '\')">Tolak</button>' : '';
-    const jurnalBadge = x.jurnalId ? '<span class="badge badge-success">✓ Jurnal Otomatis</span>' : (x.status === STATUS.APPROVED ? '<span class="badge badge-warning">⏳ Membuat jurnal...</span>' : '');
+    const jurnalBadge = x.jurnalId ? '<span class="badge badge-success">✓ Jurnal</span>' : (x.status === STATUS.APPROVED ? '<span class="badge badge-warning">⏳</span>' : '');
     const detailFn = isPD ? 'detailPermohonan' : 'detailDanaMasuk';
-    return '<tr data-status="' + x.status + '"><td>' + fmtDate(x.tanggal) + '</td><td class="fw-bold">' + (isPD ? x.namaPemohon : x.sumber) + '</td><td class="fw-bold ' + (isPD?'text-blue':'text-green') + '">' + fmtRp(x.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (x.keterangan||'-') + '</td><td>' + statusBadge(x.status) + '</td><td>' + approvalFlow(x.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="' + detailFn + '(\'' + x.id + '\')">Detail</button>' + approveBtn + jurnalBadge + '</td></tr>';
+    const checkBox = isPending ? '<input type="checkbox" class="appr-check" data-col="' + col + '" data-id="' + x.id + '">' : '';
+    return '<tr data-status="' + x.status + '"><td>' + checkBox + '</td><td>' + fmtDate(x.tanggal) + '</td><td class="fw-bold">' + (isPD ? x.namaPemohon : x.sumber) + '</td><td class="fw-bold ' + (isPD?'text-blue':'text-green') + '">' + fmtRp(x.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (x.keterangan||'-') + '</td><td>' + statusBadge(x.status) + '</td><td>' + approvalFlow(x.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="' + detailFn + '(\'' + x.id + '\')">Detail</button>' + approveBtn + jurnalBadge + '</td></tr>';
   }).join('');
-  return '<div class="table-wrap"><table id="tbl-all-' + col + '"><thead><tr><th>Tgl</th><th>' + (isPD?'Pemohon':'Sumber') + '</th><th>Nominal</th><th>Keterangan</th><th>Status</th><th>Approval Flow</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  return '<div style="padding:8px 12px;background:#f8f9ff;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    + '<label style="font-size:0.82rem;font-weight:600"><input type="checkbox" onchange="toggleSelectAll(this,\'' + col + '\')"> Pilih Semua Pending</label>'
+    + '<button class="btn btn-xs btn-success" onclick="approveSelected(\'' + col + '\')">✅ Approve Terpilih</button>'
+    + '<button class="btn btn-xs btn-danger" onclick="rejectSelected(\'' + col + '\')">❌ Reject Terpilih</button>'
+    + '<button class="btn btn-xs btn-success" onclick="approveSemuaItem(\'' + col + '\')">✅ Approve Semua</button>'
+    + '<button class="btn btn-xs btn-danger" onclick="rejectSemuaItem(\'' + col + '\')">❌ Reject Semua</button>'
+    + '<span id="selected-count-all-' + col + '" style="font-size:0.8rem;color:#555">0 dipilih</span>'
+    + '</div>'
+    + '<div class="table-wrap" style="max-height:400px;overflow-y:auto"><table id="tbl-all-' + col + '"><thead><tr><th style="width:30px">✓</th><th>Tgl</th><th>' + (isPD?'Pemohon':'Sumber') + '</th><th>Nominal</th><th>Keterangan</th><th>Status</th><th>Approval Flow</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function filterApprovalAll(val) {
@@ -4326,6 +4347,84 @@ async function rejectSemuaItem(col) {
   var ok = 0;
   for (var i = 0; i < pending.length; i++) {
     var item = pending[i];
+    var currentLayer = getCurrentLayer(item.status);
+    if (!currentLayer) continue;
+    var log = (item.approvalLog || []).concat([{ layer: currentLayer, action: 'reject', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: catatan }]);
+    await KDB.save(col, item.id, Object.assign({}, item, { status: 'Rejected Layer ' + currentLayer, approvalLog: log, lastUpdatedAt: new Date().toISOString() }));
+    ok++;
+  }
+  showLoading(false);
+  showAlert(ok + ' item berhasil di-reject!');
+  navigate('dana-approval');
+}
+
+function toggleSelectAll(masterCb, col) {
+  var checkboxes = document.querySelectorAll('.appr-check[data-col="' + col + '"]');
+  checkboxes.forEach(function(cb) { cb.checked = masterCb.checked; });
+  updateSelectedCount(col);
+}
+
+function updateSelectedCount(col) {
+  var checked = document.querySelectorAll('.appr-check[data-col="' + col + '"]:checked');
+  var el = document.getElementById('selected-count-' + col) || document.getElementById('selected-count-all-' + col);
+  if (el) el.textContent = checked.length + ' dipilih';
+}
+
+// Attach event listener for individual checkbox changes
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.classList.contains('appr-check')) {
+    var col = e.target.dataset.col;
+    updateSelectedCount(col);
+  }
+});
+
+async function approveSelected(col) {
+  var checked = document.querySelectorAll('.appr-check[data-col="' + col + '"]:checked');
+  if (!checked.length) { showAlert('Pilih minimal 1 item untuk di-approve!', 'warning'); return; }
+  if (!confirm('Approve ' + checked.length + ' item yang dipilih?')) return;
+  var ids = [];
+  checked.forEach(function(cb) { ids.push(cb.dataset.id); });
+
+  const approvers = await getApprovers();
+  const list = await KDB.getAll(col);
+  showLoading(true);
+  var ok = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var item = list.find(function(x){ return x.id === ids[i]; });
+    if (!item) continue;
+    var currentLayer = getCurrentLayer(item.status);
+    if (!currentLayer) continue;
+    var totalLayers = (item.approvers || approvers).length;
+    var log = (item.approvalLog || []).concat([{ layer: currentLayer, action: 'approve', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: 'Approve terpilih' }]);
+    var newStatus = currentLayer >= totalLayers ? STATUS.APPROVED : 'Pending Layer ' + (currentLayer + 1);
+    await KDB.save(col, item.id, Object.assign({}, item, { status: newStatus, approvalLog: log, lastUpdatedAt: new Date().toISOString() }));
+    if (newStatus === STATUS.APPROVED) {
+      if (col === 'permohonan') await buatJurnalDariPermohonan(item.id);
+      else if (col === 'danamasuk') await buatJurnalDariDanaMasuk(item.id);
+    }
+    ok++;
+  }
+  showLoading(false);
+  showAlert(ok + ' item berhasil di-approve!');
+  navigate('dana-approval');
+}
+
+async function rejectSelected(col) {
+  var checked = document.querySelectorAll('.appr-check[data-col="' + col + '"]:checked');
+  if (!checked.length) { showAlert('Pilih minimal 1 item untuk di-reject!', 'warning'); return; }
+  var catatan = prompt('Alasan penolakan (wajib diisi):');
+  if (!catatan || !catatan.trim()) { showAlert('Alasan penolakan wajib diisi!', 'danger'); return; }
+  if (!confirm('Reject ' + checked.length + ' item yang dipilih?')) return;
+  var ids = [];
+  checked.forEach(function(cb) { ids.push(cb.dataset.id); });
+
+  const approvers = await getApprovers();
+  const list = await KDB.getAll(col);
+  showLoading(true);
+  var ok = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var item = list.find(function(x){ return x.id === ids[i]; });
+    if (!item) continue;
     var currentLayer = getCurrentLayer(item.status);
     if (!currentLayer) continue;
     var log = (item.approvalLog || []).concat([{ layer: currentLayer, action: 'reject', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: catatan }]);
