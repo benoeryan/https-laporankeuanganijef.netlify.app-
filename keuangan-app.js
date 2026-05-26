@@ -2320,7 +2320,7 @@ async function renderNeraca() {
   const saldo = fd.saldo;
   const akun = fd.akun;
   const perusahaan = await KDB.getSetting('perusahaan', {});
-  const groups = { 'Aset Lancar': [], 'Aset Tetap': [], 'Kewajiban Lancar': [], 'Kewajiban Jangka Panjang': [], 'Ekuitas': [] };
+  const groups = { 'Aset Lancar': [], 'Aset Tetap': [], 'Aset Lain-lain': [], 'Kewajiban Lancar': [], 'Kewajiban Jangka Panjang': [], 'Ekuitas': [] };
   akun.forEach(function(a) { if (groups[a.kategori]) groups[a.kategori].push(a); });
   function sum(kat) { return groups[kat].reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0); }
   function renderGroup(kat) {
@@ -2330,7 +2330,8 @@ async function renderNeraca() {
   }
   const totalAsetLancar = sum('Aset Lancar');
   const totalAsetTetap = sum('Aset Tetap');
-  const totalAset = totalAsetLancar + totalAsetTetap;
+  const totalAsetLainlain = sum('Aset Lain-lain');
+  const totalAset = totalAsetLancar + totalAsetTetap + totalAsetLainlain;
   const totalKewLancar = sum('Kewajiban Lancar');
   const totalKewPanjang = sum('Kewajiban Jangka Panjang');
   const totalEkuitas = sum('Ekuitas');
@@ -2378,6 +2379,8 @@ async function renderNeraca() {
     + '<tr style="background:#e3f2fd"><td><b>Total Aset Lancar</b></td><td class="text-right fw-bold">' + fmtRp(totalAsetLancar) + '</td></tr>'
     + '<tr style="background:#f5f5ff"><td colspan="2"><i>Aset Tetap</i></td></tr>' + renderGroup('Aset Tetap')
     + '<tr style="background:#e3f2fd"><td><b>Total Aset Tetap</b></td><td class="text-right fw-bold">' + fmtRp(totalAsetTetap) + '</td></tr>'
+    + '<tr style="background:#f5f5ff"><td colspan="2"><i>Aset Lain-lain</i></td></tr>' + renderGroup('Aset Lain-lain')
+    + '<tr style="background:#e3f2fd"><td><b>Total Aset Lain-lain</b></td><td class="text-right fw-bold">' + fmtRp(totalAsetLainlain) + '</td></tr>'
     + '<tr style="background:#1a237e;color:white"><td><b>TOTAL ASET</b></td><td class="text-right fw-bold">' + fmtRp(totalAset) + '</td></tr>'
     + '</tbody></table>'
     + '<table><tbody><tr style="background:#e8eaf6"><td colspan="2"><b>KEWAJIBAN & EKUITAS</b></td></tr>'
