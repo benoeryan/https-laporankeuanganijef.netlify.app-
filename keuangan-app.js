@@ -4763,11 +4763,12 @@ const SHEET_COLS = {
 // ===== AI ASSISTANT - Analisis & Deteksi Kesalahan Otomatis =====
 async function renderAIAssistant() {
   return '<div class="page-title">🤖 AI Assistant Keuangan</div>'
-    + '<div class="alert alert-info">AI Assistant membantu mendeteksi kesalahan pencatatan, selisih jurnal, dan memberikan rekomendasi perbaikan secara otomatis.</div>'
+    + '<div class="alert alert-info">AI Assistant membantu mendeteksi kesalahan pencatatan, selisih jurnal, dan memberikan rekomendasi perbaikan secara otomatis. Analisis lengkap mencakup 15 pemeriksaan komprehensif termasuk validasi neraca, trial balance, deteksi anomali, dan Financial Health Score.</div>'
     + '<div class="stats-row">'
     + '<div class="stat-box"><button class="btn btn-primary" onclick="runAIAnalysis()" style="width:100%">🔍 Jalankan Analisis Lengkap</button></div>'
     + '<div class="stat-box"><button class="btn btn-warning" onclick="runAIJurnalCheck()" style="width:100%">📓 Cek Jurnal Tidak Balance</button></div>'
     + '<div class="stat-box"><button class="btn btn-info" onclick="runAIPettyCashCheck()" style="width:100%">💵 Cek Petty Cash vs Jurnal</button></div>'
+    + '<div class="stat-box"><button class="btn btn-success" onclick="runAINeracaCheck()" style="width:100%">📊 Cek Neraca Balance</button></div>'
     + '</div>'
     + '<div id="ai-result" style="margin-top:16px"></div>';
 }
@@ -4792,7 +4793,7 @@ async function runAIAnalysis() {
       }
     });
     if (unbalanced.length > 0) {
-      issues.push({ severity: 'danger', title: '❌ Jurnal Tidak Balance (' + unbalanced.length + ' transaksi)', detail: unbalanced.map(function(u) { return '<tr><td>' + fmtDate(u.tanggal) + '</td><td>' + u.ref + '</td><td>' + (u.ket||'-') + '</td><td class="text-red">' + fmtRp(u.selisih) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + u.id + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + u.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + u.id + '\')">Hapus</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Selisih</th><th>Aksi</th>' });
+      issues.push({ severity: 'danger', title: '❌ Jurnal Tidak Balance (' + unbalanced.length + ' transaksi)', detail: unbalanced.map(function(u) { return '<tr><td>' + fmtDate(u.tanggal) + '</td><td>' + u.ref + '</td><td>' + (u.ket||'-') + '</td><td class="text-red">' + fmtRp(u.selisih) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + u.id + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + u.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + u.id + '\')">Hapus</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Selisih</th><th>Aksi</th>', group: 'integritas', recommendation: 'Periksa dan perbaiki jurnal yang selisih debit-kreditnya tidak nol.' });
     } else {
       info.push('✅ Semua jurnal balance (Debit = Kredit)');
     }
@@ -4816,7 +4817,7 @@ async function runAIAnalysis() {
       });
     });
     if (unknownAkun.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Akun Tidak Terdaftar di COA (' + unknownAkun.length + ' akun)', detail: unknownAkun.map(function(u) { return '<tr><td>' + u.kode + '</td><td>' + (u.ket||'-') + '</td><td>' + u.dariJurnal + '</td><td><button class="btn btn-xs btn-info" onclick="navigate(\'setup-akun\')">Tambah ke COA</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Kode Akun</th><th>Keterangan</th><th>Dari Jurnal</th><th>Aksi</th>' });
+      warnings.push({ severity: 'warning', title: '⚠️ Akun Tidak Terdaftar di COA (' + unknownAkun.length + ' akun)', detail: unknownAkun.map(function(u) { return '<tr><td>' + u.kode + '</td><td>' + (u.ket||'-') + '</td><td>' + u.dariJurnal + '</td><td><button class="btn btn-xs btn-info" onclick="navigate(\'setup-akun\')">Tambah ke COA</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Kode Akun</th><th>Keterangan</th><th>Dari Jurnal</th><th>Aksi</th>', group: 'anomali', recommendation: 'Tambahkan akun-akun ini ke Chart of Account atau perbaiki kode akun di jurnal terkait.' });
     } else {
       info.push('✅ Semua akun di jurnal terdaftar di COA');
     }
@@ -4844,7 +4845,7 @@ async function runAIAnalysis() {
         + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jumlah</th><th>Ref</th><th>Aksi</th></tr></thead><tbody>'
         + pcNoJurnal.slice(0,20).map(function(p) { return '<tr><td>' + fmtDate(p.tanggal) + '</td><td>' + (p.keterangan||'-') + '</td><td>' + fmtRp(Math.abs(parseFloat(p.jumlah)||0)) + '</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.noRef||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatPettyCashDetail(\'' + p.id + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editPettyCash(\'' + p.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusPettyCash(\'' + p.id + '\')">Hapus</button> <button class="btn btn-xs btn-success" onclick="buatJurnalDariPC(\'' + p.id + '\')">Buat Jurnal</button></td></tr>'; }).join('')
         + (pcNoJurnal.length > 20 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (pcNoJurnal.length - 20) + ' transaksi lainnya</td></tr>' : '')
-        + '</tbody></table></div>', isTable: false });
+        + '</tbody></table></div>', isTable: false, group: 'anomali' });
     } else {
       info.push('✅ Semua petty cash terintegrasi dengan jurnal');
     }
@@ -4862,7 +4863,7 @@ async function runAIAnalysis() {
       }
     });
     if (duplicates.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', detail: duplicates.map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')" title="Lihat entri asli">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')" title="Lihat duplikat">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')" title="Hapus hanya entri duplikat">Hapus Duplikat</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>' });
+      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', detail: duplicates.map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')" title="Lihat entri asli">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')" title="Lihat duplikat">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')" title="Hapus hanya entri duplikat">Hapus Duplikat</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>', group: 'integritas', recommendation: 'Review dan hapus jurnal duplikat yang teridentifikasi.' });
     } else {
       info.push('✅ Tidak ditemukan duplikasi transaksi');
     }
@@ -4876,7 +4877,7 @@ async function runAIAnalysis() {
     if (totalPendapatan > 0) {
       var rasio = ((totalBeban / totalPendapatan) * 100).toFixed(1);
       if (parseFloat(rasio) > 120) {
-        warnings.push({ severity: 'danger', title: '💡 Beban Jauh Melebihi Pendapatan (Rasio ' + rasio + '%)', detail: '<p>Total Beban: <b class="text-red">' + fmtRp(totalBeban) + '</b></p><p>Total Pendapatan: <b class="text-green">' + fmtRp(totalPendapatan) + '</b></p><p>Rasio Beban/Pendapatan: <b>' + rasio + '%</b></p><p><b>Kemungkinan penyebab:</b></p><ul style="margin:4px 0 0 20px;font-size:0.85rem"><li>Pendapatan belum semua diinput ke Dana Masuk / Jurnal</li><li>Beban dari periode sebelumnya masih terbawa (belum tutup buku)</li><li>Terdapat transaksi petty cash yang belum terintegrasi jurnal</li></ul>' });
+        warnings.push({ severity: 'danger', title: '💡 Beban Jauh Melebihi Pendapatan (Rasio ' + rasio + '%)', detail: '<p>Total Beban: <b class="text-red">' + fmtRp(totalBeban) + '</b></p><p>Total Pendapatan: <b class="text-green">' + fmtRp(totalPendapatan) + '</b></p><p>Rasio Beban/Pendapatan: <b>' + rasio + '%</b></p><p><b>Kemungkinan penyebab:</b></p><ul style="margin:4px 0 0 20px;font-size:0.85rem"><li>Pendapatan belum semua diinput ke Dana Masuk / Jurnal</li><li>Beban dari periode sebelumnya masih terbawa (belum tutup buku)</li><li>Terdapat transaksi petty cash yang belum terintegrasi jurnal</li></ul>', group: 'anomali' });
       } else if (parseFloat(rasio) > 100) {
         info.push('ℹ️ Beban sedikit melebihi pendapatan (rasio ' + rasio + '%) — normal jika masih awal periode');
       } else {
@@ -4889,7 +4890,7 @@ async function runAIAnalysis() {
     // 6. Cek jurnal tanpa tanggal
     var noDate = allJurnal.filter(function(j) { return !j.tanggal; });
     if (noDate.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanpa Tanggal (' + noDate.length + ')', detail: noDate.slice(0,10).map(function(j) { return '<tr><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Perbaiki</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Ref</th><th>Keterangan</th><th>Aksi</th>' });
+      warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanpa Tanggal (' + noDate.length + ')', detail: noDate.slice(0,10).map(function(j) { return '<tr><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Perbaiki</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Ref</th><th>Keterangan</th><th>Aksi</th>', group: 'integritas', recommendation: 'Tambahkan tanggal yang sesuai untuk setiap jurnal yang belum memiliki tanggal.' });
     } else {
       info.push('✅ Semua jurnal memiliki tanggal');
     }
@@ -4897,8 +4898,210 @@ async function runAIAnalysis() {
     // 7. Cek total transaksi & ringkasan
     info.push('📊 Total jurnal: ' + allJurnal.length + ' | Petty cash: ' + pcList.length + ' | COA: ' + akunList.length + ' akun');
 
+    // === NEW CHECKS 8-15 ===
+
+    // 8. Neraca Balance Validation
+    var totalAsetN = 0, totalKewajibanN = 0, totalEkuitasN = 0;
+    var totalPendapatanN = 0, totalPendapatanLainN = 0, totalBebanOpsN = 0, totalBebanLainN = 0;
+    Object.keys(fd.saldo).forEach(function(kode) {
+      var s = fd.saldo[kode];
+      var kat = (s.akun && s.akun.kategori) || '';
+      var net = s.net || 0;
+      if (kat.includes('Aset')) totalAsetN += net;
+      else if (kat.includes('Kewajiban')) totalKewajibanN += net;
+      else if (kat === 'Ekuitas') totalEkuitasN += net;
+      else if (kat === 'Pendapatan') totalPendapatanN += net;
+      else if (kat === 'Pendapatan Lain-lain') totalPendapatanLainN += net;
+      else if (kat === 'Beban Operasional') totalBebanOpsN += net;
+      else if (kat === 'Beban Lain-lain') totalBebanLainN += net;
+    });
+    var labaBersihN = totalPendapatanN + totalPendapatanLainN - totalBebanOpsN - totalBebanLainN;
+    var totalKewEkuitasN = totalKewajibanN + totalEkuitasN + labaBersihN;
+    var selisihNeraca = Math.abs(totalAsetN - totalKewEkuitasN);
+    if (selisihNeraca >= 1) {
+      issues.push({ severity: 'danger', title: '❌ Neraca Tidak Balance (Selisih: ' + fmtRp(selisihNeraca) + ')', detail: '<p>Total Aset: ' + fmtRp(totalAsetN) + '</p><p>Total Kewajiban + Ekuitas + Laba Bersih: ' + fmtRp(totalKewEkuitasN) + '</p><p>Selisih: <b class="text-red">' + fmtRp(selisihNeraca) + '</b></p><p><b>Rekomendasi:</b> Periksa jurnal yang tidak balance dan pastikan semua transaksi dicatat berpasangan (double entry). Jalankan "Cek Neraca Balance" untuk detail lengkap.</p>', isTable: false, group: 'standar' });
+    } else {
+      info.push('✅ Neraca balance (Aset = Kewajiban + Ekuitas + Laba Bersih)');
+    }
+
+    // 9. Trial Balance Check
+    var totalAllDebit = 0, totalAllKredit = 0;
+    allJurnal.forEach(function(j) {
+      (j.lines||[]).forEach(function(l) {
+        totalAllDebit += l.debit||0;
+        totalAllKredit += l.kredit||0;
+      });
+    });
+    var trialDiff = Math.abs(totalAllDebit - totalAllKredit);
+    if (trialDiff > 0.01) {
+      issues.push({ severity: 'danger', title: '❌ Trial Balance Tidak Seimbang (Selisih: ' + fmtRp(trialDiff) + ')', detail: '<p>Total Debit Seluruh Jurnal: ' + fmtRp(totalAllDebit) + '</p><p>Total Kredit Seluruh Jurnal: ' + fmtRp(totalAllKredit) + '</p><p>Selisih: <b class="text-red">' + fmtRp(trialDiff) + '</b></p><p><b>Rekomendasi:</b> Ini adalah error kritis. Periksa setiap jurnal yang tidak balance menggunakan fitur "Cek Jurnal Tidak Balance".</p>', isTable: false, group: 'standar' });
+    } else {
+      info.push('✅ Trial balance seimbang (Total Debit = Total Kredit)');
+    }
+
+    // 10. Saldo Normal Anomaly Detection
+    var saldoAnomalies = [];
+    Object.keys(fd.saldo).forEach(function(kode) {
+      var s = fd.saldo[kode];
+      var net = s.net || 0;
+      if (net === 0) return;
+      var tipe = (s.akun && s.akun.tipe) || '';
+      var nama = (s.akun && s.akun.nama) || kode;
+      if (tipe === 'Debit' && net < 0) {
+        saldoAnomalies.push({ kode: kode, nama: nama, net: net, expected: 'Debit (positif)', actual: 'Kredit (negatif)' });
+      } else if (tipe === 'Kredit' && net < 0) {
+        saldoAnomalies.push({ kode: kode, nama: nama, net: net, expected: 'Kredit (positif)', actual: 'Debit (negatif)' });
+      }
+    });
+    if (saldoAnomalies.length > 0) {
+      warnings.push({ severity: 'warning', title: '⚠️ Saldo Normal Anomali (' + saldoAnomalies.length + ' akun)', detail: saldoAnomalies.slice(0,15).map(function(a) { return '<tr><td>' + a.kode + '</td><td>' + a.nama + '</td><td class="text-red">' + fmtRp(a.net) + '</td><td>' + a.expected + '</td></tr>'; }).join('') + (saldoAnomalies.length > 15 ? '<tr><td colspan="4" style="text-align:center;color:#888">... dan ' + (saldoAnomalies.length - 15) + ' akun lainnya</td></tr>' : ''), isTable: true, headers: '<th>Kode</th><th>Nama Akun</th><th>Saldo</th><th>Seharusnya</th>', group: 'anomali', recommendation: 'Periksa ulang jurnal manual terkait akun-akun ini. Saldo yang berlawanan dengan tipe normal bisa mengindikasikan kesalahan pencatatan.' });
+    } else {
+      info.push('✅ Semua akun memiliki saldo normal sesuai tipe');
+    }
+
+    // 11. Double Entry Validation
+    var singleLineJournals = [];
+    allJurnal.forEach(function(j) {
+      if (j.tipe === 'penutup') return;
+      if ((j.lines||[]).length < 2) {
+        singleLineJournals.push({ id: j.id, ref: j.noRef||j.id, ket: j.keterangan, tanggal: j.tanggal, lines: (j.lines||[]).length });
+      }
+    });
+    if (singleLineJournals.length > 0) {
+      issues.push({ severity: 'danger', title: '❌ Jurnal Tidak Double Entry (' + singleLineJournals.length + ' jurnal hanya 1 baris)', detail: singleLineJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + j.ref + '</td><td>' + (j.ket||'-') + '</td><td>' + j.lines + ' baris</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Perbaiki</button></td></tr>'; }).join('') + (singleLineJournals.length > 10 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (singleLineJournals.length - 10) + ' jurnal lainnya</td></tr>' : ''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah Baris</th><th>Aksi</th>', group: 'integritas', recommendation: 'Setiap jurnal harus memiliki minimal 2 baris (debit dan kredit). Tambahkan baris pasangan untuk setiap jurnal yang bermasalah.' });
+    } else {
+      info.push('✅ Semua jurnal memiliki minimal 2 baris (double entry)');
+    }
+
+    // 12. Orphan Transactions
+    var invoiceList = await KDB.getAll('invoice');
+    var poList = await KDB.getAll('po');
+    var jurnalRefs = {};
+    allJurnal.forEach(function(j) { if (j.noRef) jurnalRefs[j.noRef.toLowerCase()] = true; });
+    var orphanInvoices = invoiceList.filter(function(inv) {
+      var invId = (inv.id||'').toLowerCase();
+      var invNo = (inv.nomor||inv.number||'').toLowerCase();
+      var found = false;
+      Object.keys(jurnalRefs).forEach(function(ref) {
+        if (ref.includes(invId) || (invNo && ref.includes(invNo))) found = true;
+      });
+      return !found;
+    });
+    var orphanPOs = poList.filter(function(po) {
+      var poId = (po.id||'').toLowerCase();
+      var poNo = (po.nomor||po.number||'').toLowerCase();
+      var found = false;
+      Object.keys(jurnalRefs).forEach(function(ref) {
+        if (ref.includes(poId) || (poNo && ref.includes(poNo))) found = true;
+      });
+      return !found;
+    });
+    if (orphanInvoices.length > 0 || orphanPOs.length > 0) {
+      var orphanDetail = '';
+      if (orphanInvoices.length > 0) {
+        orphanDetail += '<p><b>Invoice tanpa jurnal (' + orphanInvoices.length + '):</b></p>' + orphanInvoices.slice(0,10).map(function(inv) { return '<div style="padding:2px 0;font-size:0.85rem">- ' + (inv.nomor||inv.number||inv.id) + ' | ' + (inv.pelanggan||inv.customer||'-') + ' | ' + fmtRp(parseFloat(inv.total||inv.jumlah||0)) + '</div>'; }).join('');
+        if (orphanInvoices.length > 10) orphanDetail += '<div style="color:#888;font-size:0.82rem">... dan ' + (orphanInvoices.length - 10) + ' invoice lainnya</div>';
+      }
+      if (orphanPOs.length > 0) {
+        orphanDetail += '<p style="margin-top:8px"><b>PO tanpa jurnal (' + orphanPOs.length + '):</b></p>' + orphanPOs.slice(0,10).map(function(po) { return '<div style="padding:2px 0;font-size:0.85rem">- ' + (po.nomor||po.number||po.id) + ' | ' + (po.vendor||po.supplier||'-') + ' | ' + fmtRp(parseFloat(po.total||po.jumlah||0)) + '</div>'; }).join('');
+        if (orphanPOs.length > 10) orphanDetail += '<div style="color:#888;font-size:0.82rem">... dan ' + (orphanPOs.length - 10) + ' PO lainnya</div>';
+      }
+      orphanDetail += '<p style="margin-top:8px"><b>Rekomendasi:</b> Buat jurnal penyesuaian untuk transaksi ini atau hubungkan dengan jurnal yang sudah ada.</p>';
+      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Orphan (' + (orphanInvoices.length + orphanPOs.length) + ' tanpa jurnal terkait)', detail: orphanDetail, isTable: false, group: 'anomali' });
+    } else {
+      info.push('✅ Semua invoice dan PO memiliki jurnal terkait');
+    }
+
+    // 13. Cross-Report Consistency
+    var labaBersihLR = totalPendapatanN + totalPendapatanLainN - totalBebanOpsN - totalBebanLainN;
+    var labaBersihNeraca = labaBersihN;
+    var crossDiff = Math.abs(labaBersihLR - labaBersihNeraca);
+    if (crossDiff > 1) {
+      warnings.push({ severity: 'warning', title: '⚠️ Inkonsistensi Lintas Laporan (Selisih Laba Bersih: ' + fmtRp(crossDiff) + ')', detail: '<p>Laba Bersih (Laba Rugi): ' + fmtRp(labaBersihLR) + '</p><p>Laba Bersih (Neraca): ' + fmtRp(labaBersihNeraca) + '</p><p><b>Rekomendasi:</b> Periksa apakah ada akun yang salah kategori atau transaksi yang belum tercatat di salah satu laporan.</p>', isTable: false, group: 'standar' });
+    } else {
+      info.push('✅ Laba bersih konsisten antara Laba Rugi dan Neraca');
+    }
+
+    // 14. Unusual Amounts (Outlier Detection)
+    var allAmounts = [];
+    allJurnal.forEach(function(j) {
+      (j.lines||[]).forEach(function(l) {
+        if ((l.debit||0) > 0) allAmounts.push({ val: l.debit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'debit' });
+        if ((l.kredit||0) > 0) allAmounts.push({ val: l.kredit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'kredit' });
+      });
+    });
+    var outliers = [];
+    if (allAmounts.length > 10) {
+      var sumVal = 0;
+      allAmounts.forEach(function(a) { sumVal += a.val; });
+      var meanVal = sumVal / allAmounts.length;
+      var sumSqDiff = 0;
+      allAmounts.forEach(function(a) { sumSqDiff += (a.val - meanVal) * (a.val - meanVal); });
+      var stdDev = Math.sqrt(sumSqDiff / allAmounts.length);
+      var threshold = meanVal + 3 * stdDev;
+      if (threshold > 0) {
+        allAmounts.forEach(function(a) {
+          if (a.val > threshold) outliers.push(a);
+        });
+        outliers.sort(function(a,b) { return b.val - a.val; });
+        outliers = outliers.slice(0,5);
+      }
+    }
+    if (outliers.length > 0) {
+      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', detail: outliers.map(function(o) { return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td></tr>'; }).join('') + '<tr><td colspan="5" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th>', group: 'anomali' });
+    } else {
+      info.push('✅ Tidak ditemukan transaksi outlier (nominal tidak lazim)');
+    }
+
+    // 15. Future Date and Date Gap Check
+    var todayStr = new Date().toISOString().slice(0,10);
+    var futureJournals = allJurnal.filter(function(j) { return j.tanggal && j.tanggal > todayStr; });
+    if (futureJournals.length > 0) {
+      warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanggal Masa Depan (' + futureJournals.length + ')', detail: futureJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Aksi</th>', group: 'anomali', recommendation: 'Jurnal dengan tanggal masa depan mungkin salah input. Periksa dan perbaiki jika diperlukan.' });
+    }
+    var datedJournals = allJurnal.filter(function(j) { return j.tanggal; }).sort(function(a,b) { return (a.tanggal||'').localeCompare(b.tanggal||''); });
+    var largeGaps = [];
+    for (var gi = 1; gi < datedJournals.length; gi++) {
+      var d1 = new Date(datedJournals[gi-1].tanggal);
+      var d2 = new Date(datedJournals[gi].tanggal);
+      var diffDays = Math.round((d2 - d1) / (1000*60*60*24));
+      if (diffDays > 90) {
+        largeGaps.push({ from: datedJournals[gi-1].tanggal, to: datedJournals[gi].tanggal, days: diffDays });
+      }
+    }
+    if (largeGaps.length > 0) {
+      info.push('ℹ️ Terdapat ' + largeGaps.length + ' gap besar (>90 hari) antara jurnal berurutan: ' + largeGaps.slice(0,3).map(function(g) { return fmtDate(g.from) + ' s/d ' + fmtDate(g.to) + ' (' + g.days + ' hari)'; }).join(', '));
+    }
+    if (futureJournals.length === 0) {
+      info.push('✅ Tidak ada jurnal dengan tanggal masa depan');
+    }
+
+    // === FINANCIAL HEALTH SCORE ===
+    var healthScore = 100;
+    healthScore -= issues.length * 15;
+    healthScore -= warnings.length * 5;
+    if (healthScore < 0) healthScore = 0;
+    var scoreColor = healthScore >= 80 ? '#4caf50' : (healthScore >= 60 ? '#ff9800' : '#f44336');
+    var gradeText = healthScore >= 90 ? 'Excellent - Kondisi keuangan sangat baik' : (healthScore >= 80 ? 'Baik - Kondisi keuangan sehat dengan sedikit catatan' : (healthScore >= 60 ? 'Perlu Perbaikan - Ada beberapa masalah yang perlu ditangani' : 'Kritis - Banyak masalah serius yang memerlukan perhatian segera'));
     // Build result HTML
-    var html = '<div class="card"><div class="card-header"><h2>📋 Hasil Analisis AI</h2><span class="chip">' + new Date().toLocaleString('id-ID') + '</span></div>';
+    var html = '<div class="card"><div class="card-header"><h2>📋 Hasil Analisis AI Komprehensif</h2><span class="chip">' + new Date().toLocaleString('id-ID') + '</span></div>';
+
+    // Financial Health Score Card
+    html += '<div class="card" style="border-left:4px solid ' + scoreColor + ';margin-bottom:16px">'
+      + '<div style="display:flex;align-items:center;gap:20px">'
+      + '<div style="text-align:center">'
+      + '<div style="font-size:2.5rem;font-weight:700;color:' + scoreColor + '">' + healthScore + '%</div>'
+      + '<div style="font-size:0.8rem;color:#666">Financial Health Score</div>'
+      + '</div>'
+      + '<div style="flex:1">'
+      + '<div style="background:#e0e0e0;border-radius:8px;height:16px;overflow:hidden">'
+      + '<div style="width:' + healthScore + '%;height:100%;background:' + scoreColor + ';transition:width 0.5s"></div>'
+      + '</div>'
+      + '<div style="margin-top:8px;font-size:0.85rem">' + gradeText + '</div>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+
     var totalIssues = issues.length + warnings.length;
     html += '<div class="stats-row" style="margin-bottom:16px">'
       + '<div class="stat-box ' + (issues.length > 0 ? 'red' : 'green') + '"><div class="val">' + issues.length + '</div><div class="lbl">Error Kritis</div></div>'
@@ -4910,16 +5113,48 @@ async function runAIAnalysis() {
       html += '<div class="alert alert-success">🎉 Tidak ditemukan masalah! Semua data keuangan dalam kondisi baik.</div>';
     }
 
-    // Render issues
-    issues.concat(warnings).forEach(function(issue) {
-      html += '<div class="alert alert-' + issue.severity + '" style="margin-bottom:12px"><b>' + issue.title + '</b>';
-      if (issue.isTable) {
-        html += '<div class="table-wrap" style="margin-top:8px;max-height:350px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr>' + issue.headers + '</tr></thead><tbody>' + issue.detail + '</tbody></table></div>';
-      } else {
-        html += '<div style="margin-top:8px">' + issue.detail + '</div>';
-      }
-      html += '</div>';
-    });
+    // Group results by section
+    var allFindings = issues.concat(warnings);
+    var integritasItems = allFindings.filter(function(item) { return item.group === 'integritas'; });
+    var standarItems = allFindings.filter(function(item) { return item.group === 'standar'; });
+    var anomaliItems = allFindings.filter(function(item) { return item.group === 'anomali'; });
+    var ungroupedItems = allFindings.filter(function(item) { return !item.group; });
+
+    function renderFindingItems(items) {
+      var out = '';
+      items.forEach(function(issue) {
+        out += '<div class="alert alert-' + issue.severity + '" style="margin-bottom:12px"><b>' + issue.title + '</b>';
+        if (issue.isTable) {
+          out += '<div class="table-wrap" style="margin-top:8px;max-height:350px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr>' + issue.headers + '</tr></thead><tbody>' + issue.detail + '</tbody></table></div>';
+        } else {
+          out += '<div style="margin-top:8px">' + issue.detail + '</div>';
+        }
+        if (issue.recommendation) {
+          out += '<div style="margin-top:8px;padding:8px;background:#fff3e0;border-radius:4px;font-size:0.83rem"><b>Rekomendasi:</b> ' + issue.recommendation + '</div>';
+        }
+        out += '</div>';
+      });
+      return out;
+    }
+
+    // Section: Integritas Data
+    if (integritasItems.length > 0 || ungroupedItems.length > 0) {
+      html += '<div style="margin-top:16px;padding:8px 12px;background:#f5f5f5;border-radius:4px;font-weight:700">Integritas Data</div>';
+      html += renderFindingItems(ungroupedItems);
+      html += renderFindingItems(integritasItems);
+    }
+
+    // Section: Kepatuhan Standar Akuntansi
+    if (standarItems.length > 0) {
+      html += '<div style="margin-top:16px;padding:8px 12px;background:#f5f5f5;border-radius:4px;font-weight:700">Kepatuhan Standar Akuntansi</div>';
+      html += renderFindingItems(standarItems);
+    }
+
+    // Section: Analisis Anomali
+    if (anomaliItems.length > 0) {
+      html += '<div style="margin-top:16px;padding:8px 12px;background:#f5f5f5;border-radius:4px;font-weight:700">Analisis Anomali</div>';
+      html += renderFindingItems(anomaliItems);
+    }
 
     // Info items
     if (info.length > 0) {
@@ -5026,6 +5261,72 @@ async function runAIPettyCashCheck() {
 
   html += '</div>';
   el.innerHTML = html;
+}
+
+async function runAINeracaCheck() {
+  var el = document.getElementById('ai-result');
+  if (!el) return;
+  el.innerHTML = '<div class="alert alert-warning">⏳ Mengecek neraca balance...</div>';
+  try {
+    var fd = await getFinancialData();
+    var saldo = fd.saldo;
+
+    var totalAset = 0, totalKewajiban = 0, totalEkuitas = 0;
+    var totalPendapatan = 0, totalPendapatanLain = 0, totalBebanOps = 0, totalBebanLain = 0;
+    var asetItems = [], kewajibanItems = [], ekuitasItems = [], pendapatanItems = [], bebanItems = [];
+
+    Object.keys(saldo).forEach(function(kode) {
+      var s = saldo[kode];
+      var kat = (s.akun && s.akun.kategori) || '';
+      var net = s.net || 0;
+      if (kat.includes('Aset')) { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+      else if (kat.includes('Kewajiban')) { totalKewajiban += net; kewajibanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+      else if (kat === 'Ekuitas') { totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+      else if (kat === 'Pendapatan') { totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+      else if (kat === 'Pendapatan Lain-lain') { totalPendapatanLain += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+      else if (kat === 'Beban Operasional') { totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+      else if (kat === 'Beban Lain-lain') { totalBebanLain += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    });
+
+    var labaBersih = totalPendapatan + totalPendapatanLain - totalBebanOps - totalBebanLain;
+    var totalKewEkuitas = totalKewajiban + totalEkuitas + labaBersih;
+    var selisih = Math.abs(totalAset - totalKewEkuitas);
+    var balanced = selisih < 1;
+
+    var html = '<div class="card"><div class="card-header"><h2>📊 Cek Neraca Balance</h2></div>';
+    html += '<div class="stats-row">'
+      + '<div class="stat-box"><div class="val">' + fmtRp(totalAset) + '</div><div class="lbl">Total Aset</div></div>'
+      + '<div class="stat-box"><div class="val">' + fmtRp(totalKewajiban) + '</div><div class="lbl">Total Kewajiban</div></div>'
+      + '<div class="stat-box"><div class="val">' + fmtRp(totalEkuitas) + '</div><div class="lbl">Total Ekuitas</div></div>'
+      + '<div class="stat-box"><div class="val">' + fmtRp(labaBersih) + '</div><div class="lbl">Laba Bersih</div></div>'
+      + '</div>';
+
+    if (balanced) {
+      html += '<div class="alert alert-success"><b>✅ NERACA BALANCE!</b><br>Total Aset = Total Kewajiban + Total Ekuitas + Laba Bersih<br>'
+        + fmtRp(totalAset) + ' = ' + fmtRp(totalKewajiban) + ' + ' + fmtRp(totalEkuitas) + ' + ' + fmtRp(labaBersih) + ' = ' + fmtRp(totalKewEkuitas) + '</div>';
+    } else {
+      html += '<div class="alert alert-danger"><b>❌ NERACA TIDAK BALANCE!</b><br>Total Aset: ' + fmtRp(totalAset) + '<br>'
+        + 'Total Kewajiban + Ekuitas + Laba Bersih: ' + fmtRp(totalKewEkuitas) + '<br>'
+        + 'Selisih: <b>' + fmtRp(selisih) + '</b><br>'
+        + '<br><b>Rekomendasi:</b><ul style="margin:4px 0 0 20px"><li>Periksa jurnal yang tidak balance</li><li>Pastikan semua transaksi sudah dicatat berpasangan</li><li>Periksa akun-akun yang belum terkategorisasi</li></ul></div>';
+    }
+
+    html += '<div style="margin-top:12px"><b>Detail Perhitungan:</b></div>'
+      + '<div class="table-wrap"><table style="font-size:0.82rem"><thead><tr><th>Komponen</th><th>Jumlah</th></tr></thead><tbody>'
+      + '<tr><td><b>Total Aset</b></td><td class="text-right"><b>' + fmtRp(totalAset) + '</b></td></tr>'
+      + '<tr><td colspan="2" style="border-top:2px solid #333"><b>Total Kewajiban + Ekuitas</b></td></tr>'
+      + '<tr><td style="padding-left:20px">Kewajiban</td><td class="text-right">' + fmtRp(totalKewajiban) + '</td></tr>'
+      + '<tr><td style="padding-left:20px">Ekuitas</td><td class="text-right">' + fmtRp(totalEkuitas) + '</td></tr>'
+      + '<tr><td style="padding-left:20px">Laba Bersih Periode Berjalan</td><td class="text-right">' + fmtRp(labaBersih) + '</td></tr>'
+      + '<tr style="border-top:1px solid #999"><td><b>Total Kewajiban + Ekuitas + Laba</b></td><td class="text-right"><b>' + fmtRp(totalKewEkuitas) + '</b></td></tr>'
+      + '<tr style="border-top:2px solid #333"><td><b>Selisih</b></td><td class="text-right ' + (balanced?'text-green':'text-red') + '"><b>' + fmtRp(selisih) + '</b></td></tr>'
+      + '</tbody></table></div>';
+
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="alert alert-danger">Error saat cek neraca: ' + e.message + '</div>';
+  }
 }
 
 async function buatJurnalDariPC(pcId) {
