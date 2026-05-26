@@ -1559,8 +1559,32 @@ async function hapusJurnal(id) {
     }
   }
   await KDB.delete('jurnal', id);
+  // Force refresh local cache from Firebase to ensure consistency
+  await KDB.getAll('jurnal');
   showAlert('Jurnal dihapus.', 'warning');
   navigate('jurnal-umum');
+}
+
+async function hapusDuplikatJurnal(dupId, origId) {
+  if (!confirm('Hapus entri duplikat ini? Entri asli (original) TIDAK akan terhapus.')) return;
+  // Verify original exists before deleting
+  var jurnal = await KDB.getAll('jurnal');
+  var orig = jurnal.find(function(x){ return x.id === origId; });
+  var dup = jurnal.find(function(x){ return x.id === dupId; });
+  if (!dup) { showAlert('Entri duplikat tidak ditemukan.', 'warning'); return; }
+  if (!orig) { showAlert('Peringatan: Entri asli tidak ditemukan di database. Batalkan penghapusan untuk investigasi.', 'danger'); return; }
+  // Delete only the duplicate
+  await KDB.delete('jurnal', dupId);
+  // Refresh cache and verify original still exists
+  var refreshed = await KDB.getAll('jurnal');
+  var origStillExists = refreshed.find(function(x){ return x.id === origId; });
+  if (origStillExists) {
+    showAlert('Duplikat berhasil dihapus. Entri asli tetap aman.', 'success');
+  } else {
+    showAlert('Duplikat dihapus, namun entri asli perlu diverifikasi.', 'warning');
+  }
+  // Re-run analysis to refresh the view
+  runAIAnalysis();
 }
 
 async function hapusSemuaJurnal() {
@@ -2320,7 +2344,7 @@ async function renderNeraca() {
   const saldo = fd.saldo;
   const akun = fd.akun;
   const perusahaan = await KDB.getSetting('perusahaan', {});
-  const groups = { 'Aset Lancar': [], 'Aset Tetap': [], 'Kewajiban Lancar': [], 'Kewajiban Jangka Panjang': [], 'Ekuitas': [] };
+  const groups = { 'Aset Lancar': [], 'Aset Tetap': [], 'Aset Lain-lain': [], 'Kewajiban Lancar': [], 'Kewajiban Jangka Panjang': [], 'Ekuitas': [] };
   akun.forEach(function(a) { if (groups[a.kategori]) groups[a.kategori].push(a); });
   function sum(kat) { return groups[kat].reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0); }
   function renderGroup(kat) {
@@ -2330,7 +2354,8 @@ async function renderNeraca() {
   }
   const totalAsetLancar = sum('Aset Lancar');
   const totalAsetTetap = sum('Aset Tetap');
-  const totalAset = totalAsetLancar + totalAsetTetap;
+  const totalAsetLainlain = sum('Aset Lain-lain');
+  const totalAset = totalAsetLancar + totalAsetTetap + totalAsetLainlain;
   const totalKewLancar = sum('Kewajiban Lancar');
   const totalKewPanjang = sum('Kewajiban Jangka Panjang');
   const totalEkuitas = sum('Ekuitas');
@@ -2378,6 +2403,8 @@ async function renderNeraca() {
     + '<tr style="background:#e3f2fd"><td><b>Total Aset Lancar</b></td><td class="text-right fw-bold">' + fmtRp(totalAsetLancar) + '</td></tr>'
     + '<tr style="background:#f5f5ff"><td colspan="2"><i>Aset Tetap</i></td></tr>' + renderGroup('Aset Tetap')
     + '<tr style="background:#e3f2fd"><td><b>Total Aset Tetap</b></td><td class="text-right fw-bold">' + fmtRp(totalAsetTetap) + '</td></tr>'
+    + '<tr style="background:#f5f5ff"><td colspan="2"><i>Aset Lain-lain</i></td></tr>' + renderGroup('Aset Lain-lain')
+    + '<tr style="background:#e3f2fd"><td><b>Total Aset Lain-lain</b></td><td class="text-right fw-bold">' + fmtRp(totalAsetLainlain) + '</td></tr>'
     + '<tr style="background:#1a237e;color:white"><td><b>TOTAL ASET</b></td><td class="text-right fw-bold">' + fmtRp(totalAset) + '</td></tr>'
     + '</tbody></table>'
     + '<table><tbody><tr style="background:#e8eaf6"><td colspan="2"><b>KEWAJIBAN & EKUITAS</b></td></tr>'
@@ -4780,7 +4807,7 @@ async function runAIAnalysis() {
       }
     });
     if (duplicates.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', detail: duplicates.map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + d.id2 + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + d.id2 + '\')">Hapus</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>' });
+      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', detail: duplicates.map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')" title="Lihat entri asli">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')" title="Lihat duplikat">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')" title="Hapus hanya entri duplikat">Hapus Duplikat</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>' });
     } else {
       info.push('✅ Tidak ditemukan duplikasi transaksi');
     }
@@ -5863,11 +5890,32 @@ function resetSaldoAwal() {
 // ===== PRINT BUNDLE LAPORAN KEUANGAN =====
 async function renderPrintBundle() {
   var perusahaan = await KDB.getSetting('perusahaan', {});
-  var fd = await getFinancialData();
-  var saldo = fd.saldo;
-  var akun = fd.akun;
   var jurnal = await KDB.getAll('jurnal');
-  var periode = perusahaan.periode || new Date().getFullYear();
+  jurnal = filterJurnalByPeriod(jurnal);
+  var akun = await getAkun();
+  var saldo = {};
+  akun.forEach(function(a) { saldo[a.kode] = { akun: a, debit: 0, kredit: 0, net: 0 }; });
+  jurnal.filter(function(j) { return j.tipe !== 'penutup'; }).forEach(function(j) {
+    (j.lines || []).forEach(function(l) {
+      if (!l.akun) return;
+      if (!saldo[l.akun]) {
+        var autoKat = autoKategoriCOA(l.akun, l.ket || '', '');
+        saldo[l.akun] = { akun: { kode: l.akun, nama: l.ket || l.akun, kategori: autoKat.kategori, tipe: autoKat.tipe }, debit: 0, kredit: 0, net: 0 };
+      }
+      saldo[l.akun].debit += l.debit || 0;
+      saldo[l.akun].kredit += l.kredit || 0;
+    });
+  });
+  Object.values(saldo).forEach(function(s) {
+    s.net = s.akun.tipe === 'Debit' ? s.debit - s.kredit : s.kredit - s.debit;
+  });
+  var allAkun = akun.slice();
+  Object.keys(saldo).forEach(function(k) {
+    if (!allAkun.find(function(a){ return a.kode === k; })) allAkun.push(saldo[k].akun);
+  });
+  allAkun.sort(function(a,b){ return (a.kode||'').localeCompare(b.kode||''); });
+  akun = allAkun;
+  var periode = getPrintPeriodeLabel() !== 'Semua Periode' ? getPrintPeriodeLabel() : (perusahaan.periode || new Date().getFullYear());
 
   // Build logo header
   var logoHtml = perusahaan.logoData
@@ -6010,6 +6058,22 @@ async function renderPrintBundle() {
   return '<div class="page-title">🖨️ Print Laporan Keuangan</div>'
     + '<div class="card no-print"><div class="card-header"><h2>Bundel Laporan Keuangan — ' + (perusahaan.nama||'IJEF Corp') + '</h2></div>'
     + '<div class="alert alert-info">Klik tombol <b>Print</b> untuk mencetak seluruh laporan keuangan dalam satu bundel (Cover, Daftar Isi, Laba Rugi, Neraca, Arus Kas, Ekuitas, Analisis Naratif).</div>'
+    + '<div style="margin-bottom:16px;padding:16px;background:#f8f9fa;border-radius:8px;border:1px solid #e0e0e0">'
+    + '<div style="font-weight:600;margin-bottom:10px;color:#1a237e">Filter Periode Laporan:</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px">'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="all"' + (_printFilterMode==='all'?' checked':'') + '> Semua</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="year"' + (_printFilterMode==='year'?' checked':'') + '> Per Tahun</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="month"' + (_printFilterMode==='month'?' checked':'') + '> Per Bulan</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="date"' + (_printFilterMode==='date'?' checked':'') + '> Per Tanggal</label>'
+    + '</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
+    + '<input type="number" id="print-filter-year" value="' + _printFilterYear + '" min="2020" max="2099" style="width:90px;padding:6px 10px;border:1px solid #ccc;border-radius:5px" placeholder="Tahun">'
+    + '<input type="month" id="print-filter-month" value="' + _printFilterMonth + '" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px">'
+    + '<input type="date" id="print-filter-date" value="' + _printFilterDate + '" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px">'
+    + '<button class="btn btn-primary btn-sm" onclick="applyPrintFilter()">Terapkan Filter</button>'
+    + '</div>'
+    + '<div style="margin-top:8px;font-size:0.82rem;color:#555">Periode aktif: <b>' + getPrintPeriodeLabel() + '</b></div>'
+    + '</div>'
     + '<div class="flex-row" style="gap:8px">'
     + '<button class="btn btn-primary" onclick="printBundleLaporan()">🖨️ Print Semua Laporan</button>'
     + '<span class="text-muted">Periode: ' + periode + '</span>'
@@ -6179,6 +6243,44 @@ function printBundleLaporan() {
   w.document.write('</body></html>');
   w.document.close();
   setTimeout(function() { w.print(); }, 500);
+}
+
+// ===== PRINT FILTER STATE =====
+var _printFilterMode = 'all'; // 'all', 'date', 'month', 'year'
+var _printFilterDate = '';
+var _printFilterMonth = '';
+var _printFilterYear = new Date().getFullYear().toString();
+
+function filterJurnalByPeriod(jurnal) {
+  if (_printFilterMode === 'date' && _printFilterDate) {
+    return jurnal.filter(function(j) { return j.tanggal === _printFilterDate; });
+  }
+  if (_printFilterMode === 'month' && _printFilterMonth) {
+    return jurnal.filter(function(j) { return (j.tanggal||'').startsWith(_printFilterMonth); });
+  }
+  if (_printFilterMode === 'year' && _printFilterYear) {
+    return jurnal.filter(function(j) { return (j.tanggal||'').startsWith(_printFilterYear); });
+  }
+  return jurnal;
+}
+
+function getPrintPeriodeLabel() {
+  if (_printFilterMode === 'date' && _printFilterDate) return fmtDate(_printFilterDate);
+  if (_printFilterMode === 'month' && _printFilterMonth) {
+    var parts = _printFilterMonth.split('-');
+    var bulanNames = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    return bulanNames[parseInt(parts[1])] + ' ' + parts[0];
+  }
+  if (_printFilterMode === 'year' && _printFilterYear) return 'Tahun ' + _printFilterYear;
+  return 'Semua Periode';
+}
+
+function applyPrintFilter() {
+  _printFilterMode = document.querySelector('input[name="print-filter-mode"]:checked').value;
+  _printFilterDate = (document.getElementById('print-filter-date')||{}).value || '';
+  _printFilterMonth = (document.getElementById('print-filter-month')||{}).value || '';
+  _printFilterYear = (document.getElementById('print-filter-year')||{}).value || '';
+  navigate('lap-print-bundle');
 }
 
 // ===== DASHBOARD EXTRAS: Ringkasan, Forecast, Actual vs Budget =====

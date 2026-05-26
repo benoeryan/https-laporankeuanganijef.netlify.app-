@@ -72,7 +72,13 @@ const KDB = {
 
   // ---- GENERIC COLLECTION ----
   async save(col, id, data) {
+    data.id = id;
     _klset('k_' + col + '_' + id, data);
+    // Also update the _all list cache to keep it in sync
+    const all = _klget('k_' + col + '_all', []);
+    const idx = all.findIndex(x => x.id === id || x._id === id);
+    if (idx >= 0) { all[idx] = data; } else { all.push(data); }
+    _klset('k_' + col + '_all', all);
     if (kfbReady) {
       try { await kfs.setDoc(kfs.doc(kdb, 'k_' + col, id), data); } catch(e) { console.warn(e); }
     }
