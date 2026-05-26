@@ -2342,7 +2342,7 @@ async function renderLabaRugi() {
 async function renderNeraca() {
   const fd = await getFinancialData();
   const saldo = fd.saldo;
-  const akun = fd.akun;
+  const akun = await getAkun();
   const perusahaan = await KDB.getSetting('perusahaan', {});
   const groups = { 'Aset Lancar': [], 'Aset Tetap': [], 'Aset Lain-lain': [], 'Kewajiban Lancar': [], 'Kewajiban Jangka Panjang': [], 'Ekuitas': [] };
   akun.forEach(function(a) {
@@ -5952,12 +5952,7 @@ async function renderPrintBundle() {
   Object.values(saldo).forEach(function(s) {
     s.net = s.akun.tipe === 'Debit' ? s.debit - s.kredit : s.kredit - s.debit;
   });
-  var allAkun = akun.slice();
-  Object.keys(saldo).forEach(function(k) {
-    if (!allAkun.find(function(a){ return a.kode === k; })) allAkun.push(saldo[k].akun);
-  });
-  allAkun.sort(function(a,b){ return (a.kode||'').localeCompare(b.kode||''); });
-  akun = allAkun;
+  akun.sort(function(a,b){ return (a.kode||'').localeCompare(b.kode||''); });
   var periode = getPrintPeriodeLabel() !== 'Semua Periode' ? getPrintPeriodeLabel() : (perusahaan.periode || new Date().getFullYear());
 
   // Build logo header
