@@ -5890,11 +5890,32 @@ function resetSaldoAwal() {
 // ===== PRINT BUNDLE LAPORAN KEUANGAN =====
 async function renderPrintBundle() {
   var perusahaan = await KDB.getSetting('perusahaan', {});
-  var fd = await getFinancialData();
-  var saldo = fd.saldo;
-  var akun = fd.akun;
   var jurnal = await KDB.getAll('jurnal');
-  var periode = perusahaan.periode || new Date().getFullYear();
+  jurnal = filterJurnalByPeriod(jurnal);
+  var akun = await getAkun();
+  var saldo = {};
+  akun.forEach(function(a) { saldo[a.kode] = { akun: a, debit: 0, kredit: 0, net: 0 }; });
+  jurnal.filter(function(j) { return j.tipe !== 'penutup'; }).forEach(function(j) {
+    (j.lines || []).forEach(function(l) {
+      if (!l.akun) return;
+      if (!saldo[l.akun]) {
+        var autoKat = autoKategoriCOA(l.akun, l.ket || '', '');
+        saldo[l.akun] = { akun: { kode: l.akun, nama: l.ket || l.akun, kategori: autoKat.kategori, tipe: autoKat.tipe }, debit: 0, kredit: 0, net: 0 };
+      }
+      saldo[l.akun].debit += l.debit || 0;
+      saldo[l.akun].kredit += l.kredit || 0;
+    });
+  });
+  Object.values(saldo).forEach(function(s) {
+    s.net = s.akun.tipe === 'Debit' ? s.debit - s.kredit : s.kredit - s.debit;
+  });
+  var allAkun = akun.slice();
+  Object.keys(saldo).forEach(function(k) {
+    if (!allAkun.find(function(a){ return a.kode === k; })) allAkun.push(saldo[k].akun);
+  });
+  allAkun.sort(function(a,b){ return (a.kode||'').localeCompare(b.kode||''); });
+  akun = allAkun;
+  var periode = getPrintPeriodeLabel() !== 'Semua Periode' ? getPrintPeriodeLabel() : (perusahaan.periode || new Date().getFullYear());
 
   // Build logo header
   var logoHtml = perusahaan.logoData
@@ -6037,6 +6058,22 @@ async function renderPrintBundle() {
   return '<div class="page-title">🖨️ Print Laporan Keuangan</div>'
     + '<div class="card no-print"><div class="card-header"><h2>Bundel Laporan Keuangan — ' + (perusahaan.nama||'IJEF Corp') + '</h2></div>'
     + '<div class="alert alert-info">Klik tombol <b>Print</b> untuk mencetak seluruh laporan keuangan dalam satu bundel (Cover, Daftar Isi, Laba Rugi, Neraca, Arus Kas, Ekuitas, Analisis Naratif).</div>'
+    + '<div style="margin-bottom:16px;padding:16px;background:#f8f9fa;border-radius:8px;border:1px solid #e0e0e0">'
+    + '<div style="font-weight:600;margin-bottom:10px;color:#1a237e">Filter Periode Laporan:</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px">'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="all"' + (_printFilterMode==='all'?' checked':'') + '> Semua</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="year"' + (_printFilterMode==='year'?' checked':'') + '> Per Tahun</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="month"' + (_printFilterMode==='month'?' checked':'') + '> Per Bulan</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="print-filter-mode" value="date"' + (_printFilterMode==='date'?' checked':'') + '> Per Tanggal</label>'
+    + '</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
+    + '<input type="number" id="print-filter-year" value="' + _printFilterYear + '" min="2020" max="2099" style="width:90px;padding:6px 10px;border:1px solid #ccc;border-radius:5px" placeholder="Tahun">'
+    + '<input type="month" id="print-filter-month" value="' + _printFilterMonth + '" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px">'
+    + '<input type="date" id="print-filter-date" value="' + _printFilterDate + '" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px">'
+    + '<button class="btn btn-primary btn-sm" onclick="applyPrintFilter()">Terapkan Filter</button>'
+    + '</div>'
+    + '<div style="margin-top:8px;font-size:0.82rem;color:#555">Periode aktif: <b>' + getPrintPeriodeLabel() + '</b></div>'
+    + '</div>'
     + '<div class="flex-row" style="gap:8px">'
     + '<button class="btn btn-primary" onclick="printBundleLaporan()">🖨️ Print Semua Laporan</button>'
     + '<span class="text-muted">Periode: ' + periode + '</span>'
@@ -6206,6 +6243,44 @@ function printBundleLaporan() {
   w.document.write('</body></html>');
   w.document.close();
   setTimeout(function() { w.print(); }, 500);
+}
+
+// ===== PRINT FILTER STATE =====
+var _printFilterMode = 'all'; // 'all', 'date', 'month', 'year'
+var _printFilterDate = '';
+var _printFilterMonth = '';
+var _printFilterYear = new Date().getFullYear().toString();
+
+function filterJurnalByPeriod(jurnal) {
+  if (_printFilterMode === 'date' && _printFilterDate) {
+    return jurnal.filter(function(j) { return j.tanggal === _printFilterDate; });
+  }
+  if (_printFilterMode === 'month' && _printFilterMonth) {
+    return jurnal.filter(function(j) { return (j.tanggal||'').startsWith(_printFilterMonth); });
+  }
+  if (_printFilterMode === 'year' && _printFilterYear) {
+    return jurnal.filter(function(j) { return (j.tanggal||'').startsWith(_printFilterYear); });
+  }
+  return jurnal;
+}
+
+function getPrintPeriodeLabel() {
+  if (_printFilterMode === 'date' && _printFilterDate) return fmtDate(_printFilterDate);
+  if (_printFilterMode === 'month' && _printFilterMonth) {
+    var parts = _printFilterMonth.split('-');
+    var bulanNames = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    return bulanNames[parseInt(parts[1])] + ' ' + parts[0];
+  }
+  if (_printFilterMode === 'year' && _printFilterYear) return 'Tahun ' + _printFilterYear;
+  return 'Semua Periode';
+}
+
+function applyPrintFilter() {
+  _printFilterMode = document.querySelector('input[name="print-filter-mode"]:checked').value;
+  _printFilterDate = (document.getElementById('print-filter-date')||{}).value || '';
+  _printFilterMonth = (document.getElementById('print-filter-month')||{}).value || '';
+  _printFilterYear = (document.getElementById('print-filter-year')||{}).value || '';
+  navigate('lap-print-bundle');
 }
 
 // ===== DASHBOARD EXTRAS: Ringkasan, Forecast, Actual vs Budget =====
