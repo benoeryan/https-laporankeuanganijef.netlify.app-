@@ -2558,12 +2558,24 @@ async function renderNeraca() {
       return '<tr><td style="padding-left:20px">' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp(getNeracaBalance(a, kat)) + '</td></tr>';
     }).join('');
   }
-  // Calculate Laba Bersih Periode Berjalan for Ekuitas section
-  const pendapatanAkun = akun.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; });
-  const bebanAkun = akun.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; });
-  const totalPendapatanNeraca = pendapatanAkun.reduce(function(s,a){ var sal = saldo[a.kode] || { debit: 0, kredit: 0 }; return s + (sal.kredit - sal.debit); }, 0);
-  const totalBebanNeraca = bebanAkun.reduce(function(s,a){ var sal = saldo[a.kode] || { debit: 0, kredit: 0 }; return s + (sal.debit - sal.kredit); }, 0);
-  const labaBersihPeriode = totalPendapatanNeraca - totalBebanNeraca;
+  // Calculate Laba Bersih from ALL P&L accounts in saldo (not just COA)
+  // This ensures laba calculation covers all journal entries, matching how assets/liabilities are computed
+  var labaBersihPeriode = 0;
+  Object.keys(saldo).forEach(function(kode) {
+    var s = saldo[kode];
+    if (!s) return;
+    var kat = (s.akun && s.akun.kategori) || '';
+    var katLower = kat.toLowerCase();
+    var d = s.debit || 0, k = s.kredit || 0;
+    var prefix = (kode || '').charAt(0);
+    // Determine if P&L account by category or prefix
+    var isPendapatan = kat === 'Pendapatan' || kat === 'Pendapatan Lain-lain' || (katLower.indexOf('pendapatan') !== -1 && katLower.indexOf('diterima dimuka') === -1) || prefix === '4';
+    var isBeban = kat === 'Beban Operasional' || kat === 'Beban Lain-lain' || (katLower.indexOf('beban') !== -1 || katLower.indexOf('biaya') !== -1) || prefix === '5' || prefix === '6';
+    // Don't double-count: skip if already in a neraca group (prefix 1/2/3 with wrong category)
+    if (prefix === '1' || prefix === '2' || prefix === '3') return;
+    if (isPendapatan && !isBeban) labaBersihPeriode += (k - d);
+    else if (isBeban && !isPendapatan) labaBersihPeriode -= (d - k);
+  });
 
   const totalAsetLancar = sum('Aset Lancar');
   const totalAsetTetap = sum('Aset Tetap');
