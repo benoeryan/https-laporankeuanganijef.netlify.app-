@@ -2399,13 +2399,20 @@ async function renderNeraca() {
       return '<tr><td style="padding-left:20px">' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp((saldo[a.kode]||{}).net||0) + '</td></tr>';
     }).join('');
   }
+  // Calculate Laba Bersih Periode Berjalan for Ekuitas section
+  const pendapatanAkun = fd.akun.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; });
+  const bebanAkun = fd.akun.filter(function(a){ return a.kategori && a.kategori.includes('Beban'); });
+  const totalPendapatanNeraca = pendapatanAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const totalBebanNeraca = bebanAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const labaBersihPeriode = totalPendapatanNeraca - totalBebanNeraca;
+
   const totalAsetLancar = sum('Aset Lancar');
   const totalAsetTetap = sum('Aset Tetap');
   const totalAsetLainlain = sum('Aset Lain-lain');
   const totalAset = totalAsetLancar + totalAsetTetap + totalAsetLainlain;
   const totalKewLancar = sum('Kewajiban Lancar');
   const totalKewPanjang = sum('Kewajiban Jangka Panjang');
-  const totalEkuitas = sum('Ekuitas');
+  const totalEkuitas = sum('Ekuitas') + labaBersihPeriode;
   const totalKewEkuitas = totalKewLancar + totalKewPanjang + totalEkuitas;
   const bal = Math.abs(totalAset - totalKewEkuitas) < 1;
   const printHeader = await buildPrintHeader(perusahaan, 'NERACA', perusahaan.periode||new Date().getFullYear());
@@ -2460,6 +2467,7 @@ async function renderNeraca() {
     + '<tr style="background:#f5f5ff"><td colspan="2"><i>Kewajiban Jangka Panjang</i></td></tr>' + renderGroup('Kewajiban Jangka Panjang')
     + '<tr style="background:#fff8e1"><td><b>Total Kewajiban Panjang</b></td><td class="text-right fw-bold">' + fmtRp(totalKewPanjang) + '</td></tr>'
     + '<tr style="background:#f5f5ff"><td colspan="2"><i>Ekuitas</i></td></tr>' + renderGroup('Ekuitas')
+    + '<tr><td style="padding-left:20px"><i>Laba (Rugi) Periode Berjalan</i></td><td class="text-right ' + (labaBersihPeriode>=0?'text-green':'text-red') + '">' + fmtRp(labaBersihPeriode) + '</td></tr>'
     + '<tr style="background:#e8f5e9"><td><b>Total Ekuitas</b></td><td class="text-right fw-bold text-green">' + fmtRp(totalEkuitas) + '</td></tr>'
     + '<tr style="background:#1a237e;color:white"><td><b>TOTAL KEW + EKUITAS</b></td><td class="text-right fw-bold">' + fmtRp(totalKewEkuitas) + '</td></tr>'
     + '</tbody></table></div>'
