@@ -515,6 +515,26 @@ function computeNeracaTotals(saldo, akunList, fdAkun) {
     else if (kat === 'Pendapatan Lain-lain') { totalPendapatanLain += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
     else if (kat === 'Beban Operasional') { totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
     else if (kat === 'Beban Lain-lain') { totalBebanLain += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    else {
+      // Fallback: keyword matching on kategori (case insensitive)
+      var katLower = kat.toLowerCase();
+      if (katLower.indexOf('ekuitas') !== -1 || katLower.indexOf('modal') !== -1) {
+        totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net});
+      } else if (katLower.indexOf('pendapatan') !== -1 || katLower.indexOf('revenue') !== -1) {
+        totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net});
+      } else if (katLower.indexOf('beban') !== -1 || katLower.indexOf('biaya') !== -1) {
+        totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net});
+      } else {
+        // Final fallback: classify by account code prefix
+        var prefix = (kode || '').charAt(0);
+        if (prefix === '1') { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+        else if (prefix === '2') { totalKewajiban += net; kewajibanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+        else if (prefix === '3') { totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+        else if (prefix === '4') { totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+        else if (prefix === '5' || prefix === '6') { totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+        else { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+      }
+    }
   });
   var labaBersih = totalPendapatan + totalPendapatanLain - totalBebanOps - totalBebanLain;
   var totalKewEkuitas = totalKewajiban + totalEkuitas + labaBersih;
