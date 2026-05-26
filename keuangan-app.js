@@ -505,15 +505,32 @@ function computeNeracaTotals(saldo, akunList, fdAkun) {
   var totalPendapatan = 0, totalPendapatanLain = 0, totalBebanOps = 0, totalBebanLain = 0;
   var asetItems = [], kewajibanItems = [], ekuitasItems = [], pendapatanItems = [], bebanItems = [];
 
-  Object.keys(saldo).forEach(function(kode) {
+  // When akunList is provided, only iterate over official COA accounts.
+  // This ensures phantom accounts from journal entries don't cause balance mismatches
+  // between what computeNeracaTotals reports and what renderNeraca displays.
+  var accountsToCheck = [];
+  if (akunList && akunList.length > 0) {
+    accountsToCheck = akunList.map(function(a) {
+      return { kode: a.kode, kategori: a.kategori || '', nama: a.nama || a.kode };
+    });
+  } else {
+    Object.keys(saldo).forEach(function(kode) {
+      var s = saldo[kode];
+      accountsToCheck.push({ kode: kode, kategori: (s.akun && s.akun.kategori) || '', nama: (s.akun && s.akun.nama) || kode });
+    });
+  }
+
+  accountsToCheck.forEach(function(akun) {
+    var kode = akun.kode;
     var s = saldo[kode];
-    var kat = (s.akun && s.akun.kategori) || '';
+    if (!s) return; // skip if no saldo data for this COA account
+    var kat = akun.kategori;
     var katLower = kat.toLowerCase();
     var debit = s.debit || 0;
     var kredit = s.kredit || 0;
     var group = '';
 
-    // Determine group based on kategori
+    // Determine group based on kategori from COA
     if (kat.includes('Aset')) group = 'aset';
     else if (kat.includes('Kewajiban')) group = 'kewajiban';
     else if (kat === 'Ekuitas') group = 'ekuitas';
@@ -546,7 +563,7 @@ function computeNeracaTotals(saldo, akunList, fdAkun) {
       balance = kredit - debit;
     }
 
-    var itemData = {kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: balance};
+    var itemData = {kode: kode, nama: akun.nama, net: balance};
 
     if (group === 'aset') { totalAset += balance; asetItems.push(itemData); }
     else if (group === 'kewajiban') { totalKewajiban += balance; kewajibanItems.push(itemData); }
@@ -560,14 +577,17 @@ function computeNeracaTotals(saldo, akunList, fdAkun) {
   var labaBersih = totalPendapatan + totalPendapatanLain - totalBebanOps - totalBebanLain;
   var totalKewEkuitas = totalKewajiban + totalEkuitas + labaBersih;
 
-  // Compute COA-only laba if akunList provided
+  // labaCOA is the same as labaBersih when akunList is provided (since we already
+  // iterated only over COA accounts). For backward compatibility, compute it separately
+  // only when no akunList was provided (fallback mode using all saldo keys).
   var labaCOA = labaBersih;
-  if (akunList) {
+  if (!akunList && fdAkun) {
+    // In fallback mode, compute COA-only laba from fdAkun for comparison
     var pendapatanCOA = 0, bebanCOA = 0;
-    akunList.forEach(function(a) {
-      var s = saldo[a.kode];
-      if (!s) return;
-      var d = s.debit || 0, k = s.kredit || 0;
+    (fdAkun || []).forEach(function(a) {
+      var ss = saldo[a.kode];
+      if (!ss) return;
+      var d = ss.debit || 0, k = ss.kredit || 0;
       if (a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain') pendapatanCOA += (k - d);
       else if (a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain') bebanCOA += (d - k);
     });
