@@ -5148,7 +5148,7 @@ async function runAIAnalysis() {
     if (totalPendapatan > 0) {
       var rasio = ((totalBeban / totalPendapatan) * 100).toFixed(1);
       if (parseFloat(rasio) > 120) {
-        warnings.push({ severity: 'danger', title: '💡 Beban Jauh Melebihi Pendapatan (Rasio ' + rasio + '%)', detail: '<p>Total Beban: <b class="text-red">' + fmtRp(totalBeban) + '</b></p><p>Total Pendapatan: <b class="text-green">' + fmtRp(totalPendapatan) + '</b></p><p>Rasio Beban/Pendapatan: <b>' + rasio + '%</b></p><p><b>Kemungkinan penyebab:</b></p><ul style="margin:4px 0 0 20px;font-size:0.85rem"><li>Pendapatan belum semua diinput ke Dana Masuk / Jurnal</li><li>Beban dari periode sebelumnya masih terbawa (belum tutup buku)</li><li>Terdapat transaksi petty cash yang belum terintegrasi jurnal</li></ul>', group: 'anomali' });
+        warnings.push({ severity: 'danger', title: '💡 Beban Jauh Melebihi Pendapatan (Rasio ' + rasio + '%)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'lap-labarugi\')">📊 Lihat Laba Rugi</button> <button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal</button>', detail: '<p>Total Beban: <b class="text-red">' + fmtRp(totalBeban) + '</b></p><p>Total Pendapatan: <b class="text-green">' + fmtRp(totalPendapatan) + '</b></p><p>Rasio Beban/Pendapatan: <b>' + rasio + '%</b></p><p><b>Kemungkinan penyebab:</b></p><ul style="margin:4px 0 0 20px;font-size:0.85rem"><li>Pendapatan belum semua diinput ke Dana Masuk / Jurnal</li><li>Beban dari periode sebelumnya masih terbawa (belum tutup buku)</li><li>Terdapat transaksi petty cash yang belum terintegrasi jurnal</li></ul>', group: 'anomali' });
       } else if (parseFloat(rasio) > 100) {
         info.push('ℹ️ Beban sedikit melebihi pendapatan (rasio ' + rasio + '%) — normal jika masih awal periode');
       } else {
@@ -5198,7 +5198,7 @@ async function runAIAnalysis() {
     var totalKewEkuitasN = neracaTotals.totalKewEkuitas;
     var selisihNeraca = Math.abs(totalAsetN - totalKewEkuitasN);
     if (selisihNeraca >= 1) {
-      issues.push({ severity: 'danger', title: '❌ Neraca Tidak Balance (Selisih: ' + fmtRp(selisihNeraca) + ')', detail: '<p>Total Aset: ' + fmtRp(totalAsetN) + '</p><p>Total Kewajiban + Ekuitas + Laba Bersih: ' + fmtRp(totalKewEkuitasN) + '</p><p>Selisih: <b class="text-red">' + fmtRp(selisihNeraca) + '</b></p><p><b>Rekomendasi:</b> Periksa jurnal yang tidak balance dan pastikan semua transaksi dicatat berpasangan (double entry). Jalankan "Cek Neraca Balance" untuk detail lengkap.</p>', isTable: false, group: 'standar' });
+      issues.push({ severity: 'danger', title: '❌ Neraca Tidak Balance (Selisih: ' + fmtRp(selisihNeraca) + ')', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'lap-neraca\')">⚖️ Lihat Neraca</button> <button class="btn btn-warning btn-sm" onclick="runAINeracaCheck()">📊 Cek Detail Neraca</button> <button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal</button>', detail: '<p>Total Aset: ' + fmtRp(totalAsetN) + '</p><p>Total Kewajiban + Ekuitas + Laba Bersih: ' + fmtRp(totalKewEkuitasN) + '</p><p>Selisih: <b class="text-red">' + fmtRp(selisihNeraca) + '</b></p><p><b>Rekomendasi:</b> Periksa jurnal yang tidak balance dan pastikan semua transaksi dicatat berpasangan (double entry). Jalankan "Cek Neraca Balance" untuk detail lengkap.</p>', isTable: false, group: 'standar' });
     } else {
       info.push('✅ Neraca balance (Aset = Kewajiban + Ekuitas + Laba Bersih)');
     }
@@ -5220,7 +5220,7 @@ async function runAIAnalysis() {
     });
     var trialDiff = Math.abs(totalAllDebit - totalAllKredit);
     if (trialDiff > 0.01) {
-      issues.push({ severity: 'danger', title: '❌ Trial Balance Tidak Seimbang (Selisih: ' + fmtRp(trialDiff) + ')', detail: '<p>Total Debit Seluruh Jurnal: ' + fmtRp(totalAllDebit) + '</p><p>Total Kredit Seluruh Jurnal: ' + fmtRp(totalAllKredit) + '</p><p>Selisih: <b class="text-red">' + fmtRp(trialDiff) + '</b></p><p><b>Rekomendasi:</b> Ini adalah error kritis. Periksa setiap jurnal yang tidak balance menggunakan fitur "Cek Jurnal Tidak Balance".</p>', isTable: false, group: 'standar' });
+      issues.push({ severity: 'danger', title: '❌ Trial Balance Tidak Seimbang (Selisih: ' + fmtRp(trialDiff) + ')', actionButtons: '<button class="btn btn-warning btn-sm" onclick="runAIJurnalCheck()">📓 Cek Jurnal Tidak Balance</button> <button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal</button>', detail: '<p>Total Debit Seluruh Jurnal: ' + fmtRp(totalAllDebit) + '</p><p>Total Kredit Seluruh Jurnal: ' + fmtRp(totalAllKredit) + '</p><p>Selisih: <b class="text-red">' + fmtRp(trialDiff) + '</b></p><p><b>Rekomendasi:</b> Ini adalah error kritis. Periksa setiap jurnal yang tidak balance menggunakan fitur "Cek Jurnal Tidak Balance".</p>', isTable: false, group: 'standar' });
     } else {
       info.push('✅ Trial balance seimbang (Total Debit = Total Kredit)');
     }
@@ -5270,7 +5270,7 @@ async function runAIAnalysis() {
       }
     });
     if (singleLineJournals.length > 0) {
-      issues.push({ severity: 'danger', title: '❌ Jurnal Tidak Double Entry (' + singleLineJournals.length + ' jurnal hanya 1 baris)', detail: singleLineJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + j.ref + '</td><td>' + (j.ket||'-') + '</td><td>' + j.lines + ' baris</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Perbaiki</button></td></tr>'; }).join('') + (singleLineJournals.length > 10 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (singleLineJournals.length - 10) + ' jurnal lainnya</td></tr>' : ''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah Baris</th><th>Aksi</th>', group: 'integritas', recommendation: 'Setiap jurnal harus memiliki minimal 2 baris (debit dan kredit). Tambahkan baris pasangan untuk setiap jurnal yang bermasalah.' });
+      issues.push({ severity: 'danger', title: '❌ Jurnal Tidak Double Entry (' + singleLineJournals.length + ' jurnal hanya 1 baris)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button>', detail: singleLineJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + j.ref + '</td><td>' + (j.ket||'-') + '</td><td>' + j.lines + ' baris</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Perbaiki</button></td></tr>'; }).join('') + (singleLineJournals.length > 10 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (singleLineJournals.length - 10) + ' jurnal lainnya</td></tr>' : ''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah Baris</th><th>Aksi</th>', group: 'integritas', recommendation: 'Setiap jurnal harus memiliki minimal 2 baris (debit dan kredit). Tambahkan baris pasangan untuk setiap jurnal yang bermasalah.' });
     } else {
       info.push('✅ Semua jurnal memiliki minimal 2 baris (double entry)');
     }
@@ -5323,7 +5323,7 @@ async function runAIAnalysis() {
         if (orphanPOs.length > 10) orphanDetail += '<div style="color:#888;font-size:0.82rem">... dan ' + (orphanPOs.length - 10) + ' PO lainnya</div>';
       }
       orphanDetail += '<p style="margin-top:8px"><b>Rekomendasi:</b> Buat jurnal penyesuaian untuk transaksi ini atau hubungkan dengan jurnal yang sudah ada.</p>';
-      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Orphan (' + (orphanInvoices.length + orphanPOs.length) + ' tanpa jurnal terkait)', detail: orphanDetail, isTable: false, group: 'anomali' });
+      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Orphan (' + (orphanInvoices.length + orphanPOs.length) + ' tanpa jurnal terkait)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'kalk-invoice\')">🧾 Buka Invoice</button> <button class="btn btn-info btn-sm" onclick="navigate(\'kalk-po\')">📦 Buka PO</button> <button class="btn btn-warning btn-sm" onclick="navigate(\'jurnal-penyesuaian\')">🔧 Buat Jurnal Penyesuaian</button>', detail: orphanDetail, isTable: false, group: 'anomali' });
     } else {
       info.push('✅ Semua invoice dan PO memiliki jurnal terkait');
     }
@@ -5403,7 +5403,7 @@ async function runAIAnalysis() {
     var todayStr = new Date().toISOString().slice(0,10);
     var futureJournals = allJurnal.filter(function(j) { return j.tanggal && j.tanggal > todayStr; });
     if (futureJournals.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanggal Masa Depan (' + futureJournals.length + ')', detail: futureJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Aksi</th>', group: 'anomali', recommendation: 'Jurnal dengan tanggal masa depan mungkin salah input. Periksa dan perbaiki jika diperlukan.' });
+      warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanggal Masa Depan (' + futureJournals.length + ')', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button>', detail: futureJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Aksi</th>', group: 'anomali', recommendation: 'Jurnal dengan tanggal masa depan mungkin salah input. Periksa dan perbaiki jika diperlukan.' });
     }
     var datedJournals = allJurnal.filter(function(j) { return j.tanggal; }).sort(function(a,b) { return (a.tanggal||'').localeCompare(b.tanggal||''); });
     var largeGaps = [];
