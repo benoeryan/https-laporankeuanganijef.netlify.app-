@@ -5059,7 +5059,7 @@ async function runAIAnalysis() {
       });
     });
     if (unknownAkun.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Akun Tidak Terdaftar di COA (' + unknownAkun.length + ' akun)', detail: unknownAkun.map(function(u) { return '<tr><td>' + u.kode + '</td><td>' + (u.ket||'-') + '</td><td>' + u.dariJurnal + '</td><td><button class="btn btn-xs btn-info" onclick="navigate(\'setup-akun\')">Tambah ke COA</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Kode Akun</th><th>Keterangan</th><th>Dari Jurnal</th><th>Aksi</th>', group: 'anomali', recommendation: 'Tambahkan akun-akun ini ke Chart of Account atau perbaiki kode akun di jurnal terkait.' });
+      warnings.push({ severity: 'warning', title: '⚠️ Akun Tidak Terdaftar di COA (' + unknownAkun.length + ' akun)', detail: '<div style="margin-bottom:8px"><button class="btn btn-info btn-sm" onclick="navigate(\'setup-akun\')">📋 Buka Setup COA</button></div>' + unknownAkun.map(function(u) { return '<tr><td>' + u.kode + '</td><td>' + (u.ket||'-') + '</td><td>' + u.dariJurnal + '</td><td><button class="btn btn-xs btn-info" onclick="navigate(\'setup-akun\')">Tambah ke COA</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Kode Akun</th><th>Keterangan</th><th>Dari Jurnal</th><th>Aksi</th>', group: 'anomali', recommendation: 'Tambahkan akun-akun ini ke Chart of Account atau perbaiki kode akun di jurnal terkait.' });
     } else {
       info.push('✅ Semua akun di jurnal terdaftar di COA');
     }
@@ -5089,6 +5089,7 @@ async function runAIAnalysis() {
       var pcTotal = pcNoJurnal.reduce(function(s,p){ return s + Math.abs(parseFloat(p.jumlah)||0); }, 0);
       warnings.push({ severity: 'warning', title: '⚠️ Petty Cash Belum Terintegrasi Jurnal (' + pcNoJurnal.length + ' transaksi, total ' + fmtRp(pcTotal) + ')', detail: '<p style="margin-bottom:8px">Transaksi petty cash lama yang diinput sebelum fitur integrasi jurnal otomatis. Klik tombol di bawah untuk membuat jurnal secara batch.</p>'
         + '<button class="btn btn-success btn-sm" onclick="batchBuatJurnalPC()" style="margin-bottom:10px">🔄 Buat Jurnal Semua (' + pcNoJurnal.length + ' transaksi)</button>'
+        + '<button class="btn btn-info btn-sm" onclick="navigate(\'kalk-pettycash\')" style="margin-left:8px;margin-bottom:10px">💵 Buka Petty Cash</button>'
         + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jumlah</th><th>Ref</th><th>Aksi</th></tr></thead><tbody>'
         + pcNoJurnal.slice(0,20).map(function(p) { return '<tr><td>' + fmtDate(p.tanggal) + '</td><td>' + (p.keterangan||'-') + '</td><td>' + fmtRp(Math.abs(parseFloat(p.jumlah)||0)) + '</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.noRef||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatPettyCashDetail(\'' + p.id + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editPettyCash(\'' + p.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusPettyCash(\'' + p.id + '\')">Hapus</button> <button class="btn btn-xs btn-success" onclick="buatJurnalDariPC(\'' + p.id + '\')">Buat Jurnal</button></td></tr>'; }).join('')
         + (pcNoJurnal.length > 20 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (pcNoJurnal.length - 20) + ' transaksi lainnya</td></tr>' : '')
@@ -5120,7 +5121,7 @@ async function runAIAnalysis() {
     if (duplicates.length > 0) {
       window._aiDuplicates = duplicates;
       warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', 
-        detail: '<div style="margin-bottom:10px"><button class="btn btn-danger btn-sm" onclick="hapusSemuaDuplikat()">\uD83D\uDDD1\uFE0F Hapus Semua Duplikat (' + duplicates.length + ')</button> <button class="btn btn-outline btn-sm" onclick="reviewDuplikat()">\uD83D\uDC41\uFE0F Review Dulu</button></div>'
+        detail: '<div style="margin-bottom:10px"><button class="btn btn-danger btn-sm" onclick="hapusSemuaDuplikat()">\uD83D\uDDD1\uFE0F Hapus Semua Duplikat (' + duplicates.length + ')</button> <button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">\uD83D\uDCD3 Buka Jurnal Umum</button> <button class="btn btn-outline btn-sm" onclick="reviewDuplikat()">\uD83D\uDC41\uFE0F Review Dulu</button></div>'
           + duplicates.slice(0, 10).map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')">Hapus Duplikat</button></td></tr>'; }).join('')
           + (duplicates.length > 10 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (duplicates.length - 10) + ' duplikat lainnya</td></tr>' : ''),
         isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>', 
@@ -5248,7 +5249,7 @@ async function runAIAnalysis() {
       }
     });
     if (saldoAnomalies.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Saldo Normal Anomali (' + saldoAnomalies.length + ' akun)', detail: saldoAnomalies.slice(0,15).map(function(a) { return '<tr><td>' + a.kode + '</td><td>' + a.nama + '</td><td class="text-red">' + fmtRp(a.net) + '</td><td>' + a.expected + '</td></tr>'; }).join('') + (saldoAnomalies.length > 15 ? '<tr><td colspan="4" style="text-align:center;color:#888">... dan ' + (saldoAnomalies.length - 15) + ' akun lainnya</td></tr>' : ''), isTable: true, headers: '<th>Kode</th><th>Nama Akun</th><th>Saldo</th><th>Seharusnya</th>', group: 'anomali', recommendation: 'Periksa ulang jurnal manual terkait akun-akun ini. Saldo yang berlawanan dengan tipe normal bisa mengindikasikan kesalahan pencatatan.' });
+      warnings.push({ severity: 'warning', title: '⚠️ Saldo Normal Anomali (' + saldoAnomalies.length + ' akun)', detail: saldoAnomalies.slice(0,15).map(function(a) { return '<tr><td>' + a.kode + '</td><td>' + a.nama + '</td><td class="text-red">' + fmtRp(a.net) + '</td><td>' + a.expected + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="navigate(\'monitor-buku-besar\')">Buku Besar</button> <button class="btn btn-xs btn-warning" onclick="navigate(\'setup-akun\')">Edit COA</button></td></tr>'; }).join('') + (saldoAnomalies.length > 15 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (saldoAnomalies.length - 15) + ' akun lainnya</td></tr>' : ''), isTable: true, headers: '<th>Kode</th><th>Nama Akun</th><th>Saldo</th><th>Seharusnya</th><th>Aksi</th>', group: 'anomali', recommendation: 'Periksa ulang jurnal manual terkait akun-akun ini. Saldo yang berlawanan dengan tipe normal bisa mengindikasikan kesalahan pencatatan.' });
     } else {
       info.push('✅ Semua akun memiliki saldo normal sesuai tipe');
     }
@@ -5348,7 +5349,7 @@ async function runAIAnalysis() {
 
     var crossDiff = Math.abs(labaCOA - labaAll);
     if (crossDiff > 0.01) {
-      warnings.push({ severity: 'warning', title: '⚠️ Inkonsistensi Lintas Laporan (Selisih: ' + fmtRp(crossDiff) + ')', detail: '<p>Laba Bersih (COA Resmi / Laba Rugi): ' + fmtRp(labaCOA) + '</p><p>Laba Bersih (Semua Akun / Neraca): ' + fmtRp(labaAll) + '</p><p>Ada akun pendapatan/beban di jurnal yang tidak terdaftar di COA resmi.</p><p><b>Rekomendasi:</b> Daftarkan akun-akun tersebut ke dalam Chart of Accounts atau hapus jurnal yang mereferensi akun tidak resmi.</p>', isTable: false, group: 'standar' });
+      warnings.push({ severity: 'warning', title: '⚠️ Inkonsistensi Lintas Laporan (Selisih: ' + fmtRp(crossDiff) + ')', detail: '<p>Laba Bersih (COA Resmi / Laba Rugi): ' + fmtRp(labaCOA) + '</p><p>Laba Bersih (Semua Akun / Neraca): ' + fmtRp(labaAll) + '</p><p>Ada akun pendapatan/beban di jurnal yang tidak terdaftar di COA resmi.</p><p><b>Rekomendasi:</b> Daftarkan akun-akun tersebut ke dalam Chart of Accounts atau hapus jurnal yang mereferensi akun tidak resmi.</p>' + '<div style="margin-top:8px"><button class="btn btn-xs btn-info" onclick="navigate(\'lap-labarugi\')">Lihat Laba Rugi</button> <button class="btn btn-xs btn-info" onclick="navigate(\'lap-neraca\')">Lihat Neraca</button> <button class="btn btn-xs btn-warning" onclick="navigate(\'setup-akun\')">Kelola COA</button></div>', isTable: false, group: 'standar' });
     } else {
       info.push('✅ Laba bersih konsisten antara Laba Rugi dan Neraca');
     }
@@ -5386,7 +5387,7 @@ async function runAIAnalysis() {
       }
     }
     if (outliers.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', detail: outliers.map(function(o) { return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td></tr>'; }).join('') + '<tr><td colspan="5" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th>', group: 'anomali' });
+      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', detail: '<div style="margin-bottom:8px"><button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button></div>' + outliers.map(function(o) { return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td></tr>'; }).join('') + '<tr><td colspan="5" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th>', group: 'anomali' });
     } else {
       info.push('✅ Tidak ditemukan transaksi outlier (nominal tidak lazim)');
     }
