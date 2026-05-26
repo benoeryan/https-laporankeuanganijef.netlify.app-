@@ -2304,16 +2304,18 @@ function buildNarrativeAnalysis(data) {
 async function renderLabaRugi() {
   const fd = await getFinancialData();
   const saldo = fd.saldo;
-  const akun = fd.akun;
+  const akun = await getAkun();
   const perusahaan = await KDB.getSetting('perusahaan', {});
   const pendapatan = akun.filter(function(a){ return a.kategori === 'Pendapatan'; });
+  const pendapatanLain = akun.filter(function(a){ return a.kategori === 'Pendapatan Lain-lain'; });
   const bebanOps = akun.filter(function(a){ return a.kategori === 'Beban Operasional'; });
   const bebanLain = akun.filter(function(a){ return a.kategori === 'Beban Lain-lain'; });
   const totalPendapatan = pendapatan.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const totalPendapatanLain = pendapatanLain.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
   const totalBebanOps = bebanOps.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
   const totalBebanLain = bebanLain.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
   const labaKotor = totalPendapatan - totalBebanOps;
-  const labaBersih = labaKotor - totalBebanLain;
+  const labaBersih = labaKotor + totalPendapatanLain - totalBebanLain;
   const totalBeban = totalBebanOps + totalBebanLain;
   const printHeader = await buildPrintHeader(perusahaan, 'LAPORAN LABA RUGI', perusahaan.periode||new Date().getFullYear());
   const narrative = buildNarrativeAnalysis({ labaBersih, totalPendapatan, totalBeban, labaKotor });
@@ -2332,7 +2334,9 @@ async function renderLabaRugi() {
     + '<tr style="background:#e8f5e9"><td><b>Total Pendapatan</b></td><td class="text-right fw-bold text-green">' + fmtRp(totalPendapatan) + '</td></tr>'
     + '<tr style="background:#e8eaf6"><td colspan="2"><b>BEBAN OPERASIONAL</b></td></tr>' + renderRows(bebanOps)
     + '<tr style="background:#fff8e1"><td><b>Total Beban Operasional</b></td><td class="text-right fw-bold text-red">' + fmtRp(totalBebanOps) + '</td></tr>'
-    + '<tr style="background:#e3f2fd"><td><b>LABA KOTOR</b></td><td class="text-right fw-bold text-blue">' + fmtRp(labaKotor) + '</td></tr>'
+    + '<tr style="background:#e3f2fd"><td><b>LABA OPERASIONAL</b></td><td class="text-right fw-bold text-blue">' + fmtRp(labaKotor) + '</td></tr>'
+    + '<tr style="background:#e8eaf6"><td colspan="2"><b>PENDAPATAN LAIN-LAIN</b></td></tr>' + renderRows(pendapatanLain)
+    + '<tr style="background:#e8f5e9"><td><b>Total Pendapatan Lain-lain</b></td><td class="text-right fw-bold text-green">' + fmtRp(totalPendapatanLain) + '</td></tr>'
     + '<tr style="background:#e8eaf6"><td colspan="2"><b>BEBAN LAIN-LAIN</b></td></tr>' + renderRows(bebanLain)
     + '<tr style="background:#fff8e1"><td><b>Total Beban Lain-lain</b></td><td class="text-right fw-bold text-red">' + fmtRp(totalBebanLain) + '</td></tr>'
     + '<tr style="background:' + (labaBersih>=0?'#e8f5e9':'#ffebee') + ';font-size:1.05rem"><td><b>LABA / RUGI BERSIH</b></td><td class="text-right fw-bold ' + (labaBersih>=0?'text-green':'text-red') + '">' + fmtRp(labaBersih) + '</td></tr>'
