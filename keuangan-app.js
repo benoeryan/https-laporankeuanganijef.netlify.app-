@@ -504,49 +504,76 @@ function computeNeracaTotals(saldo, akunList, fdAkun) {
   var totalAset = 0, totalKewajiban = 0, totalEkuitas = 0;
   var totalPendapatan = 0, totalPendapatanLain = 0, totalBebanOps = 0, totalBebanLain = 0;
   var asetItems = [], kewajibanItems = [], ekuitasItems = [], pendapatanItems = [], bebanItems = [];
+
   Object.keys(saldo).forEach(function(kode) {
     var s = saldo[kode];
     var kat = (s.akun && s.akun.kategori) || '';
-    var net = s.net || 0;
-    if (kat.includes('Aset')) { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-    else if (kat.includes('Kewajiban')) { totalKewajiban += net; kewajibanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-    else if (kat === 'Ekuitas') { totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-    else if (kat === 'Pendapatan') { totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-    else if (kat === 'Pendapatan Lain-lain') { totalPendapatanLain += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-    else if (kat === 'Beban Operasional') { totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-    else if (kat === 'Beban Lain-lain') { totalBebanLain += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    var katLower = kat.toLowerCase();
+    var debit = s.debit || 0;
+    var kredit = s.kredit || 0;
+    var group = '';
+
+    // Determine group based on kategori
+    if (kat.includes('Aset')) group = 'aset';
+    else if (kat.includes('Kewajiban')) group = 'kewajiban';
+    else if (kat === 'Ekuitas') group = 'ekuitas';
+    else if (kat === 'Pendapatan Lain-lain') group = 'pendapatanLain';
+    else if (kat === 'Pendapatan') group = 'pendapatan';
+    else if (kat === 'Beban Operasional') group = 'bebanOps';
+    else if (kat === 'Beban Lain-lain') group = 'bebanLain';
+    else if (katLower.indexOf('ekuitas') !== -1 || katLower.indexOf('modal') !== -1) group = 'ekuitas';
+    else if (katLower.indexOf('pendapatan') !== -1 || katLower.indexOf('revenue') !== -1) group = 'pendapatan';
+    else if (katLower.indexOf('beban') !== -1 || katLower.indexOf('biaya') !== -1) group = 'bebanOps';
+    else if (katLower.indexOf('kewajiban') !== -1 || katLower.indexOf('utang') !== -1 || katLower.indexOf('hutang') !== -1) group = 'kewajiban';
     else {
-      // Fallback: keyword matching on kategori (case insensitive)
-      var katLower = kat.toLowerCase();
-      if (katLower.indexOf('ekuitas') !== -1 || katLower.indexOf('modal') !== -1) {
-        totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net});
-      } else if (katLower.indexOf('pendapatan') !== -1 || katLower.indexOf('revenue') !== -1) {
-        totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net});
-      } else if (katLower.indexOf('beban') !== -1 || katLower.indexOf('biaya') !== -1) {
-        totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net});
-      } else {
-        // Final fallback: classify by account code prefix
-        var prefix = (kode || '').charAt(0);
-        if (prefix === '1') { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-        else if (prefix === '2') { totalKewajiban += net; kewajibanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-        else if (prefix === '3') { totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-        else if (prefix === '4') { totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-        else if (prefix === '5' || prefix === '6') { totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-        else { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-      }
+      // Final fallback: classify by account code prefix
+      var prefix = (kode || '').charAt(0);
+      if (prefix === '1') group = 'aset';
+      else if (prefix === '2') group = 'kewajiban';
+      else if (prefix === '3') group = 'ekuitas';
+      else if (prefix === '4') group = 'pendapatan';
+      else if (prefix === '5' || prefix === '6') group = 'bebanOps';
+      else group = 'aset';
     }
+
+    // Compute balance based on group normal direction (not s.akun.tipe)
+    // Aset and Beban are debit-normal: balance = debit - kredit
+    // Kewajiban, Ekuitas, Pendapatan are credit-normal: balance = kredit - debit
+    var balance;
+    if (group === 'aset' || group === 'bebanOps' || group === 'bebanLain') {
+      balance = debit - kredit;
+    } else {
+      balance = kredit - debit;
+    }
+
+    var itemData = {kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: balance};
+
+    if (group === 'aset') { totalAset += balance; asetItems.push(itemData); }
+    else if (group === 'kewajiban') { totalKewajiban += balance; kewajibanItems.push(itemData); }
+    else if (group === 'ekuitas') { totalEkuitas += balance; ekuitasItems.push(itemData); }
+    else if (group === 'pendapatan') { totalPendapatan += balance; pendapatanItems.push(itemData); }
+    else if (group === 'pendapatanLain') { totalPendapatanLain += balance; pendapatanItems.push(itemData); }
+    else if (group === 'bebanOps') { totalBebanOps += balance; bebanItems.push(itemData); }
+    else if (group === 'bebanLain') { totalBebanLain += balance; bebanItems.push(itemData); }
   });
+
   var labaBersih = totalPendapatan + totalPendapatanLain - totalBebanOps - totalBebanLain;
   var totalKewEkuitas = totalKewajiban + totalEkuitas + labaBersih;
+
   // Compute COA-only laba if akunList provided
   var labaCOA = labaBersih;
   if (akunList) {
-    var pendapatanCOA = akunList.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; })
-      .reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
-    var bebanCOA = akunList.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; })
-      .reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+    var pendapatanCOA = 0, bebanCOA = 0;
+    akunList.forEach(function(a) {
+      var s = saldo[a.kode];
+      if (!s) return;
+      var d = s.debit || 0, k = s.kredit || 0;
+      if (a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain') pendapatanCOA += (k - d);
+      else if (a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain') bebanCOA += (d - k);
+    });
     labaCOA = pendapatanCOA - bebanCOA;
   }
+
   return {
     totalAset: totalAset, totalKewajiban: totalKewajiban, totalEkuitas: totalEkuitas,
     totalPendapatan: totalPendapatan, totalPendapatanLain: totalPendapatanLain,
