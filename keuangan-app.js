@@ -2345,7 +2345,50 @@ async function renderNeraca() {
   const akun = fd.akun;
   const perusahaan = await KDB.getSetting('perusahaan', {});
   const groups = { 'Aset Lancar': [], 'Aset Tetap': [], 'Aset Lain-lain': [], 'Kewajiban Lancar': [], 'Kewajiban Jangka Panjang': [], 'Ekuitas': [] };
-  akun.forEach(function(a) { if (groups[a.kategori]) groups[a.kategori].push(a); });
+  akun.forEach(function(a) {
+    // First try exact match with the 6 standard groups
+    if (groups[a.kategori]) {
+      groups[a.kategori].push(a);
+      return;
+    }
+    // Try category keyword matching
+    var kat = (a.kategori || '').toLowerCase();
+    if (kat.includes('aset') || kat.includes('asset')) {
+      var resolved = autoKategoriCOA(a.kode, a.nama, null);
+      if (groups[resolved.kategori]) { groups[resolved.kategori].push(a); return; }
+      groups['Aset Lain-lain'].push(a);
+      return;
+    }
+    if (kat.includes('kewajiban') || kat.includes('utang') || kat.includes('hutang') || kat.includes('liability')) {
+      var n = (a.nama || '').toLowerCase();
+      if (n.includes('jangka panjang') || n.includes('long term') || n.includes('obligasi') || n.includes('hipotek')) {
+        groups['Kewajiban Jangka Panjang'].push(a);
+      } else {
+        groups['Kewajiban Lancar'].push(a);
+      }
+      return;
+    }
+    if (kat.includes('ekuitas') || kat.includes('modal') || kat.includes('equity')) {
+      groups['Ekuitas'].push(a);
+      return;
+    }
+    // Fallback: use account code prefix to determine group
+    var kode = (a.kode || '').toString().trim();
+    var prefix = kode.charAt(0);
+    if (prefix === '1' || prefix === '2' || prefix === '3') {
+      var resolved2 = autoKategoriCOA(a.kode, a.nama, null);
+      if (groups[resolved2.kategori]) {
+        groups[resolved2.kategori].push(a);
+      } else if (prefix === '1') {
+        groups['Aset Lain-lain'].push(a);
+      } else if (prefix === '2') {
+        groups['Kewajiban Lancar'].push(a);
+      } else {
+        groups['Ekuitas'].push(a);
+      }
+    }
+    // Skip accounts with prefix 4, 5, 6 (Laba Rugi accounts, not Neraca)
+  });
   function sum(kat) { return groups[kat].reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0); }
   function renderGroup(kat) {
     return groups[kat].filter(function(a){ return (saldo[a.kode]||{}).net !== 0; }).map(function(a) {
