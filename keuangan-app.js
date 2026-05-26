@@ -2390,22 +2390,32 @@ async function renderLabaRugi() {
   const saldo = fd.saldo;
   const akun = await getAkun();
   const perusahaan = await KDB.getSetting('perusahaan', {});
+  // Helper: compute balance from raw debit/kredit based on category normal direction
+  function getBalance(akunItem) {
+    var s = saldo[akunItem.kode] || { debit: 0, kredit: 0 };
+    var kat = akunItem.kategori || '';
+    if (kat === 'Pendapatan' || kat === 'Pendapatan Lain-lain') {
+      return s.kredit - s.debit;
+    }
+    // Beban Operasional, Beban Lain-lain are debit-normal
+    return s.debit - s.kredit;
+  }
   const pendapatan = akun.filter(function(a){ return a.kategori === 'Pendapatan'; });
   const pendapatanLain = akun.filter(function(a){ return a.kategori === 'Pendapatan Lain-lain'; });
   const bebanOps = akun.filter(function(a){ return a.kategori === 'Beban Operasional'; });
   const bebanLain = akun.filter(function(a){ return a.kategori === 'Beban Lain-lain'; });
-  const totalPendapatan = pendapatan.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
-  const totalPendapatanLain = pendapatanLain.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
-  const totalBebanOps = bebanOps.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
-  const totalBebanLain = bebanLain.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const totalPendapatan = pendapatan.reduce(function(s,a){ return s + getBalance(a); }, 0);
+  const totalPendapatanLain = pendapatanLain.reduce(function(s,a){ return s + getBalance(a); }, 0);
+  const totalBebanOps = bebanOps.reduce(function(s,a){ return s + getBalance(a); }, 0);
+  const totalBebanLain = bebanLain.reduce(function(s,a){ return s + getBalance(a); }, 0);
   const labaKotor = totalPendapatan - totalBebanOps;
   const labaBersih = labaKotor + totalPendapatanLain - totalBebanLain;
   const totalBeban = totalBebanOps + totalBebanLain;
   const printHeader = await buildPrintHeader(perusahaan, 'LAPORAN LABA RUGI', perusahaan.periode||new Date().getFullYear());
   const narrative = buildNarrativeAnalysis({ labaBersih, totalPendapatan, totalBeban, labaKotor });
   function renderRows(items) {
-    return items.filter(function(a){ return (saldo[a.kode]||{}).net !== 0; }).map(function(a) {
-      return '<tr><td style="padding-left:24px">' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp((saldo[a.kode]||{}).net||0) + '</td></tr>';
+    return items.filter(function(a){ return getBalance(a) !== 0; }).map(function(a) {
+      return '<tr><td style="padding-left:24px">' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp(getBalance(a)) + '</td></tr>';
     }).join('');
   }
   return '<div class="page-title">📊 Laporan Laba Rugi</div>'
@@ -2477,17 +2487,27 @@ async function renderNeraca() {
     }
     // Skip accounts with prefix 4, 5, 6 (Laba Rugi accounts, not Neraca)
   });
-  function sum(kat) { return groups[kat].reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0); }
+  // Helper: compute balance from raw debit/kredit based on group normal direction
+  function getNeracaBalance(akunItem, kat) {
+    var s = saldo[akunItem.kode] || { debit: 0, kredit: 0 };
+    // Aset groups are debit-normal: debit - kredit
+    if (kat === 'Aset Lancar' || kat === 'Aset Tetap' || kat === 'Aset Lain-lain') {
+      return s.debit - s.kredit;
+    }
+    // Kewajiban and Ekuitas groups are credit-normal: kredit - debit
+    return s.kredit - s.debit;
+  }
+  function sum(kat) { return groups[kat].reduce(function(s,a){ return s + getNeracaBalance(a, kat); }, 0); }
   function renderGroup(kat) {
-    return groups[kat].filter(function(a){ return (saldo[a.kode]||{}).net !== 0; }).map(function(a) {
-      return '<tr><td style="padding-left:20px">' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp((saldo[a.kode]||{}).net||0) + '</td></tr>';
+    return groups[kat].filter(function(a){ return getNeracaBalance(a, kat) !== 0; }).map(function(a) {
+      return '<tr><td style="padding-left:20px">' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp(getNeracaBalance(a, kat)) + '</td></tr>';
     }).join('');
   }
   // Calculate Laba Bersih Periode Berjalan for Ekuitas section
   const pendapatanAkun = akun.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; });
   const bebanAkun = akun.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; });
-  const totalPendapatanNeraca = pendapatanAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
-  const totalBebanNeraca = bebanAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const totalPendapatanNeraca = pendapatanAkun.reduce(function(s,a){ var sal = saldo[a.kode] || { debit: 0, kredit: 0 }; return s + (sal.kredit - sal.debit); }, 0);
+  const totalBebanNeraca = bebanAkun.reduce(function(s,a){ var sal = saldo[a.kode] || { debit: 0, kredit: 0 }; return s + (sal.debit - sal.kredit); }, 0);
   const labaBersihPeriode = totalPendapatanNeraca - totalBebanNeraca;
 
   const totalAsetLancar = sum('Aset Lancar');
@@ -2651,13 +2671,15 @@ async function renderEkuitas() {
   const ekuitas = akun.filter(function(a){ return a.kategori === 'Ekuitas'; });
   const pendapatan = akun.filter(function(a){ return a.kategori === 'Pendapatan'; });
   const beban = akun.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; });
-  const totalPendapatan = pendapatan.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
-  const totalBeban = beban.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  // Use raw debit/kredit based on category normal direction
+  const totalPendapatan = pendapatan.reduce(function(s,a){ var sal = saldo[a.kode] || { debit: 0, kredit: 0 }; return s + (sal.kredit - sal.debit); }, 0);
+  const totalBeban = beban.reduce(function(s,a){ var sal = saldo[a.kode] || { debit: 0, kredit: 0 }; return s + (sal.debit - sal.kredit); }, 0);
   const labaRugi = totalPendapatan - totalBeban;
-  const modalAwal = ekuitas.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const modalAwal = ekuitas.reduce(function(s,a){ var sal = saldo[a.kode] || { debit: 0, kredit: 0 }; return s + (sal.kredit - sal.debit); }, 0);
   const modalAkhir = modalAwal + labaRugi;
   const ekuitasRows = ekuitas.map(function(a) {
-    return '<tr><td>' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp((saldo[a.kode]||{}).net||0) + '</td></tr>';
+    var sal = saldo[a.kode] || { debit: 0, kredit: 0 };
+    return '<tr><td>' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp(sal.kredit - sal.debit) + '</td></tr>';
   }).join('');
   const printHeaderEk = await buildPrintHeader(perusahaan, 'LAPORAN EKUITAS', perusahaan.periode||new Date().getFullYear());
   return '<div class="page-title">🏦 Laporan Ekuitas</div>'
