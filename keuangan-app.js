@@ -500,6 +500,43 @@ async function getAkunOptions(filter) {
   return filtered.map(function(a) { return '<option value="' + a.kode + '">' + a.kode + ' - ' + a.nama + '</option>'; }).join('');
 }
 
+function computeNeracaTotals(saldo, akunList, fdAkun) {
+  var totalAset = 0, totalKewajiban = 0, totalEkuitas = 0;
+  var totalPendapatan = 0, totalPendapatanLain = 0, totalBebanOps = 0, totalBebanLain = 0;
+  var asetItems = [], kewajibanItems = [], ekuitasItems = [], pendapatanItems = [], bebanItems = [];
+  Object.keys(saldo).forEach(function(kode) {
+    var s = saldo[kode];
+    var kat = (s.akun && s.akun.kategori) || '';
+    var net = s.net || 0;
+    if (kat.includes('Aset')) { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    else if (kat.includes('Kewajiban')) { totalKewajiban += net; kewajibanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    else if (kat === 'Ekuitas') { totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    else if (kat === 'Pendapatan') { totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    else if (kat === 'Pendapatan Lain-lain') { totalPendapatanLain += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    else if (kat === 'Beban Operasional') { totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+    else if (kat === 'Beban Lain-lain') { totalBebanLain += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
+  });
+  var labaBersih = totalPendapatan + totalPendapatanLain - totalBebanOps - totalBebanLain;
+  var totalKewEkuitas = totalKewajiban + totalEkuitas + labaBersih;
+  // Compute COA-only laba if akunList provided
+  var labaCOA = labaBersih;
+  if (akunList) {
+    var pendapatanCOA = akunList.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; })
+      .reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+    var bebanCOA = akunList.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; })
+      .reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+    labaCOA = pendapatanCOA - bebanCOA;
+  }
+  return {
+    totalAset: totalAset, totalKewajiban: totalKewajiban, totalEkuitas: totalEkuitas,
+    totalPendapatan: totalPendapatan, totalPendapatanLain: totalPendapatanLain,
+    totalBebanOps: totalBebanOps, totalBebanLain: totalBebanLain,
+    labaBersih: labaBersih, labaCOA: labaCOA, totalKewEkuitas: totalKewEkuitas,
+    asetItems: asetItems, kewajibanItems: kewajibanItems, ekuitasItems: ekuitasItems,
+    pendapatanItems: pendapatanItems, bebanItems: bebanItems
+  };
+}
+
 async function getFinancialData() {
   var jurnal = await KDB.getAll('jurnal');
   var akun = await getAkun();
@@ -2400,8 +2437,8 @@ async function renderNeraca() {
     }).join('');
   }
   // Calculate Laba Bersih Periode Berjalan for Ekuitas section
-  const pendapatanAkun = fd.akun.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; });
-  const bebanAkun = fd.akun.filter(function(a){ return a.kategori && a.kategori.includes('Beban'); });
+  const pendapatanAkun = akun.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; });
+  const bebanAkun = akun.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; });
   const totalPendapatanNeraca = pendapatanAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
   const totalBebanNeraca = bebanAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
   const labaBersihPeriode = totalPendapatanNeraca - totalBebanNeraca;
@@ -2566,7 +2603,7 @@ async function renderEkuitas() {
   const perusahaan = await KDB.getSetting('perusahaan', {});
   const ekuitas = akun.filter(function(a){ return a.kategori === 'Ekuitas'; });
   const pendapatan = akun.filter(function(a){ return a.kategori === 'Pendapatan'; });
-  const beban = akun.filter(function(a){ return a.kategori && a.kategori.includes('Beban'); });
+  const beban = akun.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; });
   const totalPendapatan = pendapatan.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
   const totalBeban = beban.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
   const labaRugi = totalPendapatan - totalBeban;
@@ -4900,23 +4937,17 @@ async function runAIAnalysis() {
 
     // === NEW CHECKS 8-15 ===
 
-    // 8. Neraca Balance Validation
-    var totalAsetN = 0, totalKewajibanN = 0, totalEkuitasN = 0;
-    var totalPendapatanN = 0, totalPendapatanLainN = 0, totalBebanOpsN = 0, totalBebanLainN = 0;
-    Object.keys(fd.saldo).forEach(function(kode) {
-      var s = fd.saldo[kode];
-      var kat = (s.akun && s.akun.kategori) || '';
-      var net = s.net || 0;
-      if (kat.includes('Aset')) totalAsetN += net;
-      else if (kat.includes('Kewajiban')) totalKewajibanN += net;
-      else if (kat === 'Ekuitas') totalEkuitasN += net;
-      else if (kat === 'Pendapatan') totalPendapatanN += net;
-      else if (kat === 'Pendapatan Lain-lain') totalPendapatanLainN += net;
-      else if (kat === 'Beban Operasional') totalBebanOpsN += net;
-      else if (kat === 'Beban Lain-lain') totalBebanLainN += net;
-    });
-    var labaBersihN = totalPendapatanN + totalPendapatanLainN - totalBebanOpsN - totalBebanLainN;
-    var totalKewEkuitasN = totalKewajibanN + totalEkuitasN + labaBersihN;
+    // 8. Neraca Balance Validation (using shared helper)
+    var neracaTotals = computeNeracaTotals(fd.saldo, akunList, fd.akun);
+    var totalAsetN = neracaTotals.totalAset;
+    var totalKewajibanN = neracaTotals.totalKewajiban;
+    var totalEkuitasN = neracaTotals.totalEkuitas;
+    var totalPendapatanN = neracaTotals.totalPendapatan;
+    var totalPendapatanLainN = neracaTotals.totalPendapatanLain;
+    var totalBebanOpsN = neracaTotals.totalBebanOps;
+    var totalBebanLainN = neracaTotals.totalBebanLain;
+    var labaBersihN = neracaTotals.labaBersih;
+    var totalKewEkuitasN = neracaTotals.totalKewEkuitas;
     var selisihNeraca = Math.abs(totalAsetN - totalKewEkuitasN);
     if (selisihNeraca >= 1) {
       issues.push({ severity: 'danger', title: '❌ Neraca Tidak Balance (Selisih: ' + fmtRp(selisihNeraca) + ')', detail: '<p>Total Aset: ' + fmtRp(totalAsetN) + '</p><p>Total Kewajiban + Ekuitas + Laba Bersih: ' + fmtRp(totalKewEkuitasN) + '</p><p>Selisih: <b class="text-red">' + fmtRp(selisihNeraca) + '</b></p><p><b>Rekomendasi:</b> Periksa jurnal yang tidak balance dan pastikan semua transaksi dicatat berpasangan (double entry). Jalankan "Cek Neraca Balance" untuk detail lengkap.</p>', isTable: false, group: 'standar' });
@@ -5012,12 +5043,21 @@ async function runAIAnalysis() {
       info.push('✅ Semua invoice dan PO memiliki jurnal terkait');
     }
 
-    // 13. Cross-Report Consistency
-    var labaBersihLR = totalPendapatanN + totalPendapatanLainN - totalBebanOpsN - totalBebanLainN;
-    var labaBersihNeraca = labaBersihN;
-    var crossDiff = Math.abs(labaBersihLR - labaBersihNeraca);
-    if (crossDiff > 1) {
-      warnings.push({ severity: 'warning', title: '⚠️ Inkonsistensi Lintas Laporan (Selisih Laba Bersih: ' + fmtRp(crossDiff) + ')', detail: '<p>Laba Bersih (Laba Rugi): ' + fmtRp(labaBersihLR) + '</p><p>Laba Bersih (Neraca): ' + fmtRp(labaBersihNeraca) + '</p><p><b>Rekomendasi:</b> Periksa apakah ada akun yang salah kategori atau transaksi yang belum tercatat di salah satu laporan.</p>', isTable: false, group: 'standar' });
+    // 13. Cross-Report Consistency (COA-only laba vs all-accounts laba)
+    var akunResmi = akunList;
+    var labaCOA = akunResmi.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; })
+      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0)
+      - akunResmi.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; })
+      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0);
+
+    var labaAll = fd.akun.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; })
+      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0)
+      - fd.akun.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; })
+      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0);
+
+    var crossDiff = Math.abs(labaCOA - labaAll);
+    if (crossDiff > 0.01) {
+      warnings.push({ severity: 'warning', title: '⚠️ Inkonsistensi Lintas Laporan (Selisih: ' + fmtRp(crossDiff) + ')', detail: '<p>Laba Bersih (COA Resmi / Laba Rugi): ' + fmtRp(labaCOA) + '</p><p>Laba Bersih (Semua Akun / Neraca): ' + fmtRp(labaAll) + '</p><p>Ada akun pendapatan/beban di jurnal yang tidak terdaftar di COA resmi.</p><p><b>Rekomendasi:</b> Daftarkan akun-akun tersebut ke dalam Chart of Accounts atau hapus jurnal yang mereferensi akun tidak resmi.</p>', isTable: false, group: 'standar' });
     } else {
       info.push('✅ Laba bersih konsisten antara Laba Rugi dan Neraca');
     }
@@ -5078,8 +5118,8 @@ async function runAIAnalysis() {
 
     // === FINANCIAL HEALTH SCORE ===
     var healthScore = 100;
-    healthScore -= issues.length * 15;
-    healthScore -= warnings.length * 5;
+    healthScore -= Math.min(issues.length, 3) * 15;
+    healthScore -= Math.min(warnings.length, 6) * 5;
     if (healthScore < 0) healthScore = 0;
     var scoreColor = healthScore >= 80 ? '#4caf50' : (healthScore >= 60 ? '#ff9800' : '#f44336');
     var gradeText = healthScore >= 90 ? 'Excellent - Kondisi keuangan sangat baik' : (healthScore >= 80 ? 'Baik - Kondisi keuangan sehat dengan sedikit catatan' : (healthScore >= 60 ? 'Perlu Perbaikan - Ada beberapa masalah yang perlu ditangani' : 'Kritis - Banyak masalah serius yang memerlukan perhatian segera'));
@@ -5270,26 +5310,13 @@ async function runAINeracaCheck() {
   try {
     var fd = await getFinancialData();
     var saldo = fd.saldo;
+    var akunList = await getAkun();
 
-    var totalAset = 0, totalKewajiban = 0, totalEkuitas = 0;
-    var totalPendapatan = 0, totalPendapatanLain = 0, totalBebanOps = 0, totalBebanLain = 0;
-    var asetItems = [], kewajibanItems = [], ekuitasItems = [], pendapatanItems = [], bebanItems = [];
-
-    Object.keys(saldo).forEach(function(kode) {
-      var s = saldo[kode];
-      var kat = (s.akun && s.akun.kategori) || '';
-      var net = s.net || 0;
-      if (kat.includes('Aset')) { totalAset += net; asetItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-      else if (kat.includes('Kewajiban')) { totalKewajiban += net; kewajibanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-      else if (kat === 'Ekuitas') { totalEkuitas += net; ekuitasItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-      else if (kat === 'Pendapatan') { totalPendapatan += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-      else if (kat === 'Pendapatan Lain-lain') { totalPendapatanLain += net; pendapatanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-      else if (kat === 'Beban Operasional') { totalBebanOps += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-      else if (kat === 'Beban Lain-lain') { totalBebanLain += net; bebanItems.push({kode: kode, nama: (s.akun&&s.akun.nama)||kode, net: net}); }
-    });
-
-    var labaBersih = totalPendapatan + totalPendapatanLain - totalBebanOps - totalBebanLain;
-    var totalKewEkuitas = totalKewajiban + totalEkuitas + labaBersih;
+    var nt = computeNeracaTotals(saldo, akunList, fd.akun);
+    var totalAset = nt.totalAset, totalKewajiban = nt.totalKewajiban, totalEkuitas = nt.totalEkuitas;
+    var labaBersih = nt.labaBersih;
+    var totalKewEkuitas = nt.totalKewEkuitas;
+    var asetItems = nt.asetItems, kewajibanItems = nt.kewajibanItems, ekuitasItems = nt.ekuitasItems;
     var selisih = Math.abs(totalAset - totalKewEkuitas);
     var balanced = selisih < 1;
 
