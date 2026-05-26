@@ -1691,6 +1691,41 @@ async function hapusDuplikatJurnal(dupId, origId) {
   runAIAnalysis();
 }
 
+async function hapusSemuaDuplikat() {
+  if (!window._aiDuplicates || !window._aiDuplicates.length) {
+    showAlert('Tidak ada data duplikat untuk dihapus.', 'warning');
+    return;
+  }
+  var count = window._aiDuplicates.length;
+  if (!confirm('Hapus ' + count + ' entri duplikat?\n\nYang DIHAPUS: entri duplikat (copy kedua)\nYang DIPERTAHANKAN: entri asli (copy pertama)\n\nTindakan ini tidak dapat dibatalkan.')) return;
+  
+  showLoading(true);
+  var jurnal = await KDB.getAll('jurnal');
+  var jurnalMap = {};
+  jurnal.forEach(function(j) { jurnalMap[j.id] = true; });
+  
+  var deleted = 0, skipped = 0;
+  for (var i = 0; i < window._aiDuplicates.length; i++) {
+    var dup = window._aiDuplicates[i];
+    if (jurnalMap[dup.id1] && jurnalMap[dup.id2]) {
+      await KDB.delete('jurnal', dup.id2);
+      delete jurnalMap[dup.id2];
+      deleted++;
+    } else {
+      skipped++;
+    }
+  }
+  showLoading(false);
+  await KDB.getAll('jurnal');
+  window._aiDuplicates = [];
+  showAlert(deleted + ' duplikat berhasil dihapus!' + (skipped > 0 ? ' ' + skipped + ' dilewati.' : ''), 'success');
+  runAIAnalysis();
+}
+
+function reviewDuplikat() {
+  showAlert('Review tabel di bawah. Klik "Hapus Duplikat" per item atau "Hapus Semua Duplikat" untuk batch.', 'info');
+}
+
 async function hapusSemuaJurnal() {
   if (!confirm('HAPUS SEMUA JURNAL? Tindakan ini tidak dapat dibatalkan!')) return;
   if (!confirm('Anda yakin? Semua ' + (await KDB.getAll('jurnal')).length + ' jurnal akan dihapus permanen.')) return;
@@ -5024,16 +5059,24 @@ async function runAIAnalysis() {
     var refMap = {};
     var duplicates = [];
     allJurnal.forEach(function(j) {
-      if (j.tipe === 'penutup') return; // skip jurnal penutup
-      var key = (j.noRef||'') + '_' + (j.totalDebit||0).toFixed(0) + '_' + (j.tanggal||'');
-      if (key !== '__0_' && key !== '_0_' && refMap[key]) {
+      if (j.tipe === 'penutup') return;
+      if (!j.noRef) return; // skip journals without ref - they're manual entries that may legitimately have same amount
+      var key = (j.tanggal||'') + '_' + (j.totalDebit||0).toFixed(0) + '_' + (j.noRef||'') + '_' + (j.keterangan||'').substring(0,50);
+      if (refMap[key]) {
         duplicates.push({ id1: refMap[key].id, id2: j.id, ref: j.noRef, jumlah: j.totalDebit, tanggal: j.tanggal, ket: j.keterangan });
       } else {
         refMap[key] = j;
       }
     });
     if (duplicates.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', detail: duplicates.map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')" title="Lihat entri asli">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')" title="Lihat duplikat">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')" title="Hapus hanya entri duplikat">Hapus Duplikat</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>', group: 'integritas', recommendation: 'Review dan hapus jurnal duplikat yang teridentifikasi.' });
+      window._aiDuplicates = duplicates;
+      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', 
+        detail: '<div style="margin-bottom:10px"><button class="btn btn-danger btn-sm" onclick="hapusSemuaDuplikat()">\uD83D\uDDD1\uFE0F Hapus Semua Duplikat (' + duplicates.length + ')</button> <button class="btn btn-outline btn-sm" onclick="reviewDuplikat()">\uD83D\uDC41\uFE0F Review Dulu</button></div>'
+          + duplicates.slice(0, 10).map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')">Hapus Duplikat</button></td></tr>'; }).join('')
+          + (duplicates.length > 10 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (duplicates.length - 10) + ' duplikat lainnya</td></tr>' : ''),
+        isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>', 
+        group: 'integritas', 
+        recommendation: 'Review dan hapus jurnal duplikat. Gunakan "Hapus Semua Duplikat" untuk batch delete.' });
     } else {
       info.push('✅ Tidak ditemukan duplikasi transaksi');
     }
