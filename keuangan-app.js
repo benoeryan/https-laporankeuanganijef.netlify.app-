@@ -5285,7 +5285,7 @@ async function runAIAnalysis() {
       try {
     // Build a Set of lowercased jurnal refs for O(1) lookups
     var jurnalRefsSet = new Set();
-    allJurnal.forEach(function(j) { if (j.noRef) jurnalRefsSet.add(j.noRef.toLowerCase()); });
+    allJurnal.forEach(function(j) { if (j.noRef && typeof j.noRef === 'string') jurnalRefsSet.add(j.noRef.toLowerCase()); else if (j.noRef) jurnalRefsSet.add(String(j.noRef).toLowerCase()); });
     // Convert to array once for substring matching
     var jurnalRefsArr = Array.from(jurnalRefsSet);
     var orphanInvoices = invoiceList.filter(function(inv) {
