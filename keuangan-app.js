@@ -4813,14 +4813,45 @@ async function renderAIAssistant() {
 async function runAIAnalysis() {
   var el = document.getElementById('ai-result');
   if (!el) return;
-  el.innerHTML = '<div class="alert alert-warning">⏳ Sedang menganalisis data...</div>';
-  try {
-    var issues = [];
-    var warnings = [];
-    var info = [];
+  el.innerHTML = '<div class="alert alert-warning">⏳ Memulai analisis komprehensif...</div>';
 
-    // 1. Cek jurnal tidak balance
-    var allJurnal = await KDB.getAll('jurnal');
+  // Use setTimeout to allow UI to update before heavy computation
+  setTimeout(async function() {
+    try {
+      var startTime = Date.now();
+      var TIMEOUT_MS = 30000;
+      var issues = [];
+      var warnings = [];
+      var info = [];
+      var timedOut = false;
+      var TOTAL_CHECKS = 15;
+
+      function updateProgress(step, label) {
+        if (el) el.innerHTML = '<div class="alert alert-warning">⏳ Analisis ' + step + '/' + TOTAL_CHECKS + ': ' + label + '</div>';
+      }
+
+      function checkTimeout() {
+        if (Date.now() - startTime > TIMEOUT_MS) { timedOut = true; return true; }
+        return false;
+      }
+
+      el.innerHTML = '<div class="alert alert-warning">⏳ Memuat data...</div>';
+
+      // Load all data at once to minimize Firebase calls
+      var allJurnal = await KDB.getAll('jurnal');
+      var fd = await getFinancialData();
+      var akunList = await getAkun();
+      var pcList = await KDB.getAll('pettycash');
+      var invoiceList = await KDB.getAll('invoice');
+      var poList = await KDB.getAll('po');
+
+      if (checkTimeout()) { el.innerHTML = '<div class="alert alert-warning">Analisis dihentikan karena timeout. Berikut hasil parsial.</div>'; return; }
+
+      el.innerHTML = '<div class="alert alert-success">⏳ Memuat data... &#10003;</div>';
+
+      // 1. Cek jurnal tidak balance
+      updateProgress(1, 'Mengecek jurnal balance...');
+      try {
     var unbalanced = [];
     allJurnal.forEach(function(j) {
       var td = 0, tk = 0;
@@ -4834,18 +4865,19 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Semua jurnal balance (Debit = Kredit)');
     }
+      } catch(e1) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek jurnal balance', detail: '<p>Error: ' + e1.message + '</p>', isTable: false, group: 'integritas' }); }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 2. Cek akun tidak terdaftar di COA
-    // Gunakan getFinancialData yang sudah mengenali semua akun (termasuk auto-created)
-    var fd = await getFinancialData();
+      if (!timedOut) {
+      updateProgress(2, 'Mengecek akun COA...');
+      try {
     var allKnownAkun = {};
     fd.akun.forEach(function(a) { allKnownAkun[a.kode] = true; });
-    // Juga cek dari saved COA
-    var akunList = await getAkun();
     akunList.forEach(function(a) { allKnownAkun[a.kode] = true; });
     var unknownAkun = [];
     allJurnal.forEach(function(j) {
-      // Skip jurnal penutup — akun penutup dibuat otomatis oleh sistem
       if (j.tipe === 'penutup') return;
       (j.lines||[]).forEach(function(l) {
         if (l.akun && !allKnownAkun[l.akun] && !unknownAkun.find(function(x){ return x.kode === l.akun; })) {
@@ -4858,10 +4890,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Semua akun di jurnal terdaftar di COA');
     }
+      } catch(e2) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek akun COA', detail: '<p>Error: ' + e2.message + '</p>', isTable: false, group: 'anomali' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 3. Cek petty cash tanpa jurnal
-    // Cek apakah sudah ada jurnal dengan sumber petty-cash yang cocok berdasarkan noRef
-    var pcList = await KDB.getAll('pettycash');
+      if (!timedOut) {
+      updateProgress(3, 'Mengecek petty cash...');
+      try {
     var jurnalPCRefs = {};
     allJurnal.filter(function(j){ return j.sumber === 'petty-cash'; }).forEach(function(j) {
       if (j.noRef) jurnalPCRefs[j.noRef] = true;
@@ -4886,8 +4923,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Semua petty cash terintegrasi dengan jurnal');
     }
+      } catch(e3) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek petty cash', detail: '<p>Error: ' + e3.message + '</p>', isTable: false, group: 'anomali' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 4. Cek duplikasi transaksi (jurnal dengan ref & nominal & tanggal sama, exclude penutup)
+      if (!timedOut) {
+      updateProgress(4, 'Mengecek duplikasi transaksi...');
+      try {
     var refMap = {};
     var duplicates = [];
     allJurnal.forEach(function(j) {
@@ -4904,8 +4948,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Tidak ditemukan duplikasi transaksi');
     }
+      } catch(e4) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek duplikasi', detail: '<p>Error: ' + e4.message + '</p>', isTable: false, group: 'integritas' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 5. Cek selisih Actual Pembayaran vs Penerimaan
+      if (!timedOut) {
+      updateProgress(5, 'Mengecek rasio beban/pendapatan...');
+      try {
     var totalBeban = 0, totalPendapatan = 0;
     Object.values(fd.saldo).forEach(function(s) {
       if ((s.akun.kategori||'').includes('Beban')) totalBeban += s.net||0;
@@ -4923,21 +4974,35 @@ async function runAIAnalysis() {
     } else {
       info.push('ℹ️ Belum ada data pendapatan untuk analisis rasio');
     }
+      } catch(e5) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek rasio beban', detail: '<p>Error: ' + e5.message + '</p>', isTable: false, group: 'anomali' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 6. Cek jurnal tanpa tanggal
+      if (!timedOut) {
+      updateProgress(6, 'Mengecek jurnal tanpa tanggal...');
+      try {
     var noDate = allJurnal.filter(function(j) { return !j.tanggal; });
     if (noDate.length > 0) {
       warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanpa Tanggal (' + noDate.length + ')', detail: noDate.slice(0,10).map(function(j) { return '<tr><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Perbaiki</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Ref</th><th>Keterangan</th><th>Aksi</th>', group: 'integritas', recommendation: 'Tambahkan tanggal yang sesuai untuk setiap jurnal yang belum memiliki tanggal.' });
     } else {
       info.push('✅ Semua jurnal memiliki tanggal');
     }
+      } catch(e6) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek jurnal tanpa tanggal', detail: '<p>Error: ' + e6.message + '</p>', isTable: false, group: 'integritas' }); }
+      }
 
     // 7. Cek total transaksi & ringkasan
     info.push('📊 Total jurnal: ' + allJurnal.length + ' | Petty cash: ' + pcList.length + ' | COA: ' + akunList.length + ' akun');
 
+      if (checkTimeout()) { timedOut = true; }
+
     // === NEW CHECKS 8-15 ===
 
     // 8. Neraca Balance Validation (using shared helper)
+      if (!timedOut) {
+      updateProgress(8, 'Validasi neraca balance...');
+      try {
     var neracaTotals = computeNeracaTotals(fd.saldo, akunList, fd.akun);
     var totalAsetN = neracaTotals.totalAset;
     var totalKewajibanN = neracaTotals.totalKewajiban;
@@ -4954,8 +5019,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Neraca balance (Aset = Kewajiban + Ekuitas + Laba Bersih)');
     }
+      } catch(e8) { warnings.push({ severity: 'warning', title: '⚠️ Gagal validasi neraca', detail: '<p>Error: ' + e8.message + '</p>', isTable: false, group: 'standar' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 9. Trial Balance Check
+      if (!timedOut) {
+      updateProgress(9, 'Mengecek trial balance...');
+      try {
     var totalAllDebit = 0, totalAllKredit = 0;
     allJurnal.forEach(function(j) {
       (j.lines||[]).forEach(function(l) {
@@ -4969,8 +5041,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Trial balance seimbang (Total Debit = Total Kredit)');
     }
+      } catch(e9) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek trial balance', detail: '<p>Error: ' + e9.message + '</p>', isTable: false, group: 'standar' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 10. Saldo Normal Anomaly Detection
+      if (!timedOut) {
+      updateProgress(10, 'Mengecek saldo normal...');
+      try {
     var saldoAnomalies = [];
     Object.keys(fd.saldo).forEach(function(kode) {
       var s = fd.saldo[kode];
@@ -4989,8 +5068,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Semua akun memiliki saldo normal sesuai tipe');
     }
+      } catch(e10) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek saldo normal', detail: '<p>Error: ' + e10.message + '</p>', isTable: false, group: 'anomali' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 11. Double Entry Validation
+      if (!timedOut) {
+      updateProgress(11, 'Mengecek double entry...');
+      try {
     var singleLineJournals = [];
     allJurnal.forEach(function(j) {
       if (j.tipe === 'penutup') return;
@@ -5003,29 +5089,43 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Semua jurnal memiliki minimal 2 baris (double entry)');
     }
+      } catch(e11) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek double entry', detail: '<p>Error: ' + e11.message + '</p>', isTable: false, group: 'integritas' }); }
+      }
 
-    // 12. Orphan Transactions
-    var invoiceList = await KDB.getAll('invoice');
-    var poList = await KDB.getAll('po');
-    var jurnalRefs = {};
-    allJurnal.forEach(function(j) { if (j.noRef) jurnalRefs[j.noRef.toLowerCase()] = true; });
+      if (checkTimeout()) { timedOut = true; }
+
+    // 12. Orphan Transactions (optimized with Set for O(1) lookups)
+      if (!timedOut) {
+      updateProgress(12, 'Mengecek transaksi orphan...');
+      try {
+    // Build a Set of lowercased jurnal refs for O(1) lookups
+    var jurnalRefsSet = new Set();
+    allJurnal.forEach(function(j) { if (j.noRef) jurnalRefsSet.add(j.noRef.toLowerCase()); });
+    // Convert to array once for substring matching
+    var jurnalRefsArr = Array.from(jurnalRefsSet);
     var orphanInvoices = invoiceList.filter(function(inv) {
       var invId = (inv.id||'').toLowerCase();
       var invNo = (inv.nomor||inv.number||'').toLowerCase();
-      var found = false;
-      Object.keys(jurnalRefs).forEach(function(ref) {
-        if (ref.includes(invId) || (invNo && ref.includes(invNo))) found = true;
-      });
-      return !found;
+      // First try exact match via Set (O(1))
+      if (jurnalRefsSet.has(invId) || (invNo && jurnalRefsSet.has(invNo))) return false;
+      // Fallback: substring match against refs array
+      for (var ri = 0; ri < jurnalRefsArr.length; ri++) {
+        var ref = jurnalRefsArr[ri];
+        if (ref.indexOf(invId) !== -1 || (invNo && ref.indexOf(invNo) !== -1)) return false;
+      }
+      return true;
     });
     var orphanPOs = poList.filter(function(po) {
       var poId = (po.id||'').toLowerCase();
       var poNo = (po.nomor||po.number||'').toLowerCase();
-      var found = false;
-      Object.keys(jurnalRefs).forEach(function(ref) {
-        if (ref.includes(poId) || (poNo && ref.includes(poNo))) found = true;
-      });
-      return !found;
+      // First try exact match via Set (O(1))
+      if (jurnalRefsSet.has(poId) || (poNo && jurnalRefsSet.has(poNo))) return false;
+      // Fallback: substring match against refs array
+      for (var ri = 0; ri < jurnalRefsArr.length; ri++) {
+        var ref = jurnalRefsArr[ri];
+        if (ref.indexOf(poId) !== -1 || (poNo && ref.indexOf(poNo) !== -1)) return false;
+      }
+      return true;
     });
     if (orphanInvoices.length > 0 || orphanPOs.length > 0) {
       var orphanDetail = '';
@@ -5042,8 +5142,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Semua invoice dan PO memiliki jurnal terkait');
     }
+      } catch(e12) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek orphan transactions', detail: '<p>Error: ' + e12.message + '</p>', isTable: false, group: 'anomali' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 13. Cross-Report Consistency (COA-only laba vs all-accounts laba)
+      if (!timedOut) {
+      updateProgress(13, 'Mengecek konsistensi laporan...');
+      try {
     var akunResmi = akunList;
     var labaCOA = akunResmi.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; })
       .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0)
@@ -5061,8 +5168,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Laba bersih konsisten antara Laba Rugi dan Neraca');
     }
+      } catch(e13) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek konsistensi laporan', detail: '<p>Error: ' + e13.message + '</p>', isTable: false, group: 'standar' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 14. Unusual Amounts (Outlier Detection)
+      if (!timedOut) {
+      updateProgress(14, 'Mengecek outlier/transaksi tidak lazim...');
+      try {
     var allAmounts = [];
     allJurnal.forEach(function(j) {
       (j.lines||[]).forEach(function(l) {
@@ -5092,8 +5206,15 @@ async function runAIAnalysis() {
     } else {
       info.push('✅ Tidak ditemukan transaksi outlier (nominal tidak lazim)');
     }
+      } catch(e14) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek outlier', detail: '<p>Error: ' + e14.message + '</p>', isTable: false, group: 'anomali' }); }
+      }
+
+      if (checkTimeout()) { timedOut = true; }
 
     // 15. Future Date and Date Gap Check
+      if (!timedOut) {
+      updateProgress(15, 'Mengecek tanggal jurnal...');
+      try {
     var todayStr = new Date().toISOString().slice(0,10);
     var futureJournals = allJurnal.filter(function(j) { return j.tanggal && j.tanggal > todayStr; });
     if (futureJournals.length > 0) {
@@ -5115,6 +5236,13 @@ async function runAIAnalysis() {
     if (futureJournals.length === 0) {
       info.push('✅ Tidak ada jurnal dengan tanggal masa depan');
     }
+      } catch(e15) { warnings.push({ severity: 'warning', title: '⚠️ Gagal cek tanggal', detail: '<p>Error: ' + e15.message + '</p>', isTable: false, group: 'anomali' }); }
+      }
+
+      // Add timeout notice if applicable
+      if (timedOut) {
+        info.push('⚠️ Analisis dihentikan karena timeout (>30 detik). Berikut hasil parsial.');
+      }
 
     // === FINANCIAL HEALTH SCORE ===
     var healthScore = 100;
@@ -5205,9 +5333,10 @@ async function runAIAnalysis() {
 
     html += '</div>';
     el.innerHTML = html;
-  } catch(e) {
-    el.innerHTML = '<div class="alert alert-danger">Error saat analisis: ' + e.message + '</div>';
-  }
+    } catch(e) {
+      el.innerHTML = '<div class="alert alert-danger">Error saat analisis: ' + e.message + '</div>';
+    }
+  }, 50);
 }
 
 async function runAIJurnalCheck() {
