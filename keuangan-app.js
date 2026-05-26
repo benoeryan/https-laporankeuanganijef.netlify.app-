@@ -5028,8 +5028,9 @@ async function runAIAnalysis() {
       try {
     var totalBeban = 0, totalPendapatan = 0;
     Object.values(fd.saldo).forEach(function(s) {
-      if ((s.akun.kategori||'').includes('Beban')) totalBeban += s.net||0;
-      if ((s.akun.kategori||'').includes('Pendapatan')) totalPendapatan += s.net||0;
+      var d = s.debit || 0, k = s.kredit || 0;
+      if ((s.akun.kategori||'').includes('Beban')) totalBeban += (d - k);
+      if ((s.akun.kategori||'').includes('Pendapatan')) totalPendapatan += (k - d);
     });
     if (totalPendapatan > 0) {
       var rasio = ((totalBeban / totalPendapatan) * 100).toFixed(1);
@@ -5122,14 +5123,16 @@ async function runAIAnalysis() {
     var saldoAnomalies = [];
     Object.keys(fd.saldo).forEach(function(kode) {
       var s = fd.saldo[kode];
-      var net = s.net || 0;
-      if (net === 0) return;
-      var tipe = (s.akun && s.akun.tipe) || '';
+      var d = s.debit || 0, k = s.kredit || 0;
+      var kat = (s.akun && s.akun.kategori) || '';
       var nama = (s.akun && s.akun.nama) || kode;
-      if (tipe === 'Debit' && net < 0) {
-        saldoAnomalies.push({ kode: kode, nama: nama, net: net, expected: 'Debit (positif)', actual: 'Kredit (negatif)' });
-      } else if (tipe === 'Kredit' && net < 0) {
-        saldoAnomalies.push({ kode: kode, nama: nama, net: net, expected: 'Kredit (positif)', actual: 'Debit (negatif)' });
+      // Determine expected direction from category
+      var isDebitNormal = kat.includes('Aset') || kat.includes('Beban');
+      var balance = isDebitNormal ? (d - k) : (k - d);
+      if (balance === 0) return;
+      // Anomaly: negative balance means contra to expected
+      if (balance < 0) {
+        saldoAnomalies.push({ kode: kode, nama: nama, net: balance, expected: isDebitNormal ? 'Debit (positif)' : 'Kredit (positif)', actual: isDebitNormal ? 'Kredit (negatif)' : 'Debit (negatif)' });
       }
     });
     if (saldoAnomalies.length > 0) {
@@ -5222,14 +5225,14 @@ async function runAIAnalysis() {
       try {
     var akunResmi = akunList;
     var labaCOA = akunResmi.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; })
-      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0)
+      .reduce(function(s,a){ var sal = fd.saldo[a.kode]||{}; return s + ((sal.kredit||0) - (sal.debit||0)); }, 0)
       - akunResmi.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; })
-      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0);
+      .reduce(function(s,a){ var sal = fd.saldo[a.kode]||{}; return s + ((sal.debit||0) - (sal.kredit||0)); }, 0);
 
     var labaAll = fd.akun.filter(function(a){ return a.kategori === 'Pendapatan' || a.kategori === 'Pendapatan Lain-lain'; })
-      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0)
+      .reduce(function(s,a){ var sal = fd.saldo[a.kode]||{}; return s + ((sal.kredit||0) - (sal.debit||0)); }, 0)
       - fd.akun.filter(function(a){ return a.kategori === 'Beban Operasional' || a.kategori === 'Beban Lain-lain'; })
-      .reduce(function(s,a){ return s+((fd.saldo[a.kode]||{}).net||0); }, 0);
+      .reduce(function(s,a){ var sal = fd.saldo[a.kode]||{}; return s + ((sal.debit||0) - (sal.kredit||0)); }, 0);
 
     var crossDiff = Math.abs(labaCOA - labaAll);
     if (crossDiff > 0.01) {
