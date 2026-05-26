@@ -1559,8 +1559,32 @@ async function hapusJurnal(id) {
     }
   }
   await KDB.delete('jurnal', id);
+  // Force refresh local cache from Firebase to ensure consistency
+  await KDB.getAll('jurnal');
   showAlert('Jurnal dihapus.', 'warning');
   navigate('jurnal-umum');
+}
+
+async function hapusDuplikatJurnal(dupId, origId) {
+  if (!confirm('Hapus entri duplikat ini? Entri asli (original) TIDAK akan terhapus.')) return;
+  // Verify original exists before deleting
+  var jurnal = await KDB.getAll('jurnal');
+  var orig = jurnal.find(function(x){ return x.id === origId; });
+  var dup = jurnal.find(function(x){ return x.id === dupId; });
+  if (!dup) { showAlert('Entri duplikat tidak ditemukan.', 'warning'); return; }
+  if (!orig) { showAlert('Peringatan: Entri asli tidak ditemukan di database. Batalkan penghapusan untuk investigasi.', 'danger'); return; }
+  // Delete only the duplicate
+  await KDB.delete('jurnal', dupId);
+  // Refresh cache and verify original still exists
+  var refreshed = await KDB.getAll('jurnal');
+  var origStillExists = refreshed.find(function(x){ return x.id === origId; });
+  if (origStillExists) {
+    showAlert('Duplikat berhasil dihapus. Entri asli tetap aman.', 'success');
+  } else {
+    showAlert('Duplikat dihapus, namun entri asli perlu diverifikasi.', 'warning');
+  }
+  // Re-run analysis to refresh the view
+  runAIAnalysis();
 }
 
 async function hapusSemuaJurnal() {
@@ -4783,7 +4807,7 @@ async function runAIAnalysis() {
       }
     });
     if (duplicates.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', detail: duplicates.map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + d.id2 + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + d.id2 + '\')">Hapus</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>' });
+      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', detail: duplicates.map(function(d) { return '<tr><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')" title="Lihat entri asli">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')" title="Lihat duplikat">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')" title="Hapus hanya entri duplikat">Hapus Duplikat</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Aksi</th>' });
     } else {
       info.push('✅ Tidak ditemukan duplikasi transaksi');
     }
