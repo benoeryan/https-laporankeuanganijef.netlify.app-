@@ -1615,7 +1615,8 @@ async function renderJurnalUmum() {
     const hapusBtn = hasRole('leader') ? '<button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + j.id + '\')" title="Hapus jurnal ini">Hapus</button>' : '';
     const editBtn = hasRole('leader') ? '<button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button>' : '';
     const sumberChip = j.sumber ? '<span class="chip" style="font-size:0.68rem;background:#e8f0fe;color:#1a237e">' + j.sumber + '</span> ' : '';
-    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||'-') + '</td>'
+    const akunCodes = (j.lines||[]).map(function(l){ return l.akun||''; }).join(',');
+    return '<tr data-tanggal="' + (j.tanggal||'') + '" data-sumber="' + (j.sumber||'') + '" data-akun="' + akunCodes + '"><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||'-') + '</td>'
       + '<td>' + sumberChip + (j.keterangan||'-') + '</td>'
       + '<td class="text-green">' + fmtRp(j.totalDebit) + '</td><td class="text-red">' + fmtRp(j.totalKredit) + '</td>'
       + '<td><span class="badge ' + (bal?'badge-success':'badge-danger') + '">' + (bal?'Balance':'Unbalance') + '</span></td>'
@@ -1626,6 +1627,7 @@ async function renderJurnalUmum() {
     + '<div class="card"><div class="card-header"><h2>Daftar Jurnal (' + jurnal.length + ')</h2>'
     + '<div class="actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
     + '<input type="text" id="jurnal-search-q" placeholder="Cari keterangan / ref..." style="padding:6px 10px;border:1.5px solid #ddd;border-radius:7px;font-size:0.83rem;min-width:160px">'
+    + '<select id="jurnal-filter-akun" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:7px;font-size:0.83rem;max-width:200px"><option value="">Semua Akun</option>' + akunOpts + '</select>'
     + '<select id="jurnal-filter-month" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:7px;font-size:0.83rem"><option value="">Semua Bulan</option><option value="01">Januari</option><option value="02">Februari</option><option value="03">Maret</option><option value="04">April</option><option value="05">Mei</option><option value="06">Juni</option><option value="07">Juli</option><option value="08">Agustus</option><option value="09">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option></select>'
     + '<select id="jurnal-filter-sumber" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:7px;font-size:0.83rem"><option value="">Semua Sumber</option><option value="import-sheets">Import Sheets</option><option value="umum">Manual</option><option value="permohonan-dana">Permohonan Dana</option><option value="dana-masuk">Dana Masuk</option><option value="petty-cash">Petty Cash</option></select>'
     + '<input type="date" id="jurnal-filter-tgl-dari" title="Dari Tanggal" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:7px;font-size:0.83rem">'
@@ -7487,34 +7489,38 @@ function filterJurnalBySumber(sumber) {
 
 function applyJurnalFilter() {
   var q = ((document.getElementById('jurnal-search-q')||{}).value||'').toLowerCase();
+  var akunFilter = (document.getElementById('jurnal-filter-akun')||{}).value||'';
   var month = (document.getElementById('jurnal-filter-month')||{}).value||'';
   var sumber = (document.getElementById('jurnal-filter-sumber')||{}).value||'';
   var tglDari = (document.getElementById('jurnal-filter-tgl-dari')||{}).value||'';
   var tglSampai = (document.getElementById('jurnal-filter-tgl-sampai')||{}).value||'';
   document.querySelectorAll('#tbl-jurnal tbody tr').forEach(function(r) {
     var text = r.textContent.toLowerCase();
-    var tglCell = r.cells[0] ? r.cells[0].textContent.trim() : '';
     var dateStr = r.dataset ? r.dataset.tanggal : '';
+    var rowAkun = r.dataset ? (r.dataset.akun||'') : '';
+    var rowSumber = r.dataset ? (r.dataset.sumber||'') : '';
     // Parse date from cell text if no dataset
     if (!dateStr) {
+      var tglCell = r.cells[0] ? r.cells[0].textContent.trim() : '';
       var parsed = parseFlexDate(tglCell);
       if (parsed) dateStr = parsed;
     }
     var showQ = !q || text.includes(q);
+    var showAkun = !akunFilter || rowAkun.split(',').indexOf(akunFilter) >= 0;
     var showMonth = !month || (dateStr && dateStr.substring(5,7) === month);
     var showSumber = !sumber || (function() {
-      if (sumber === 'import-sheets') return text.includes('import');
-      if (sumber === 'umum') return !text.includes('import');
-      return text.includes(sumber);
+      if (sumber === 'import-sheets') return rowSumber.includes('import') || text.includes('import');
+      if (sumber === 'umum') return !rowSumber || rowSumber === 'umum' || rowSumber === '';
+      return rowSumber.includes(sumber) || text.includes(sumber);
     })();
     var showDari = !tglDari || (dateStr && dateStr >= tglDari);
     var showSampai = !tglSampai || (dateStr && dateStr <= tglSampai);
-    r.style.display = (showQ && showMonth && showSumber && showDari && showSampai) ? '' : 'none';
+    r.style.display = (showQ && showAkun && showMonth && showSumber && showDari && showSampai) ? '' : 'none';
   });
 }
 
 function resetJurnalFilter() {
-  var ids = ['jurnal-search-q','jurnal-filter-month','jurnal-filter-sumber','jurnal-filter-tgl-dari','jurnal-filter-tgl-sampai'];
+  var ids = ['jurnal-search-q','jurnal-filter-akun','jurnal-filter-month','jurnal-filter-sumber','jurnal-filter-tgl-dari','jurnal-filter-tgl-sampai'];
   ids.forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
   document.querySelectorAll('#tbl-jurnal tbody tr').forEach(function(r){ r.style.display = ''; });
 }
