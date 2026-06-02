@@ -3183,6 +3183,7 @@ async function renderPettyCash() {
 
   // Kumpulkan semua transaksi, tentukan tipe
   const allTx = [];
+  var tahunSekarang = new Date().getFullYear();
   list.forEach(function(p) {
     var tipe = p.tipe || 'keluar';
     if (!p.tipe) {
@@ -3197,17 +3198,30 @@ async function renderPettyCash() {
   allTx.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
 
   // Hitung saldo berjalan maju (forward) dari saldo awal
+  // PENTING: hanya hitung transaksi TAHUN BERJALAN karena transaksi tahun sebelumnya
+  // sudah termasuk dalam pettycash_saldo (carry-forward dari tutup buku)
   var saldoBerjalan = saldoAwal;
   var totalMasuk = 0, totalKeluar = 0;
   allTx.forEach(function(t) {
-    if (t.tipe === 'masuk') { saldoBerjalan += t.jumlah; totalMasuk += t.jumlah; }
-    else { saldoBerjalan -= t.jumlah; totalKeluar += t.jumlah; }
+    // Cek apakah transaksi tahun ini
+    var tglTahun = t.tanggal ? parseInt(t.tanggal.substring(0, 4)) : 0;
+    var isCurrentYear = (tglTahun === tahunSekarang);
+    if (isCurrentYear) {
+      if (t.tipe === 'masuk') { saldoBerjalan += t.jumlah; totalMasuk += t.jumlah; }
+      else { saldoBerjalan -= t.jumlah; totalKeluar += t.jumlah; }
+    }
     t.saldoSetelah = saldoBerjalan;
   });
   const sisaSaldo = saldoBerjalan;
 
-  // Reverse untuk tampilan (terbaru di atas)
-  const allTxDesc = allTx.slice().reverse();
+  // Filter tampilan: hanya transaksi tahun ini
+  const allTxTahunIni = allTx.filter(function(t) {
+    var tglTahun = t.tanggal ? parseInt(t.tanggal.substring(0, 4)) : 0;
+    return tglTahun === tahunSekarang;
+  });
+
+  // Reverse untuk tampilan (terbaru di atas) — hanya tahun ini
+  const allTxDesc = allTxTahunIni.slice().reverse();
 
   const rows = allTxDesc.slice(0,100).map(function(t) {
     const cls = t.tipe === 'masuk' ? 'text-green' : 'text-red';
@@ -3275,9 +3289,9 @@ async function renderPettyCash() {
     + '<div class="mt-12 flex-row"><button class="btn btn-primary" onclick="simpanPettyCashJurnal()">Simpan Pengeluaran</button><button class="btn btn-outline" onclick="navigate(\'kalk-pettycash\')">Reset</button></div>'
     + '</div>'
     // Laporan per Periode
-    + buildPettyCashPeriodReport(allTx)
+    + buildPettyCashPeriodReport(allTxTahunIni)
     // Buku Kas — daftar transaksi dengan saldo berjalan
-    + '<div class="card"><div class="card-header"><h2>📒 Buku Kas Kecil (' + allTx.length + ' transaksi)</h2>'
+    + '<div class="card"><div class="card-header"><h2>📒 Buku Kas Kecil (' + allTxTahunIni.length + ' transaksi — ' + tahunSekarang + ')</h2>'
     + '<div style="font-size:0.82rem;color:#888">Saldo Awal: ' + fmtRp(saldoAwal) + ' → Saldo Saat Ini: <b class="' + (sisaSaldo>=0?'text-green':'text-red') + '">' + fmtRp(sisaSaldo) + '</b></div></div>'
     + (allTx.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>No. Ref</th><th>Tipe</th><th>Keterangan</th><th>Jumlah</th><th>Saldo</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">💵</span>Belum ada transaksi</div>')
     + '</div>';
@@ -3673,10 +3687,15 @@ async function hapusDanaMasukPC(id) {
 async function renderPettyCashRec() {
   const list = await KDB.getAll('pettycash');
   const saldoAwal = await KDB.getSetting('pettycash_saldo', 0);
+  var tahunSekarang = new Date().getFullYear();
 
-  // Hitung total masuk dan keluar dari semua transaksi
+  // Hitung total masuk dan keluar HANYA tahun berjalan
   var totalMasuk = 0, totalKeluar = 0;
   list.forEach(function(p) {
+    // Filter tahun ini saja
+    var tglTahun = p.tanggal ? parseInt(p.tanggal.substring(0, 4)) : 0;
+    if (tglTahun !== tahunSekarang) return;
+
     var tipe = p.tipe || 'keluar';
     if (!p.tipe) {
       var ket = (p.keterangan||'').toLowerCase();
@@ -3707,8 +3726,13 @@ function hitungSelisihPC() {
   const fisik = parseFloat(document.getElementById('pc-fisik') ? document.getElementById('pc-fisik').value : 0) || 0;
   const saldoAwal = parseFloat(_klget('ksetting_pettycash_saldo', 0));
   const list = _klget('k_pettycash_all', []);
+  var tahunSekarang = new Date().getFullYear();
   var totalMasuk = 0, totalKeluar = 0;
   list.forEach(function(p) {
+    // Filter tahun ini saja
+    var tglTahun = p.tanggal ? parseInt(p.tanggal.substring(0, 4)) : 0;
+    if (tglTahun !== tahunSekarang) return;
+
     var tipe = p.tipe || 'keluar';
     if (!p.tipe) {
       var ket = (p.keterangan||'').toLowerCase();
