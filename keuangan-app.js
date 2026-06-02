@@ -3239,6 +3239,7 @@ async function renderPettyCash() {
     + '<input type="number" id="pc-saldo" value="' + saldoAwal + '" placeholder="Saldo awal" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem">'
     + '<button class="btn btn-success" onclick="setSaldoPettyCash()">Set Saldo Awal</button>'
     + '<button class="btn btn-info" onclick="topUpPettyCash()">+ Top-up Kas Kecil</button>'
+    + '<button class="btn btn-warning btn-sm" onclick="fixJurnalPettyCash()" style="margin-left:auto">🔧 Fix Akun Jurnal Lama</button>'
     + '</div>'
     + '<div id="topup-form" style="display:none;margin-top:12px;padding:12px;background:#f8fff8;border-radius:8px;border:1.5px solid #4caf50">'
     + '<div class="form-grid">'
@@ -3341,32 +3342,101 @@ function topUpPettyCash() {
   if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 
+// Fix jurnal petty cash lama yang pakai akun hardcode 1-1200/1-1100
+// ke akun COA yang benar sesuai setup user
+async function fixJurnalPettyCash() {
+  var akunPC = await getAkunPettyCash();
+  var akunBank = await getAkunKasBank();
+  if (akunPC === '1-1200' && akunBank === '1-1100') {
+    showAlert('Akun COA sudah sesuai default (1-1200 / 1-1100). Tidak perlu fix.', 'info');
+    return;
+  }
+  if (!confirm('Perbaiki jurnal petty cash lama?\n\nAkun 1-1200 → ' + akunPC + '\nAkun 1-1100 → ' + akunBank + '\n\nSemua jurnal sumber petty-cash yang masih pakai akun lama akan diperbarui.')) return;
+
+  showLoading(true);
+  var jurnal = await KDB.getAll('jurnal');
+  var pcJurnal = jurnal.filter(function(j) { return j.sumber === 'petty-cash'; });
+  var fixed = 0;
+  for (var i = 0; i < pcJurnal.length; i++) {
+    var j = pcJurnal[i];
+    var changed = false;
+    var newLines = (j.lines || []).map(function(l) {
+      var newL = Object.assign({}, l);
+      if (l.akun === '1-1200') { newL.akun = akunPC; changed = true; }
+      if (l.akun === '1-1100') { newL.akun = akunBank; changed = true; }
+      return newL;
+    });
+    if (changed) {
+      await KDB.save('jurnal', j.id, Object.assign({}, j, { lines: newLines }));
+      fixed++;
+    }
+  }
+  showLoading(false);
+  showAlert('Selesai! ' + fixed + ' jurnal diperbaiki. Akun diubah ke ' + akunPC + ' / ' + akunBank);
+  navigate('kalk-pettycash');
+}
+
 async function simpanTopUpPC() {
   var tgl = (document.getElementById('topup-tgl')||{}).value || today();
   var jumlah = parseFloat((document.getElementById('topup-jumlah')||{}).value) || 0;
   var ket = (document.getElementById('topup-ket')||{}).value || 'Top-up kas kecil';
   if (!jumlah || jumlah <= 0) { showAlert('Jumlah top-up wajib diisi!', 'danger'); return; }
   var id = genId('PC');
+
+  // Cari akun COA petty cash & kas/bank secara dinamis dari COA yang ada
+  var akunPC = await getAkunPettyCash();
+  var akunBank = await getAkunKasBank();
+
   // Simpan ke petty cash collection
   await KDB.save('pettycash', id, {
     id: id, tanggal: tgl, keterangan: ket, noRef: 'TOPUP-' + id.substring(0,8),
     jumlah: jumlah, kategori: 'Top-up Kas Kecil', tipe: 'masuk',
     createdBy: KU.username, createdAt: new Date().toISOString()
   });
-  // Buat jurnal otomatis: Debit Kas Kecil (1-1200), Kredit Kas/Bank (1-1100)
+  // Buat jurnal otomatis: Debit Petty Cash, Kredit Kas/Bank
   var jId = genId('JU');
   await KDB.save('jurnal', jId, {
     id: jId, tanggal: tgl, keterangan: ket, noRef: 'TOPUP-' + id.substring(0,8),
     tipe: 'umum', sumber: 'petty-cash',
     lines: [
-      { akun: '1-1200', ket: 'Top-up kas kecil', debit: jumlah, kredit: 0 },
-      { akun: '1-1100', ket: 'Transfer ke kas kecil', debit: 0, kredit: jumlah }
+      { akun: akunPC, ket: 'Top-up kas kecil', debit: jumlah, kredit: 0 },
+      { akun: akunBank, ket: 'Transfer ke kas kecil', debit: 0, kredit: jumlah }
     ],
     totalDebit: jumlah, totalKredit: jumlah,
     createdBy: KU.username, createdAt: new Date().toISOString()
   });
   showAlert('Top-up kas kecil ' + fmtRp(jumlah) + ' berhasil dicatat & jurnal dibuat!');
   navigate('kalk-pettycash');
+}
+
+// Helper: cari kode akun petty cash dari COA (dinamis, bukan hardcode)
+async function getAkunPettyCash() {
+  var akun = await getAkun();
+  // Cari akun yang nama/kodenya mengandung 'petty' atau 'kas kecil'
+  var found = akun.find(function(a) {
+    var n = (a.nama||'').toLowerCase();
+    return n.includes('petty') || n.includes('kas kecil');
+  });
+  if (found) return found.kode;
+  // Fallback: cari 1-1200 atau 1-1101-3
+  found = akun.find(function(a) { return a.kode === '1-1200' || a.kode === '1-1101-3'; });
+  if (found) return found.kode;
+  return '1-1200'; // fallback terakhir
+}
+
+// Helper: cari kode akun kas/bank utama dari COA
+async function getAkunKasBank() {
+  var akun = await getAkun();
+  // Cari akun kas/bank utama (bukan petty cash)
+  var found = akun.find(function(a) {
+    var n = (a.nama||'').toLowerCase();
+    return (n.includes('bank') || n.includes('kas')) && !n.includes('petty') && !n.includes('kecil') && a.kategori === 'Aset Lancar';
+  });
+  if (found) return found.kode;
+  // Fallback
+  found = akun.find(function(a) { return a.kode === '1-1100' || a.kode === '1-1101-1'; });
+  if (found) return found.kode;
+  return '1-1100';
 }
 
 function buildPettyCashPeriodReport(allTx) {
@@ -5740,8 +5810,9 @@ async function buatJurnalDariPC(pcId) {
   if (pc.jurnalId) { showAlert('Jurnal sudah dibuat sebelumnya!', 'warning'); return; }
 
   var jumlah = Math.abs(parseFloat(pc.jumlah)||0);
+  var akunPC = await getAkunPettyCash();
   var akunDebit = pc.akunDebit || '5-2200'; // Default: Beban Operasional
-  var akunKredit = pc.akunKredit || '1-1200'; // Default: Kas Kecil
+  var akunKredit = pc.akunKredit || akunPC; // Default: akun Petty Cash dari COA
 
   var jId = genId('JU');
   await KDB.save('jurnal', jId, {
@@ -5764,7 +5835,8 @@ async function buatJurnalDariPC(pcId) {
 }
 
 async function batchBuatJurnalPC() {
-  if (!confirm('Buat jurnal otomatis untuk SEMUA transaksi petty cash yang belum terintegrasi?\n\nAkun default:\n- Debit: Beban Operasional (5-2200)\n- Kredit: Kas Kecil (1-1200)\n\nAnda bisa edit jurnal nanti jika akun perlu disesuaikan.')) return;
+  var akunPC = await getAkunPettyCash();
+  if (!confirm('Buat jurnal otomatis untuk SEMUA transaksi petty cash yang belum terintegrasi?\n\nAkun default:\n- Debit: Beban Operasional (5-2200)\n- Kredit: ' + akunPC + ' (Kas Kecil)\n\nAnda bisa edit jurnal nanti jika akun perlu disesuaikan.')) return;
 
   var pcList = await KDB.getAll('pettycash');
   var allJurnal = await KDB.getAll('jurnal');
@@ -5794,7 +5866,7 @@ async function batchBuatJurnalPC() {
     if (jumlah <= 0) continue;
 
     var akunDebit = pc.akunDebit || '5-2200';
-    var akunKredit = pc.akunKredit || '1-1200';
+    var akunKredit = pc.akunKredit || akunPC;
     var jId = genId('JU');
 
     await KDB.save('jurnal', jId, {
