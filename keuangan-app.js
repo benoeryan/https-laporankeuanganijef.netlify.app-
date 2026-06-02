@@ -625,6 +625,36 @@ async function getFinancialData() {
   var akun = await getAkun();
   var saldo = {};
   akun.forEach(function(a) { saldo[a.kode] = { akun: a, debit: 0, kredit: 0, net: 0 }; });
+
+  // === SALDO AWAL: Tambahkan saldo awal tahun berjalan ke perhitungan ===
+  // Saldo awal disimpan di setting 'saldo_awal_YYYY' sebagai {kodeAkun: nominal}
+  // Nominal positif = saldo normal akun (debit untuk Aset/Beban, kredit untuk Kewajiban/Ekuitas/Pendapatan)
+  var tahunSekarang = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahunSekarang, {});
+
+  Object.keys(saldoAwalData).forEach(function(kode) {
+    var nominal = parseFloat(saldoAwalData[kode]) || 0;
+    if (nominal === 0) return;
+    if (!saldo[kode]) {
+      var autoKat = autoKategoriCOA(kode, '', '');
+      saldo[kode] = { akun: { kode: kode, nama: kode, kategori: autoKat.kategori, tipe: autoKat.tipe }, debit: 0, kredit: 0, net: 0 };
+    }
+    // Saldo awal positif berarti saldo normal:
+    // Akun Debit-normal (Aset, Beban): tambah ke debit
+    // Akun Kredit-normal (Kewajiban, Ekuitas, Pendapatan): tambah ke kredit
+    var tipe = saldo[kode].akun.tipe;
+    var kat = (saldo[kode].akun.kategori || '').toLowerCase();
+    var isDebitNormal = (tipe === 'Debit') ||
+      kat.includes('aset') || kat.includes('beban') ||
+      (kode.charAt(0) === '1') || (kode.charAt(0) === '5') || (kode.charAt(0) === '6');
+    if (isDebitNormal) {
+      saldo[kode].debit += nominal;
+    } else {
+      saldo[kode].kredit += nominal;
+    }
+  });
+
+  // === JURNAL: Tambahkan semua transaksi jurnal ===
   jurnal.filter(function(j) { return j.tipe !== 'penutup'; }).forEach(function(j) {
     (j.lines || []).forEach(function(l) {
       if (!l.akun) return;
@@ -3146,13 +3176,15 @@ async function renderPettyCash() {
   // Petty cash = buku kas kecil
   // tipe 'masuk' = top-up/isi ulang kas kecil
   // tipe 'keluar' = pengeluaran dari kas kecil
-  // Saldo awal = manual setting sebagai saldo pembuka
-  const saldoAwal = await KDB.getSetting('pettycash_saldo', 0);
+
+  // Ambil saldo aktual dari getFinancialData (COA akun 1-1200) sebagai sumber kebenaran
+  const fd = await getFinancialData();
+  const saldoNeraca = fd.saldo['1-1200'] ? ((fd.saldo['1-1200'].debit||0) - (fd.saldo['1-1200'].kredit||0)) : 0;
 
   // Hitung semua transaksi — masuk dan keluar
   const allTx = [];
   list.forEach(function(p) {
-    // Tentukan tipe: jika jumlah negatif atau kategori mengandung 'masuk'/'topup'/'isi', tipe masuk
+    // Tentukan tipe
     var tipe = p.tipe || 'keluar';
     if (!p.tipe) {
       var ket = (p.keterangan||'').toLowerCase();
@@ -3163,17 +3195,27 @@ async function renderPettyCash() {
     }
     allTx.push({ tanggal: p.tanggal, ket: p.keterangan, kategori: p.kategori||'Petty Cash', jumlah: Math.abs(parseFloat(p.jumlah)||0), tipe: tipe, sumber: 'petty', id: p.id, noRef: p.noRef||'' });
   });
-  allTx.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); }); // ascending untuk saldo berjalan
+  allTx.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); }); // ascending
 
-  // Hitung saldo berjalan
-  var saldoBerjalan = saldoAwal;
+  // Hitung total masuk dan keluar dari SEMUA transaksi
   var totalMasuk = 0, totalKeluar = 0;
   allTx.forEach(function(t) {
-    if (t.tipe === 'masuk') { saldoBerjalan += t.jumlah; totalMasuk += t.jumlah; }
-    else { saldoBerjalan -= t.jumlah; totalKeluar += t.jumlah; }
-    t.saldoSetelah = saldoBerjalan;
+    if (t.tipe === 'masuk') { totalMasuk += t.jumlah; }
+    else { totalKeluar += t.jumlah; }
   });
-  const sisaSaldo = saldoBerjalan;
+
+  // Saldo saat ini = saldo Neraca (sumber kebenaran dari COA + jurnal)
+  const sisaSaldo = saldoNeraca;
+
+  // Hitung saldo berjalan per transaksi (backward dari saldo akhir)
+  // Saldo transaksi terakhir = sisaSaldo, lalu mundur
+  var saldoRunning = sisaSaldo;
+  for (var i = allTx.length - 1; i >= 0; i--) {
+    allTx[i].saldoSetelah = saldoRunning;
+    if (allTx[i].tipe === 'masuk') { saldoRunning -= allTx[i].jumlah; }
+    else { saldoRunning += allTx[i].jumlah; }
+  }
+  var impliedSaldoAwal = saldoRunning;
 
   // Reverse untuk tampilan (terbaru di atas)
   const allTxDesc = allTx.slice().reverse();
@@ -3195,9 +3237,10 @@ async function renderPettyCash() {
   }).join('');
 
   // Input form — tambah opsi tipe masuk/keluar
+  var saldoAwal = await KDB.getSetting('pettycash_saldo', 0);
   return '<div class="page-title">💵 Petty Cash</div>'
     + '<div class="stats-row">'
-    + '<div class="stat-box"><div class="val">' + fmtRp(saldoAwal) + '</div><div class="lbl">Saldo Awal</div></div>'
+    + '<div class="stat-box"><div class="val">' + fmtRp(impliedSaldoAwal) + '</div><div class="lbl">Saldo Awal (implied)</div></div>'
     + '<div class="stat-box green"><div class="val">' + fmtRp(totalMasuk) + '</div><div class="lbl">Total Masuk</div></div>'
     + '<div class="stat-box red"><div class="val">' + fmtRp(totalKeluar) + '</div><div class="lbl">Total Keluar</div></div>'
     + '<div class="stat-box ' + (sisaSaldo >= 0 ? 'green' : 'red') + '"><div class="val">' + fmtRp(sisaSaldo) + '</div><div class="lbl">Saldo Saat Ini</div></div>'
@@ -3246,7 +3289,7 @@ async function renderPettyCash() {
     + buildPettyCashPeriodReport(allTx)
     // Buku Kas — daftar transaksi dengan saldo berjalan
     + '<div class="card"><div class="card-header"><h2>📒 Buku Kas Kecil (' + allTx.length + ' transaksi)</h2>'
-    + '<div style="font-size:0.82rem;color:#888">Saldo Awal: ' + fmtRp(saldoAwal) + ' → Saldo Saat Ini: <b class="' + (sisaSaldo>=0?'text-green':'text-red') + '">' + fmtRp(sisaSaldo) + '</b></div></div>'
+    + '<div style="font-size:0.82rem;color:#888">Saldo Awal: ' + fmtRp(impliedSaldoAwal) + ' → Saldo Saat Ini: <b class="' + (sisaSaldo>=0?'text-green':'text-red') + '">' + fmtRp(sisaSaldo) + '</b></div></div>'
     + (allTx.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>No. Ref</th><th>Tipe</th><th>Keterangan</th><th>Jumlah</th><th>Saldo</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">💵</span>Belum ada transaksi</div>')
     + '</div>';
 }
@@ -3301,7 +3344,12 @@ async function simpanPettyCashJurnal() {
 async function setSaldoPettyCash() {
   const saldo = parseFloat(document.getElementById('pc-saldo').value) || 0;
   await KDB.saveSetting('pettycash_saldo', saldo);
-  showAlert('Saldo awal petty cash diperbarui!');
+  // Sinkronkan ke saldo awal COA akun 1-1200 (Kas Kecil) agar Neraca konsisten
+  var tahun = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahun, {});
+  saldoAwalData['1-1200'] = saldo;
+  await KDB.saveSetting('saldo_awal_' + tahun, saldoAwalData);
+  showAlert('Saldo awal petty cash diperbarui & sinkron ke Neraca!');
   navigate('kalk-pettycash');
 }
 
@@ -3480,7 +3528,7 @@ async function tutupBukuPettyCash() {
     arsipAt: new Date().toISOString()
   });
 
-  // Set saldo awal baru = saldo sisa (carry forward)
+  // Set saldo awal baru = saldo sisa (carry forward) — untuk backward compat
   await KDB.saveSetting('pettycash_saldo', saldoBerjalan);
 
   showAlert('Tutup buku ' + bulan + '/' + tahun + ' selesai! Saldo sisa ' + fmtRp(saldoBerjalan) + ' dibawa ke periode berikutnya.');
@@ -3571,15 +3619,15 @@ async function hapusDanaMasukPC(id) {
 
 async function renderPettyCashRec() {
   const list = await KDB.getAll('pettycash');
-  const saldo = await KDB.getSetting('pettycash_saldo', 0);
-  const totalKeluar = list.reduce(function(s,x){ return s+(parseFloat(x.jumlah)||0); }, 0);
-  const sisaSeharusnya = saldo - totalKeluar;
+
+  // Ambil saldo aktual dari getFinancialData (COA akun 1-1200)
+  const fd = await getFinancialData();
+  const saldoNeraca = fd.saldo['1-1200'] ? ((fd.saldo['1-1200'].debit||0) - (fd.saldo['1-1200'].kredit||0)) : 0;
+  const sisaSeharusnya = saldoNeraca;
   return '<div class="page-title">🔄 Petty Cash Reconcile</div>'
     + '<div class="card"><div class="card-header"><h2>Rekonsiliasi Petty Cash</h2></div>'
     + '<div class="table-wrap"><table><tbody>'
-    + '<tr><td>Saldo Awal Petty Cash</td><td class="text-right fw-bold">' + fmtRp(saldo) + '</td></tr>'
-    + '<tr><td>Total Pengeluaran Tercatat</td><td class="text-right text-red">(' + fmtRp(totalKeluar) + ')</td></tr>'
-    + '<tr style="background:#e3f2fd"><td><b>Sisa Seharusnya</b></td><td class="text-right fw-bold">' + fmtRp(sisaSeharusnya) + '</td></tr>'
+    + '<tr style="background:#e3f2fd"><td><b>Saldo Kas Kecil (dari Neraca / COA 1-1200)</b></td><td class="text-right fw-bold">' + fmtRp(sisaSeharusnya) + '</td></tr>'
     + '<tr><td>Saldo Fisik (isi manual)</td><td class="text-right"><input type="number" id="pc-fisik" placeholder="0" style="padding:6px;border:1px solid #ddd;border-radius:5px;text-align:right" oninput="hitungSelisihPC()"></td></tr>'
     + '<tr id="pc-selisih-row" style="display:none"><td><b>Selisih</b></td><td class="text-right fw-bold" id="pc-selisih-val">-</td></tr>'
     + '</tbody></table></div>'
@@ -3588,10 +3636,30 @@ async function renderPettyCashRec() {
 
 function hitungSelisihPC() {
   const fisik = parseFloat(document.getElementById('pc-fisik') ? document.getElementById('pc-fisik').value : 0) || 0;
-  const saldo = parseFloat(_klget('ksetting_pettycash_saldo', 0));
+  // Gunakan saldo dari Neraca yang sudah terakhir di-render
+  // Karena ini synchronous, gunakan cached local data
+  const saldoAwal = parseFloat(_klget('ksetting_pettycash_saldo', 0));
   const list = _klget('k_pettycash_all', []);
-  const totalKeluar = list.reduce(function(s,x){ return s+(parseFloat(x.jumlah)||0); }, 0);
-  const seharusnya = saldo - totalKeluar;
+  // Hitung dari semua transaksi (simplified - saldo neraca sudah benar saat render)
+  var totalMasuk = 0, totalKeluar = 0;
+  list.forEach(function(p) {
+    var tipe = p.tipe || 'keluar';
+    if (!p.tipe) {
+      var ket = (p.keterangan||'').toLowerCase();
+      var kat = (p.kategori||'').toLowerCase();
+      if (kat.includes('masuk') || kat.includes('topup') || kat.includes('isi') || kat.includes('dana masuk') || ket.includes('top up') || ket.includes('isi kas') || ket.includes('saldo masuk')) {
+        tipe = 'masuk';
+      }
+    }
+    var jumlah = Math.abs(parseFloat(p.jumlah)||0);
+    if (tipe === 'masuk') totalMasuk += jumlah;
+    else totalKeluar += jumlah;
+  });
+  // Ambil saldo awal dari saldo_awal COA (cached)
+  var tahun = new Date().getFullYear();
+  var saldoAwalCOA = _klget('ksetting_saldo_awal_' + tahun, {});
+  var saldoAwalPC = parseFloat(saldoAwalCOA['1-1200']) || 0;
+  const seharusnya = saldoAwalPC + totalMasuk - totalKeluar;
   const selisih = fisik - seharusnya;
   const row = document.getElementById('pc-selisih-row');
   const val = document.getElementById('pc-selisih-val');
