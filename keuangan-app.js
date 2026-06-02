@@ -5198,10 +5198,8 @@ async function kirimChatAI() {
   var apiKey = localStorage.getItem('k_ai_apikey') || '';
 
   if (apiKey) {
-    // Gunakan Gemini API
     reply = await callGeminiChat(msg, apiKey);
   } else {
-    // Fallback: analisis lokal berdasarkan data
     reply = await localAIReply(msg);
   }
 
@@ -5211,8 +5209,172 @@ async function kirimChatAI() {
   var typing = document.getElementById('ai-typing');
   if (typing) typing.remove();
 
+  // Cek apakah ada ACTION di respons
+  var actionMatch = reply.match(/###ACTION:(.*?)###/);
+  var displayText = reply.replace(/###ACTION:.*?###/g, '').trim();
+  var actionHtml = '';
+
+  if (actionMatch) {
+    try {
+      var actionData = JSON.parse(actionMatch[1]);
+      _pendingAIAction = actionData;
+      actionHtml = renderActionConfirmation(actionData);
+    } catch(e) {
+      // JSON parse gagal, abaikan action
+    }
+  }
+
   // Tampilkan reply
-  chatEl.innerHTML += '<div style="display:flex;margin-bottom:8px"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6;white-space:pre-wrap">' + escapeHtml(reply) + '</div></div>';
+  chatEl.innerHTML += '<div style="display:flex;margin-bottom:8px"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6;white-space:pre-wrap">' + escapeHtml(displayText) + '</div></div>';
+
+  // Tampilkan action confirmation jika ada
+  if (actionHtml) {
+    chatEl.innerHTML += actionHtml;
+  }
+
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+var _pendingAIAction = null;
+
+function renderActionConfirmation(action) {
+  var html = '<div style="margin:8px 0;padding:12px;background:#fff3e0;border:1.5px solid #ff9800;border-radius:10px">';
+  html += '<div style="font-weight:700;color:#e65100;margin-bottom:8px">⚡ AI ingin melakukan aksi berikut:</div>';
+
+  if (action.type === 'jurnal') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Buat Jurnal Umum</b><br>'
+      + 'Tanggal: ' + (action.tanggal||today()) + '<br>'
+      + 'Keterangan: ' + (action.keterangan||'-') + '<br>'
+      + '<table style="width:100%;font-size:0.82rem;margin-top:6px;border-collapse:collapse">'
+      + '<tr style="background:#1a237e;color:white"><th style="padding:4px 8px">Akun</th><th style="padding:4px 8px">Ket</th><th style="padding:4px 8px">Debit</th><th style="padding:4px 8px">Kredit</th></tr>';
+    (action.lines||[]).forEach(function(l) {
+      html += '<tr style="border-bottom:1px solid #ddd"><td style="padding:4px 8px">' + (l.akun||'-') + '</td><td style="padding:4px 8px">' + (l.ket||'-') + '</td><td style="padding:4px 8px">' + fmtRp(l.debit||0) + '</td><td style="padding:4px 8px">' + fmtRp(l.kredit||0) + '</td></tr>';
+    });
+    html += '</table></div>';
+  } else if (action.type === 'topup_pc') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Top-up Petty Cash</b><br>'
+      + 'Tanggal: ' + (action.tanggal||today()) + '<br>'
+      + 'Jumlah: ' + fmtRp(action.jumlah||0) + '<br>'
+      + 'Keterangan: ' + (action.keterangan||'-') + '</div>';
+  } else if (action.type === 'pengeluaran_pc') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Pengeluaran Petty Cash</b><br>'
+      + 'Tanggal: ' + (action.tanggal||today()) + '<br>'
+      + 'Jumlah: ' + fmtRp(action.jumlah||0) + '<br>'
+      + 'Akun Beban: ' + (action.akunBeban||'-') + '<br>'
+      + 'Keterangan: ' + (action.keterangan||'-') + '</div>';
+  } else if (action.type === 'hapus_jurnal') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Hapus Jurnal</b><br>'
+      + 'ID: ' + (action.id||'-') + '<br>'
+      + 'Alasan: ' + (action.alasan||'-') + '</div>';
+  } else {
+    html += '<div style="font-size:0.85rem">Aksi: ' + JSON.stringify(action) + '</div>';
+  }
+
+  html += '<div style="display:flex;gap:8px;margin-top:10px">'
+    + '<button class="btn btn-success btn-sm" onclick="eksekusiAIAction()">✅ Konfirmasi & Eksekusi</button>'
+    + '<button class="btn btn-danger btn-sm" onclick="batalAIAction()">❌ Batalkan</button>'
+    + '</div></div>';
+  return html;
+}
+
+async function eksekusiAIAction() {
+  if (!_pendingAIAction) { showAlert('Tidak ada aksi pending', 'warning'); return; }
+  var action = _pendingAIAction;
+  _pendingAIAction = null;
+  var chatEl = document.getElementById('ai-chat-messages');
+
+  try {
+    if (action.type === 'jurnal') {
+      var totalD = 0, totalK = 0;
+      (action.lines||[]).forEach(function(l) { totalD += l.debit||0; totalK += l.kredit||0; });
+      if (Math.abs(totalD - totalK) > 1) {
+        showAlert('Jurnal tidak balance! Debit: ' + fmtRp(totalD) + ' ≠ Kredit: ' + fmtRp(totalK), 'danger');
+        return;
+      }
+      var id = genId('JU');
+      await KDB.save('jurnal', id, {
+        id: id, tanggal: action.tanggal || today(), keterangan: action.keterangan || 'Jurnal dari AI Chat',
+        noRef: action.noRef || id, tipe: 'umum', sumber: 'ai-chat',
+        lines: action.lines, totalDebit: totalD, totalKredit: totalK,
+        createdBy: KU.username, createdAt: new Date().toISOString()
+      });
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Jurnal berhasil dibuat! (ID: ' + id + ')</div></div>';
+      showAlert('Jurnal berhasil dibuat dari AI Chat!');
+
+    } else if (action.type === 'topup_pc') {
+      var jumlah = parseFloat(action.jumlah) || 0;
+      if (jumlah <= 0) { showAlert('Jumlah harus > 0', 'danger'); return; }
+      var pcId = genId('PC');
+      var akunPC = await getAkunPettyCash();
+      var akunBank = await getAkunKasBank();
+      await KDB.save('pettycash', pcId, {
+        id: pcId, tanggal: action.tanggal || today(), keterangan: action.keterangan || 'Top-up dari AI Chat',
+        noRef: 'TOPUP-' + pcId.substring(0,8), jumlah: jumlah, kategori: 'Top-up Kas Kecil', tipe: 'masuk',
+        createdBy: KU.username, createdAt: new Date().toISOString()
+      });
+      var jId = genId('JU');
+      await KDB.save('jurnal', jId, {
+        id: jId, tanggal: action.tanggal || today(), keterangan: action.keterangan || 'Top-up kas kecil',
+        noRef: 'TOPUP-' + pcId.substring(0,8), tipe: 'umum', sumber: 'petty-cash',
+        lines: [
+          { akun: akunPC, ket: 'Top-up kas kecil', debit: jumlah, kredit: 0 },
+          { akun: akunBank, ket: 'Transfer ke kas kecil', debit: 0, kredit: jumlah }
+        ],
+        totalDebit: jumlah, totalKredit: jumlah,
+        createdBy: KU.username, createdAt: new Date().toISOString()
+      });
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Top-up petty cash ' + fmtRp(jumlah) + ' berhasil!</div></div>';
+      showAlert('Top-up petty cash berhasil dari AI Chat!');
+
+    } else if (action.type === 'pengeluaran_pc') {
+      var jumlah2 = parseFloat(action.jumlah) || 0;
+      if (jumlah2 <= 0) { showAlert('Jumlah harus > 0', 'danger'); return; }
+      var akunPC2 = await getAkunPettyCash();
+      var akunBeban = action.akunBeban || '5-2200';
+      var pcId2 = genId('PC');
+      await KDB.save('pettycash', pcId2, {
+        id: pcId2, tanggal: action.tanggal || today(), keterangan: action.keterangan || 'Pengeluaran dari AI Chat',
+        noRef: pcId2, jumlah: jumlah2, kategori: 'Pengeluaran', tipe: 'keluar',
+        createdBy: KU.username, createdAt: new Date().toISOString()
+      });
+      var jId2 = genId('JU');
+      await KDB.save('jurnal', jId2, {
+        id: jId2, tanggal: action.tanggal || today(), keterangan: action.keterangan || 'Pengeluaran petty cash',
+        noRef: pcId2, tipe: 'umum', sumber: 'petty-cash',
+        lines: [
+          { akun: akunBeban, ket: action.keterangan || 'Pengeluaran', debit: jumlah2, kredit: 0 },
+          { akun: akunPC2, ket: 'Kas kecil keluar', debit: 0, kredit: jumlah2 }
+        ],
+        totalDebit: jumlah2, totalKredit: jumlah2,
+        createdBy: KU.username, createdAt: new Date().toISOString()
+      });
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Pengeluaran petty cash ' + fmtRp(jumlah2) + ' berhasil dicatat!</div></div>';
+      showAlert('Pengeluaran petty cash berhasil dari AI Chat!');
+
+    } else if (action.type === 'hapus_jurnal') {
+      if (!action.id) { showAlert('ID jurnal tidak valid', 'danger'); return; }
+      await KDB.delete('jurnal', action.id);
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Jurnal ' + action.id + ' berhasil dihapus.</div></div>';
+      showAlert('Jurnal dihapus dari AI Chat!');
+
+    } else {
+      showAlert('Tipe aksi tidak dikenali: ' + action.type, 'warning');
+    }
+  } catch(e) {
+    chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#ffcdd2;padding:8px 14px;border-radius:8px;font-size:0.85rem">❌ Gagal: ' + e.message + '</div></div>';
+    showAlert('Gagal eksekusi: ' + e.message, 'danger');
+  }
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function batalAIAction() {
+  _pendingAIAction = null;
+  var chatEl = document.getElementById('ai-chat-messages');
+  chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#ffecb3;padding:8px 14px;border-radius:8px;font-size:0.85rem">⚠️ Aksi dibatalkan oleh user.</div></div>';
   chatEl.scrollTop = chatEl.scrollHeight;
 }
 
@@ -5234,6 +5396,7 @@ async function callGeminiChat(msg, apiKey) {
     var fd = await getFinancialData();
     var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
     var jurnal = await KDB.getAll('jurnal');
+    var akunList = await getAkun();
 
     var konteks = 'Data keuangan perusahaan saat ini:\n'
       + '- Total jurnal: ' + jurnal.length + '\n'
@@ -5247,8 +5410,23 @@ async function callGeminiChat(msg, apiKey) {
     }).join('\n');
     konteks += '- Saldo akun:\n' + akunPenting + '\n';
 
+    // Daftar akun COA untuk referensi AI
+    var coaList = akunList.slice(0, 30).map(function(a) { return a.kode + ' - ' + a.nama + ' (' + a.kategori + ')'; }).join('\n');
+    konteks += '\n- Daftar Akun COA:\n' + coaList + '\n';
+
+    var systemPrompt = 'Kamu adalah AI asisten keuangan untuk perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas.\n\n'
+      + 'KEMAMPUAN AKSI: Kamu bisa membantu user melakukan aksi berikut. Jika user meminta aksi, respond dengan format JSON khusus di akhir pesan (setelah penjelasan):\n\n'
+      + 'Format aksi (taruh di baris terakhir):\n'
+      + '###ACTION:{"type":"jurnal","tanggal":"YYYY-MM-DD","keterangan":"...","lines":[{"akun":"kode","ket":"...","debit":number,"kredit":number}]}###\n'
+      + '###ACTION:{"type":"topup_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"..."}###\n'
+      + '###ACTION:{"type":"pengeluaran_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"...","akunBeban":"kode"}###\n'
+      + '###ACTION:{"type":"hapus_jurnal","id":"jurnal_id","alasan":"..."}###\n\n'
+      + 'PENTING: Selalu berikan penjelasan dulu baru action JSON. User akan konfirmasi sebelum eksekusi.\n'
+      + 'Jika user hanya bertanya (bukan minta aksi), jawab biasa tanpa ACTION.\n\n'
+      + 'Berikut konteks data:\n\n' + konteks;
+
     var messages = [
-      { role: 'user', parts: [{ text: 'Kamu adalah AI asisten keuangan untuk perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas. Berikut konteks data:\n\n' + konteks + '\n\nPertanyaan user: ' + msg }] }
+      { role: 'user', parts: [{ text: systemPrompt + '\n\nPertanyaan/perintah user: ' + msg }] }
     ];
 
     var response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
@@ -5277,6 +5455,59 @@ async function localAIReply(msg) {
   var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
   var pcList = await KDB.getAll('pettycash');
   var jurnal = await KDB.getAll('jurnal');
+
+  // Deteksi perintah aksi: buat jurnal
+  if ((lower.includes('buat') || lower.includes('catat') || lower.includes('input')) && lower.includes('jurnal')) {
+    // Coba parse nominal dari pesan
+    var nominalMatch = msg.match(/(\d[\d.,]*)/);
+    var nominal = nominalMatch ? parseFloat(nominalMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+    if (nominal > 0) {
+      var akunList = await getAkun();
+      // Coba detect akun dari keyword
+      var akunDebit = '5-2200', akunKredit = await getAkunPettyCash();
+      if (lower.includes('listrik')) akunDebit = akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('listrik'); }) ? akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('listrik'); }).kode : '5-2200';
+      if (lower.includes('gaji') || lower.includes('salary')) akunDebit = akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('gaji'); }) ? akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('gaji'); }).kode : '5-1100';
+      if (lower.includes('atk') || lower.includes('alat tulis')) akunDebit = akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('atk'); }) ? akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('atk'); }).kode : '5-2200';
+
+      var ket = msg.replace(/buat(kan)?|catat(kan)?|input(kan)?|jurnal/gi, '').trim() || 'Jurnal dari AI Chat';
+      return 'Saya akan buatkan jurnal:\n'
+        + '• Keterangan: ' + ket + '\n'
+        + '• Debit: ' + akunDebit + ' → Rp ' + nominal.toLocaleString('id-ID') + '\n'
+        + '• Kredit: ' + akunKredit + ' → Rp ' + nominal.toLocaleString('id-ID') + '\n\n'
+        + 'Klik Konfirmasi untuk menyimpan.\n'
+        + '###ACTION:{"type":"jurnal","tanggal":"' + today() + '","keterangan":"' + ket.replace(/"/g,'\\"') + '","lines":[{"akun":"' + akunDebit + '","ket":"' + ket.replace(/"/g,'\\"') + '","debit":' + nominal + ',"kredit":0},{"akun":"' + akunKredit + '","ket":"Kas keluar","debit":0,"kredit":' + nominal + '}]}###';
+    }
+    return 'Untuk membuat jurnal, sebutkan nominal dan keterangan. Contoh:\n"Buatkan jurnal beban listrik 500000"';
+  }
+
+  // Deteksi perintah topup petty cash
+  if ((lower.includes('topup') || lower.includes('top up') || lower.includes('isi') || lower.includes('tambah saldo')) && (lower.includes('petty') || lower.includes('kas kecil'))) {
+    var nominalMatch2 = msg.match(/(\d[\d.,]*)/);
+    var nominal2 = nominalMatch2 ? parseFloat(nominalMatch2[1].replace(/\./g,'').replace(',','.')) : 0;
+    if (nominal2 > 0) {
+      return 'Saya akan top-up petty cash:\n'
+        + '• Jumlah: Rp ' + nominal2.toLocaleString('id-ID') + '\n'
+        + '• Tanggal: ' + today() + '\n\n'
+        + 'Klik Konfirmasi untuk menyimpan.\n'
+        + '###ACTION:{"type":"topup_pc","tanggal":"' + today() + '","jumlah":' + nominal2 + ',"keterangan":"Top-up kas kecil dari AI Chat"}###';
+    }
+    return 'Sebutkan jumlah yang mau di-topup. Contoh:\n"Topup petty cash 1000000"';
+  }
+
+  // Deteksi pengeluaran petty cash
+  if ((lower.includes('buat') || lower.includes('catat') || lower.includes('input')) && (lower.includes('pengeluaran') || lower.includes('keluar')) && (lower.includes('petty') || lower.includes('kas kecil'))) {
+    var nominalMatch3 = msg.match(/(\d[\d.,]*)/);
+    var nominal3 = nominalMatch3 ? parseFloat(nominalMatch3[1].replace(/\./g,'').replace(',','.')) : 0;
+    if (nominal3 > 0) {
+      var ket3 = msg.replace(/buat(kan)?|catat(kan)?|input(kan)?|pengeluaran|keluar|petty|kas kecil/gi, '').trim() || 'Pengeluaran petty cash';
+      return 'Saya akan catat pengeluaran petty cash:\n'
+        + '• Jumlah: Rp ' + nominal3.toLocaleString('id-ID') + '\n'
+        + '• Keterangan: ' + ket3 + '\n\n'
+        + 'Klik Konfirmasi untuk menyimpan.\n'
+        + '###ACTION:{"type":"pengeluaran_pc","tanggal":"' + today() + '","jumlah":' + nominal3 + ',"keterangan":"' + ket3.replace(/"/g,'\\"') + '","akunBeban":"5-2200"}###';
+    }
+    return 'Sebutkan jumlah dan keterangan. Contoh:\n"Catat pengeluaran petty cash 50000 beli ATK"';
+  }
 
   if (lower.includes('saldo') || lower.includes('kas') || lower.includes('petty')) {
     var tahun = new Date().getFullYear();
@@ -5314,15 +5545,11 @@ async function localAIReply(msg) {
   }
 
   if (lower.includes('jurnal') || lower.includes('penyesuaian')) {
-    return 'Cara membuat jurnal penyesuaian:\n'
-      + '1. Buka menu Jurnal → Jurnal Penyesuaian\n'
-      + '2. Pilih tipe: Akrual, Deferral, atau Penyusutan\n'
-      + '3. Isi akun debit dan kredit yang sesuai\n'
-      + '4. Masukkan nominal\n'
-      + '5. Klik Simpan\n\n'
-      + 'Contoh: Akrual beban listrik belum dibayar:\n'
-      + '  Debit: Beban Listrik\n'
-      + '  Kredit: Utang Beban Listrik';
+    return 'Saya bisa bantu buatkan jurnal! Contoh perintah:\n'
+      + '• "Buatkan jurnal beban listrik 500000"\n'
+      + '• "Catat pengeluaran petty cash 50000 beli ATK"\n'
+      + '• "Topup petty cash 1000000"\n\n'
+      + 'Atau tanya tentang cara jurnal penyesuaian, saya jelaskan langkahnya.';
   }
 
   if (lower.includes('posisi') || lower.includes('keuangan') || lower.includes('kesehatan')) {
@@ -5351,14 +5578,12 @@ async function localAIReply(msg) {
     return '✅ Semua jurnal balance. Tidak ada transaksi yang perlu perhatian khusus saat ini.\n\nUntuk analisis anomali lebih dalam, klik "Jalankan Analisis Lengkap".';
   }
 
-  return 'Maaf, saya belum bisa menjawab pertanyaan itu secara detail tanpa API key.\n\n'
-    + 'Untuk fitur chat yang lebih lengkap, masukkan API key Gemini (gratis) di pengaturan di bawah.\n\n'
-    + 'Saya bisa menjawab tentang:\n'
-    + '• Saldo kas & petty cash\n'
-    + '• Posisi neraca\n'
-    + '• Cara membuat jurnal\n'
-    + '• Posisi keuangan\n'
-    + '• Transaksi yang perlu perhatian';
+  return 'Saya bisa bantu:\n'
+    + '• Tanya: saldo, neraca, posisi keuangan, transaksi anomali\n'
+    + '• Aksi: "Buatkan jurnal beban listrik 500000"\n'
+    + '• Aksi: "Topup petty cash 1000000"\n'
+    + '• Aksi: "Catat pengeluaran petty cash 50000 beli ATK"\n\n'
+    + 'Untuk fitur chat AI yang lebih cerdas, masukkan API key Gemini (gratis) di pengaturan.';
 }
 
 async function runAIAnalysis() {
