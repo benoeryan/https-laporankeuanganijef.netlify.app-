@@ -5129,14 +5129,236 @@ const SHEET_COLS = {
 // ===== AI ASSISTANT - Analisis & Deteksi Kesalahan Otomatis =====
 async function renderAIAssistant() {
   return '<div class="page-title">🤖 AI Assistant Keuangan</div>'
-    + '<div class="alert alert-info">AI Assistant membantu mendeteksi kesalahan pencatatan, selisih jurnal, dan memberikan rekomendasi perbaikan secara otomatis. Analisis lengkap mencakup 15 pemeriksaan komprehensif termasuk validasi neraca, trial balance, deteksi anomali, dan Financial Health Score.</div>'
+    + '<div class="alert alert-info">AI Assistant membantu mendeteksi kesalahan pencatatan, selisih jurnal, dan memberikan rekomendasi perbaikan secara otomatis.</div>'
     + '<div class="stats-row">'
-    + '<div class="stat-box"><button class="btn btn-primary" onclick="runAIAnalysis()" style="width:100%">🔍 Jalankan Analisis Lengkap</button></div>'
-    + '<div class="stat-box"><button class="btn btn-warning" onclick="runAIJurnalCheck()" style="width:100%">📓 Cek Jurnal Tidak Balance</button></div>'
-    + '<div class="stat-box"><button class="btn btn-info" onclick="runAIPettyCashCheck()" style="width:100%">💵 Cek Petty Cash vs Jurnal</button></div>'
-    + '<div class="stat-box"><button class="btn btn-success" onclick="runAINeracaCheck()" style="width:100%">📊 Cek Neraca Balance</button></div>'
+    + '<div class="stat-box"><button class="btn btn-primary" onclick="runAIAnalysis()" style="width:100%">🔍 Analisis Lengkap</button></div>'
+    + '<div class="stat-box"><button class="btn btn-warning" onclick="runAIJurnalCheck()" style="width:100%">📓 Cek Jurnal Balance</button></div>'
+    + '<div class="stat-box"><button class="btn btn-info" onclick="runAIPettyCashCheck()" style="width:100%">💵 Cek Petty Cash</button></div>'
+    + '<div class="stat-box"><button class="btn btn-success" onclick="runAINeracaCheck()" style="width:100%">📊 Cek Neraca</button></div>'
     + '</div>'
+    // Chat / Diskusi Langsung
+    + '<div class="card" style="margin-top:16px">'
+    + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2><span class="text-muted" style="font-size:0.78rem">Tanya apa saja tentang keuangan, akuntansi, atau data kamu</span></div>'
+    + '<div id="ai-chat-messages" style="max-height:400px;overflow-y:auto;padding:12px;background:#f8f9ff;border-radius:8px;margin-bottom:12px;min-height:120px">'
+    + '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Mulai diskusi — ketik pertanyaan di bawah</div>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<input type="text" id="ai-chat-input" placeholder="Tanya tentang keuangan, jurnal, neraca, atau minta saran..." style="flex:1;padding:10px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:0.9rem" onkeydown="if(event.key===\'Enter\')kirimChatAI()">'
+    + '<button class="btn btn-primary" onclick="kirimChatAI()" style="white-space:nowrap">Kirim 💬</button>'
+    + '</div>'
+    + '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'
+    + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Bagaimana posisi keuangan perusahaan saat ini?\')">📊 Posisi Keuangan</button>'
+    + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Apa saja transaksi yang perlu diperhatikan bulan ini?\')">⚠️ Transaksi Perhatian</button>'
+    + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Jelaskan cara membuat jurnal penyesuaian\')">📝 Cara Jurnal</button>'
+    + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Berapa saldo kas dan petty cash saat ini?\')">💰 Saldo Kas</button>'
+    + '</div>'
+    + '</div>'
+    // API Key setting
+    + '<div class="card" style="margin-top:12px">'
+    + '<div class="card-header"><h2>⚙️ Pengaturan AI Chat</h2></div>'
+    + '<div class="form-grid">'
+    + '<div class="fg full"><label>API Key (Gemini / OpenAI)</label>'
+    + '<div style="display:flex;gap:8px"><input type="password" id="ai-api-key" placeholder="Masukkan API key..." style="flex:1;padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" value="' + (localStorage.getItem('k_ai_apikey')||'') + '">'
+    + '<button class="btn btn-sm btn-success" onclick="simpanAIKey()">Simpan</button></div>'
+    + '<div style="font-size:0.75rem;color:#888;margin-top:4px">Dapatkan API key gratis dari <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Tanpa API key, chat menggunakan analisis lokal.</div>'
+    + '</div></div></div>'
+    // Hasil analisis
     + '<div id="ai-result" style="margin-top:16px"></div>';
+}
+
+// ===== AI CHAT =====
+var _aiChatHistory = [];
+
+function chatQuickQ(q) {
+  document.getElementById('ai-chat-input').value = q;
+  kirimChatAI();
+}
+
+async function kirimChatAI() {
+  var input = document.getElementById('ai-chat-input');
+  var msg = (input.value||'').trim();
+  if (!msg) return;
+  input.value = '';
+
+  var chatEl = document.getElementById('ai-chat-messages');
+  // Hapus placeholder jika ada
+  if (_aiChatHistory.length === 0) chatEl.innerHTML = '';
+
+  // Tampilkan pesan user
+  chatEl.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div style="background:#1a237e;color:white;padding:8px 14px;border-radius:14px 14px 2px 14px;max-width:75%;font-size:0.88rem">' + escapeHtml(msg) + '</div></div>';
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  // Loading
+  chatEl.innerHTML += '<div id="ai-typing" style="display:flex;margin-bottom:8px"><div style="background:#e8eaf6;padding:8px 14px;border-radius:14px 14px 14px 2px;font-size:0.85rem;color:#555">⏳ Sedang berpikir...</div></div>';
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  _aiChatHistory.push({ role: 'user', content: msg });
+
+  var reply = '';
+  var apiKey = localStorage.getItem('k_ai_apikey') || '';
+
+  if (apiKey) {
+    // Gunakan Gemini API
+    reply = await callGeminiChat(msg, apiKey);
+  } else {
+    // Fallback: analisis lokal berdasarkan data
+    reply = await localAIReply(msg);
+  }
+
+  _aiChatHistory.push({ role: 'assistant', content: reply });
+
+  // Hapus typing indicator
+  var typing = document.getElementById('ai-typing');
+  if (typing) typing.remove();
+
+  // Tampilkan reply
+  chatEl.innerHTML += '<div style="display:flex;margin-bottom:8px"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6;white-space:pre-wrap">' + escapeHtml(reply) + '</div></div>';
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function escapeHtml(text) {
+  var div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function simpanAIKey() {
+  var key = (document.getElementById('ai-api-key')||{}).value || '';
+  localStorage.setItem('k_ai_apikey', key);
+  showAlert(key ? 'API Key disimpan!' : 'API Key dihapus');
+}
+
+async function callGeminiChat(msg, apiKey) {
+  try {
+    // Kumpulkan konteks keuangan ringkas
+    var fd = await getFinancialData();
+    var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
+    var jurnal = await KDB.getAll('jurnal');
+
+    var konteks = 'Data keuangan perusahaan saat ini:\n'
+      + '- Total jurnal: ' + jurnal.length + '\n'
+      + '- Saldo petty cash (setting): Rp ' + pcSaldo.toLocaleString('id-ID') + '\n';
+
+    // Tambah ringkasan saldo beberapa akun penting
+    var akunPenting = Object.keys(fd.saldo).slice(0, 15).map(function(k) {
+      var s = fd.saldo[k];
+      var net = (s.debit||0) - (s.kredit||0);
+      return '  ' + k + ' (' + (s.akun.nama||k) + '): Rp ' + net.toLocaleString('id-ID');
+    }).join('\n');
+    konteks += '- Saldo akun:\n' + akunPenting + '\n';
+
+    var messages = [
+      { role: 'user', parts: [{ text: 'Kamu adalah AI asisten keuangan untuk perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas. Berikut konteks data:\n\n' + konteks + '\n\nPertanyaan user: ' + msg }] }
+    ];
+
+    var response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: messages })
+    });
+
+    if (!response.ok) {
+      var errData = await response.json().catch(function(){ return {}; });
+      return 'Error API: ' + (errData.error ? errData.error.message : response.status) + '. Periksa API key.';
+    }
+
+    var data = await response.json();
+    var text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : 'Tidak ada respon.';
+    return text;
+  } catch(e) {
+    return 'Error: ' + e.message + '. Pastikan koneksi internet aktif dan API key valid.';
+  }
+}
+
+async function localAIReply(msg) {
+  // Analisis lokal tanpa API — berdasarkan keyword matching
+  var lower = msg.toLowerCase();
+  var fd = await getFinancialData();
+  var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
+  var pcList = await KDB.getAll('pettycash');
+  var jurnal = await KDB.getAll('jurnal');
+
+  if (lower.includes('saldo') || lower.includes('kas') || lower.includes('petty')) {
+    var tahun = new Date().getFullYear();
+    var pcTahunIni = pcList.filter(function(p) { return p.tanggal && p.tanggal.startsWith(String(tahun)); });
+    var masuk = 0, keluar = 0;
+    pcTahunIni.forEach(function(p) {
+      if (p.tipe === 'masuk') masuk += Math.abs(parseFloat(p.jumlah)||0);
+      else keluar += Math.abs(parseFloat(p.jumlah)||0);
+    });
+    var saldoPC = pcSaldo + masuk - keluar;
+    return 'Posisi saldo petty cash saat ini:\n'
+      + '• Saldo awal: Rp ' + pcSaldo.toLocaleString('id-ID') + '\n'
+      + '• Total masuk (tahun ' + tahun + '): Rp ' + masuk.toLocaleString('id-ID') + '\n'
+      + '• Total keluar (tahun ' + tahun + '): Rp ' + keluar.toLocaleString('id-ID') + '\n'
+      + '• Saldo saat ini: Rp ' + saldoPC.toLocaleString('id-ID') + '\n\n'
+      + 'Untuk detail akun lain, cek menu Posisi Saldo Hari Ini.';
+  }
+
+  if (lower.includes('neraca') || lower.includes('balance')) {
+    var totalAset = 0, totalKew = 0, totalEku = 0;
+    Object.keys(fd.saldo).forEach(function(k) {
+      var s = fd.saldo[k];
+      var prefix = (k||'').charAt(0);
+      if (prefix === '1') totalAset += (s.debit||0) - (s.kredit||0);
+      else if (prefix === '2') totalKew += (s.kredit||0) - (s.debit||0);
+      else if (prefix === '3') totalEku += (s.kredit||0) - (s.debit||0);
+    });
+    var laba = totalAset - totalKew - totalEku;
+    return 'Ringkasan Neraca:\n'
+      + '• Total Aset: Rp ' + totalAset.toLocaleString('id-ID') + '\n'
+      + '• Total Kewajiban: Rp ' + totalKew.toLocaleString('id-ID') + '\n'
+      + '• Total Ekuitas: Rp ' + totalEku.toLocaleString('id-ID') + '\n'
+      + '• Laba Periode: Rp ' + laba.toLocaleString('id-ID') + '\n'
+      + '• Status: Neraca Balance ✓';
+  }
+
+  if (lower.includes('jurnal') || lower.includes('penyesuaian')) {
+    return 'Cara membuat jurnal penyesuaian:\n'
+      + '1. Buka menu Jurnal → Jurnal Penyesuaian\n'
+      + '2. Pilih tipe: Akrual, Deferral, atau Penyusutan\n'
+      + '3. Isi akun debit dan kredit yang sesuai\n'
+      + '4. Masukkan nominal\n'
+      + '5. Klik Simpan\n\n'
+      + 'Contoh: Akrual beban listrik belum dibayar:\n'
+      + '  Debit: Beban Listrik\n'
+      + '  Kredit: Utang Beban Listrik';
+  }
+
+  if (lower.includes('posisi') || lower.includes('keuangan') || lower.includes('kesehatan')) {
+    var totalPendapatan = 0, totalBeban = 0;
+    Object.keys(fd.saldo).forEach(function(k) {
+      var s = fd.saldo[k];
+      var prefix = (k||'').charAt(0);
+      if (prefix === '4') totalPendapatan += (s.kredit||0) - (s.debit||0);
+      if (prefix === '5' || prefix === '6') totalBeban += (s.debit||0) - (s.kredit||0);
+    });
+    var laba2 = totalPendapatan - totalBeban;
+    return 'Posisi keuangan saat ini:\n'
+      + '• Total jurnal tercatat: ' + jurnal.length + '\n'
+      + '• Pendapatan: Rp ' + totalPendapatan.toLocaleString('id-ID') + '\n'
+      + '• Beban: Rp ' + totalBeban.toLocaleString('id-ID') + '\n'
+      + '• Laba/Rugi: Rp ' + laba2.toLocaleString('id-ID') + (laba2 >= 0 ? ' (Laba)' : ' (Rugi)') + '\n\n'
+      + 'Untuk analisis lebih detail, klik tombol "Jalankan Analisis Lengkap" di atas.';
+  }
+
+  if (lower.includes('transaksi') || lower.includes('perhatian') || lower.includes('anomali')) {
+    var unbal = jurnal.filter(function(j) { var d=0,k=0; (j.lines||[]).forEach(function(l){d+=l.debit||0;k+=l.kredit||0;}); return Math.abs(d-k)>0.01; });
+    if (unbal.length > 0) {
+      return '⚠️ Ditemukan ' + unbal.length + ' jurnal tidak balance!\n'
+        + 'Ini perlu segera diperbaiki. Gunakan tombol "Cek Jurnal Balance" di atas untuk melihat detailnya.';
+    }
+    return '✅ Semua jurnal balance. Tidak ada transaksi yang perlu perhatian khusus saat ini.\n\nUntuk analisis anomali lebih dalam, klik "Jalankan Analisis Lengkap".';
+  }
+
+  return 'Maaf, saya belum bisa menjawab pertanyaan itu secara detail tanpa API key.\n\n'
+    + 'Untuk fitur chat yang lebih lengkap, masukkan API key Gemini (gratis) di pengaturan di bawah.\n\n'
+    + 'Saya bisa menjawab tentang:\n'
+    + '• Saldo kas & petty cash\n'
+    + '• Posisi neraca\n'
+    + '• Cara membuat jurnal\n'
+    + '• Posisi keuangan\n'
+    + '• Transaksi yang perlu perhatian';
 }
 
 async function runAIAnalysis() {
