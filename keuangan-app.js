@@ -5429,15 +5429,32 @@ async function callGeminiChat(msg, apiKey) {
       { role: 'user', parts: [{ text: systemPrompt + '\n\nPertanyaan/perintah user: ' + msg }] }
     ];
 
-    var response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: messages })
-    });
+    // Coba model gemini-2.0-flash dulu, fallback ke gemini-1.5-flash jika blocked
+    var models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro'];
+    var response = null;
+    var lastError = '';
 
-    if (!response.ok) {
-      var errData = await response.json().catch(function(){ return {}; });
-      return 'Error API: ' + (errData.error ? errData.error.message : response.status) + '. Periksa API key.';
+    for (var mi = 0; mi < models.length; mi++) {
+      try {
+        response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[mi] + ':generateContent?key=' + apiKey, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: messages })
+        });
+        if (response.ok) break;
+        var errBody = await response.json().catch(function(){ return {}; });
+        lastError = errBody.error ? errBody.error.message : ('HTTP ' + response.status);
+        if (response.status === 400 || response.status === 404) continue; // model not available, try next
+        if (response.status === 403) continue; // blocked, try next
+        break; // other errors, stop
+      } catch(fetchErr) {
+        lastError = fetchErr.message;
+        continue;
+      }
+    }
+
+    if (!response || !response.ok) {
+      return 'Error API: ' + lastError + '. Periksa API key dan pastikan Gemini API sudah di-enable.';
     }
 
     var data = await response.json();
