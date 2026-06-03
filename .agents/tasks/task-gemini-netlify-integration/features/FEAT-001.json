@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create Netlify Function proxy for Gemini API and update frontend to use it instead of direct API calls",
+  "status": "in_progress",
+  "steps": [
+    "Create netlify.toml in project root with [build] and [functions] configuration pointing to netlify/functions directory",
+    "Create netlify/functions/gemini.js - a serverless function that: (a) reads GEMINI_API_KEY from process.env, (b) accepts POST requests with JSON body containing 'message' and optionally 'context' (financial data), (c) constructs the system prompt as a financial assistant for IJEF Corp with ACTION capabilities (same prompt structure as current callGeminiChat around line 5440), (d) calls the Gemini API at https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent, (e) returns the AI response text, (f) includes proper CORS headers and error handling. Use Node.js built-in fetch (no npm dependencies needed).",
+    "Modify keuangan-app.js: Update the callGeminiChat function (line 5414) to call /.netlify/functions/gemini instead of calling the Gemini API directly. The function should POST {message: msg, context: konteks} to the Netlify function endpoint. Keep the financial context gathering logic (getFinancialData, KDB calls) in the frontend and pass it as context to the proxy.",
+    "Modify keuangan-app.js: Update the renderAIAssistant function (line 5130) to remove the API Key input section and provider selector since the key is now server-side. Replace it with a status indicator showing that AI is powered by Gemini via server. Keep the chat UI, quick buttons, and analysis buttons intact.",
+    "Modify keuangan-app.js: Update kirimChatAI function (around line 5196) to always use the Netlify function endpoint (remove the localStorage API key check and provider branching). Remove simpanAIKey() and simpanAIProvider() functions as they are no longer needed. Keep the localAIReply fallback for when the server call fails.",
+    "Modify keuangan-app.js: Keep callOpenRouterChat as a deprecated fallback (or remove it) since the Netlify function now handles everything server-side."
+  ],
+  "acceptance_criteria": [
+    "netlify.toml exists at project root with valid configuration",
+    "netlify/functions/gemini.js exists, is valid Node.js (passes node --check), reads GEMINI_API_KEY from environment, and proxies requests to Gemini API using model gemini-2.0-flash",
+    "The Netlify function returns proper JSON responses with AI text and handles errors gracefully (missing API key, API errors)",
+    "Frontend callGeminiChat calls /.netlify/functions/gemini instead of the direct Google API endpoint",
+    "The AI Assistant page no longer shows API key input fields - the API key is purely server-side",
+    "The chat flow still works: user types message -> frontend gathers financial context -> sends to Netlify function -> displays AI response",
+    "The ACTION pattern (###ACTION:{...}###) still works end-to-end since the Netlify function passes through the full AI response"
+  ],
+  "verification": [
+    "Run: node --check netlify/functions/gemini.js (should exit 0 with no errors)",
+    "Run: node -e \"const toml = require('fs').readFileSync('netlify.toml','utf8'); console.log('TOML valid:', toml.includes('[functions]'))\" to verify netlify.toml structure",
+    "Run: node --check keuangan-app.js (should exit 0 with no errors)",
+    "Run: grep -c '/.netlify/functions/gemini' keuangan-app.js (should be >= 1, confirming frontend calls the proxy)",
+    "Run: grep -c 'GEMINI_API_KEY' netlify/functions/gemini.js (should be >= 1, confirming env var usage)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
