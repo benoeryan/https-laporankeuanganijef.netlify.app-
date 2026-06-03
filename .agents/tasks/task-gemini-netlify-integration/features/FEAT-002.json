@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "fix",
   "description": "Address semantic review issues: fix dead localAIReply fallback, restrict CORS origin, add body size limit, cap context length server-side",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Fix keuangan-app.js kirimChatAI: replace try/catch with reply check for 'Error:' prefix to trigger localAIReply fallback",
     "Fix netlify/functions/gemini.js: restrict CORS origin using process.env.URL with fallback to '*'",
@@ -21,5 +21,5 @@
     "Run: node --check keuangan-app.js"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "All four review issues addressed. Both files pass node --check. The CORS origin uses Netlify's automatic URL env var with fallback to * for local dev. Body size limit returns 413 before JSON parse. Context capped at 10K chars via slice."
 }
