@@ -5263,13 +5263,64 @@ function renderActionConfirmation(action) {
       + '<b>Hapus Jurnal</b><br>'
       + 'ID: ' + (action.id||'-') + '<br>'
       + 'Alasan: ' + (action.alasan||'-') + '</div>';
+  } else if (action.type === 'koreksi_jurnal') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Koreksi Jurnal</b><br>'
+      + 'ID Jurnal: ' + (action.id||'-') + '<br>'
+      + 'Tanggal Baru: ' + (action.tanggal||'-') + '<br>'
+      + 'Keterangan Baru: ' + (action.keterangan||'-') + '<br>'
+      + '<table style="width:100%;font-size:0.82rem;margin-top:6px;border-collapse:collapse">'
+      + '<tr style="background:#1a237e;color:white"><th style="padding:4px 8px">Akun</th><th style="padding:4px 8px">Ket</th><th style="padding:4px 8px">Debit</th><th style="padding:4px 8px">Kredit</th></tr>';
+    (action.lines||[]).forEach(function(l) {
+      html += '<tr style="border-bottom:1px solid #ddd"><td style="padding:4px 8px">' + (l.akun||'-') + '</td><td style="padding:4px 8px">' + (l.ket||'-') + '</td><td style="padding:4px 8px">' + fmtRp(l.debit||0) + '</td><td style="padding:4px 8px">' + fmtRp(l.kredit||0) + '</td></tr>';
+    });
+    html += '</table></div>';
+  } else if (action.type === 'analisis_akun') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Analisis Akun</b><br>'
+      + 'Kode Akun: ' + (action.kodeAkun||'-') + '<br>'
+      + 'Periode: ' + (action.periode||'-') + '</div>';
+  } else if (action.type === 'laporan_ringkasan') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Generate Laporan Ringkasan</b><br>'
+      + 'Jenis: ' + (action.jenis||'-') + '<br>'
+      + 'Periode: ' + (action.periode||'-') + '</div>';
   } else {
     html += '<div style="font-size:0.85rem">Aksi: ' + JSON.stringify(action) + '</div>';
   }
 
+  // Completeness warning check
+  var incomplete = false;
+  if ((action.type === 'jurnal' || action.type === 'koreksi_jurnal' || action.type === 'topup_pc' || action.type === 'pengeluaran_pc') && !action.tanggal) {
+    incomplete = true;
+  }
+  if ((action.type === 'topup_pc' || action.type === 'pengeluaran_pc') && (!action.jumlah || action.jumlah === 0)) {
+    incomplete = true;
+  }
+  if ((action.type === 'jurnal' || action.type === 'koreksi_jurnal') && (!action.lines || action.lines.length === 0)) {
+    incomplete = true;
+  }
+  if ((action.type === 'hapus_jurnal' || action.type === 'koreksi_jurnal') && !action.id) {
+    incomplete = true;
+  }
+  if (incomplete) {
+    html += '<div style="background:#fff9c4;border:1px solid #f9a825;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:0.83rem;color:#f57f17">'
+      + '\u26a0\ufe0f Data belum lengkap. Kamu bisa edit sebelum konfirmasi, atau tanya AI untuk melengkapi.'
+      + '</div>';
+  }
+
+  // Determine confirm button text based on action type
+  var confirmBtnText = '\u2705 Konfirmasi & Eksekusi';
+  if (action.type === 'analisis_akun') {
+    confirmBtnText = '\u2705 Tampilkan Analisis';
+  } else if (action.type === 'laporan_ringkasan') {
+    confirmBtnText = '\u2705 Generate Laporan';
+  }
+
   html += '<div style="display:flex;gap:8px;margin-top:10px">'
-    + '<button class="btn btn-success btn-sm" onclick="eksekusiAIAction()">✅ Konfirmasi & Eksekusi</button>'
-    + '<button class="btn btn-danger btn-sm" onclick="batalAIAction()">❌ Batalkan</button>'
+    + '<button class="btn btn-success btn-sm" data-action-type="' + (action.type||'') + '" onclick="eksekusiAIAction()">' + confirmBtnText + '</button>'
+    + '<button class="btn btn-warning btn-sm" onclick="editAIAction()">\u270f\ufe0f Edit</button>'
+    + '<button class="btn btn-danger btn-sm" onclick="batalAIAction()">\u274c Batalkan</button>'
     + '</div></div>';
   return html;
 }
@@ -5372,6 +5423,131 @@ async function eksekusiAIAction() {
       chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Jurnal ' + action.id + ' berhasil dihapus.</div></div>';
       showAlert('Jurnal dihapus dari AI Chat!');
 
+    } else if (action.type === 'koreksi_jurnal') {
+      if (!action.id) { showAlert('ID jurnal tidak valid', 'danger'); return; }
+      var existing = await KDB.get('jurnal', action.id);
+      if (!existing) {
+        chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#ffcdd2;padding:8px 14px;border-radius:8px;font-size:0.85rem">\u274c Jurnal dengan ID tersebut tidak ditemukan</div></div>';
+        showAlert('Jurnal tidak ditemukan', 'danger');
+        var failMsg2 = pickRandom(failureFollowUps);
+        _aiChatHistory.push({ role: 'assistant', content: failMsg2 });
+        chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + failMsg2 + '</div></div>';
+        chatEl.scrollTop = chatEl.scrollHeight;
+        return;
+      }
+      var updated = JSON.parse(JSON.stringify(existing));
+      if (action.tanggal) updated.tanggal = action.tanggal;
+      if (action.keterangan) updated.keterangan = action.keterangan;
+      if (action.lines && action.lines.length > 0) {
+        updated.lines = action.lines;
+        var tdKoreksi = 0, tkKoreksi = 0;
+        action.lines.forEach(function(l) { tdKoreksi += (l.debit||0); tkKoreksi += (l.kredit||0); });
+        updated.totalDebit = tdKoreksi;
+        updated.totalKredit = tkKoreksi;
+      }
+      await KDB.save('jurnal', action.id, updated);
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">\u2705 Jurnal ' + action.id + ' berhasil dikoreksi.</div></div>';
+      showAlert('Jurnal berhasil dikoreksi dari AI Chat!');
+
+    } else if (action.type === 'analisis_akun') {
+      var fdAnalisis = await getFinancialData();
+      var akunData = fdAnalisis.saldo[action.kodeAkun];
+      if (!akunData) {
+        chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#ffcdd2;padding:8px 14px;border-radius:8px;font-size:0.85rem">\u274c Akun tidak ditemukan</div></div>';
+        showAlert('Akun tidak ditemukan', 'danger');
+        var failMsg3 = pickRandom(failureFollowUps);
+        _aiChatHistory.push({ role: 'assistant', content: failMsg3 });
+        chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + failMsg3 + '</div></div>';
+        chatEl.scrollTop = chatEl.scrollHeight;
+        return;
+      }
+      var totalDebitAnalisis = akunData.debit || 0;
+      var totalKreditAnalisis = akunData.kredit || 0;
+      var netSaldo = totalDebitAnalisis - totalKreditAnalisis;
+      var allJurnal = await KDB.getAll('jurnal');
+      var relatedJurnal = allJurnal.filter(function(j) {
+        return (j.lines||[]).some(function(l) { return l.akun === action.kodeAkun; });
+      });
+      var recentTrx = relatedJurnal.sort(function(a,b) { return (b.tanggal||'').localeCompare(a.tanggal||''); }).slice(0, 5);
+      var analisisText = '\ud83d\udcca Analisis Akun: ' + (akunData.akun ? akunData.akun.nama : action.kodeAkun) + '\n'
+        + 'Kode: ' + action.kodeAkun + '\n'
+        + 'Kategori: ' + (akunData.akun ? (akunData.akun.kategori||'-') : '-') + '\n'
+        + 'Total Debit: ' + fmtRp(totalDebitAnalisis) + '\n'
+        + 'Total Kredit: ' + fmtRp(totalKreditAnalisis) + '\n'
+        + 'Saldo Bersih: ' + fmtRp(netSaldo) + '\n\n'
+        + '5 Transaksi Terakhir:\n';
+      recentTrx.forEach(function(j, idx) {
+        analisisText += (idx+1) + '. [' + (j.tanggal||'-') + '] ' + (j.keterangan||'-') + '\n';
+      });
+      if (recentTrx.length === 0) {
+        analisisText += '(Tidak ada transaksi ditemukan)\n';
+      }
+      _aiChatHistory.push({ role: 'assistant', content: analisisText });
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e3f2fd;padding:10px 14px;border-radius:10px;max-width:90%;font-size:0.85rem;line-height:1.6;white-space:pre-wrap">' + escapeHtml(analisisText) + '</div></div>';
+      chatEl.scrollTop = chatEl.scrollHeight;
+
+      var successFollowAnalisis = pickRandom(successFollowUps);
+      _aiChatHistory.push({ role: 'assistant', content: successFollowAnalisis });
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + successFollowAnalisis + '</div></div>';
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return;
+
+    } else if (action.type === 'laporan_ringkasan') {
+      var fdLaporan = await getFinancialData();
+      var laporanText = '';
+      if (action.jenis === 'neraca') {
+        var totalAset = 0, totalKewajiban = 0, totalEkuitas = 0;
+        Object.keys(fdLaporan.saldo).forEach(function(k) {
+          var s = fdLaporan.saldo[k];
+          var net = (s.debit||0) - (s.kredit||0);
+          if (k.indexOf('1') === 0) totalAset += net;
+          else if (k.indexOf('2') === 0) totalKewajiban += net;
+          else if (k.indexOf('3') === 0) totalEkuitas += net;
+        });
+        laporanText = '\ud83d\udcca Laporan Neraca (Periode: ' + (action.periode||'-') + ')\n\n'
+          + 'Total Aset: ' + fmtRp(totalAset) + '\n'
+          + 'Total Kewajiban: ' + fmtRp(Math.abs(totalKewajiban)) + '\n'
+          + 'Total Ekuitas: ' + fmtRp(Math.abs(totalEkuitas)) + '\n'
+          + '\nAset = Kewajiban + Ekuitas\n'
+          + fmtRp(totalAset) + ' = ' + fmtRp(Math.abs(totalKewajiban)) + ' + ' + fmtRp(Math.abs(totalEkuitas));
+      } else if (action.jenis === 'laba_rugi') {
+        var totalPendapatan = 0, totalBeban = 0;
+        Object.keys(fdLaporan.saldo).forEach(function(k) {
+          var s = fdLaporan.saldo[k];
+          var net = (s.debit||0) - (s.kredit||0);
+          if (k.indexOf('4') === 0) totalPendapatan += net;
+          else if (k.indexOf('5') === 0 || k.indexOf('6') === 0) totalBeban += net;
+        });
+        var labaBersih = Math.abs(totalPendapatan) - totalBeban;
+        laporanText = '\ud83d\udcca Laporan Laba Rugi (Periode: ' + (action.periode||'-') + ')\n\n'
+          + 'Total Pendapatan: ' + fmtRp(Math.abs(totalPendapatan)) + '\n'
+          + 'Total Beban: ' + fmtRp(totalBeban) + '\n'
+          + 'Laba Bersih: ' + fmtRp(labaBersih);
+      } else if (action.jenis === 'arus_kas') {
+        var kasBank = 0;
+        Object.keys(fdLaporan.saldo).forEach(function(k) {
+          var s = fdLaporan.saldo[k];
+          var net = (s.debit||0) - (s.kredit||0);
+          if (k === '1-1100' || k === '1-1200' || k.indexOf('1-11') === 0 || k.indexOf('1-12') === 0) {
+            kasBank += net;
+          }
+        });
+        laporanText = '\ud83d\udcca Laporan Arus Kas (Periode: ' + (action.periode||'-') + ')\n\n'
+          + 'Saldo Kas & Bank: ' + fmtRp(kasBank) + '\n'
+          + '(Mencakup akun kas kecil dan rekening bank)';
+      } else {
+        laporanText = '\u26a0\ufe0f Jenis laporan "' + (action.jenis||'') + '" tidak dikenali. Pilih: neraca, laba_rugi, atau arus_kas.';
+      }
+      _aiChatHistory.push({ role: 'assistant', content: laporanText });
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e3f2fd;padding:10px 14px;border-radius:10px;max-width:90%;font-size:0.85rem;line-height:1.6;white-space:pre-wrap">' + escapeHtml(laporanText) + '</div></div>';
+      chatEl.scrollTop = chatEl.scrollHeight;
+
+      var successFollowLaporan = pickRandom(successFollowUps);
+      _aiChatHistory.push({ role: 'assistant', content: successFollowLaporan });
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + successFollowLaporan + '</div></div>';
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return;
+
     } else {
       showAlert('Tipe aksi tidak dikenali: ' + action.type, 'warning');
       chatEl.scrollTop = chatEl.scrollHeight;
@@ -5409,6 +5585,133 @@ function batalAIAction() {
   _aiChatHistory.push({ role: 'assistant', content: followUp });
   chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + followUp + '</div></div>';
   chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function editAIAction() {
+  if (!_pendingAIAction) { showAlert('Tidak ada aksi pending', 'warning'); return; }
+  var action = _pendingAIAction;
+  var chatEl = document.getElementById('ai-chat-messages');
+  var html = '<div id="ai-edit-action" style="margin:8px 0;padding:12px;background:#e3f2fd;border:1.5px solid #1976d2;border-radius:10px">';
+  html += '<div style="font-weight:700;color:#0d47a1;margin-bottom:8px">\u270f\ufe0f Edit Aksi</div>';
+
+  if (action.type === 'jurnal' || action.type === 'koreksi_jurnal') {
+    html += '<div style="font-size:0.85rem;margin-bottom:6px">';
+    if (action.type === 'koreksi_jurnal') {
+      html += '<label>ID Jurnal:</label><br><input type="text" id="edit-action-id" value="' + (action.id||'') + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px"><br>';
+    }
+    html += '<label>Tanggal:</label><br><input type="date" id="edit-action-tanggal" value="' + (action.tanggal||today()) + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px"><br>';
+    html += '<label>Keterangan:</label><br><input type="text" id="edit-action-keterangan" value="' + (action.keterangan||'') + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px"><br>';
+    html += '<label>Lines:</label><br>';
+    html += '<div id="edit-action-lines">';
+    (action.lines||[]).forEach(function(l, idx) {
+      html += '<div style="display:flex;gap:4px;margin-bottom:4px">'
+        + '<input type="text" class="edit-line-akun" value="' + (l.akun||'') + '" placeholder="Akun" style="flex:1;padding:3px 6px;font-size:0.82rem;border:1px solid #ccc;border-radius:3px">'
+        + '<input type="text" class="edit-line-ket" value="' + (l.ket||'') + '" placeholder="Ket" style="flex:1;padding:3px 6px;font-size:0.82rem;border:1px solid #ccc;border-radius:3px">'
+        + '<input type="number" class="edit-line-debit" value="' + (l.debit||0) + '" placeholder="Debit" style="width:80px;padding:3px 6px;font-size:0.82rem;border:1px solid #ccc;border-radius:3px">'
+        + '<input type="number" class="edit-line-kredit" value="' + (l.kredit||0) + '" placeholder="Kredit" style="width:80px;padding:3px 6px;font-size:0.82rem;border:1px solid #ccc;border-radius:3px">'
+        + '</div>';
+    });
+    html += '</div></div>';
+  } else if (action.type === 'topup_pc' || action.type === 'pengeluaran_pc') {
+    html += '<div style="font-size:0.85rem;margin-bottom:6px">';
+    html += '<label>Tanggal:</label><br><input type="date" id="edit-action-tanggal" value="' + (action.tanggal||today()) + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px"><br>';
+    html += '<label>Jumlah:</label><br><input type="number" id="edit-action-jumlah" value="' + (action.jumlah||0) + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px"><br>';
+    html += '<label>Keterangan:</label><br><input type="text" id="edit-action-keterangan" value="' + (action.keterangan||'') + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px">';
+    html += '</div>';
+  } else if (action.type === 'hapus_jurnal') {
+    html += '<div style="font-size:0.85rem;margin-bottom:6px">';
+    html += '<label>ID Jurnal:</label><br><input type="text" id="edit-action-id" value="' + (action.id||'') + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px"><br>';
+    html += '<label>Alasan:</label><br><input type="text" id="edit-action-alasan" value="' + (action.alasan||'') + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px">';
+    html += '</div>';
+  } else if (action.type === 'analisis_akun') {
+    html += '<div style="font-size:0.85rem;margin-bottom:6px">';
+    html += '<label>Kode Akun:</label><br><input type="text" id="edit-action-kodeAkun" value="' + (action.kodeAkun||'') + '" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px"><br>';
+    html += '<label>Periode:</label><br><input type="text" id="edit-action-periode" value="' + (action.periode||'') + '" placeholder="YYYY-MM" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px">';
+    html += '</div>';
+  } else if (action.type === 'laporan_ringkasan') {
+    html += '<div style="font-size:0.85rem;margin-bottom:6px">';
+    html += '<label>Jenis Laporan:</label><br><select id="edit-action-jenis" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px">'
+      + '<option value="neraca"' + (action.jenis==='neraca'?' selected':'') + '>Neraca</option>'
+      + '<option value="laba_rugi"' + (action.jenis==='laba_rugi'?' selected':'') + '>Laba Rugi</option>'
+      + '<option value="arus_kas"' + (action.jenis==='arus_kas'?' selected':'') + '>Arus Kas</option>'
+      + '</select><br>';
+    html += '<label>Periode:</label><br><input type="text" id="edit-action-periode" value="' + (action.periode||'') + '" placeholder="YYYY-MM" style="width:100%;padding:4px 8px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px">';
+    html += '</div>';
+  }
+
+  html += '<div style="display:flex;gap:8px;margin-top:10px">'
+    + '<button class="btn btn-primary btn-sm" onclick="simpanEditAIAction()">Simpan Perubahan</button>'
+    + '<button class="btn btn-secondary btn-sm" onclick="batalEditAIAction()">\u274c Batal Edit</button>'
+    + '</div></div>';
+
+  chatEl.innerHTML += html;
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function simpanEditAIAction() {
+  if (!_pendingAIAction) return;
+  var action = _pendingAIAction;
+
+  if (action.type === 'jurnal' || action.type === 'koreksi_jurnal') {
+    var tanggalEl = document.getElementById('edit-action-tanggal');
+    var ketEl = document.getElementById('edit-action-keterangan');
+    if (tanggalEl) action.tanggal = tanggalEl.value;
+    if (ketEl) action.keterangan = ketEl.value;
+    if (action.type === 'koreksi_jurnal') {
+      var idEl = document.getElementById('edit-action-id');
+      if (idEl) action.id = idEl.value;
+    }
+    var akunEls = document.querySelectorAll('.edit-line-akun');
+    var ketEls = document.querySelectorAll('.edit-line-ket');
+    var debitEls = document.querySelectorAll('.edit-line-debit');
+    var kreditEls = document.querySelectorAll('.edit-line-kredit');
+    var newLines = [];
+    for (var i = 0; i < akunEls.length; i++) {
+      newLines.push({
+        akun: akunEls[i].value,
+        ket: ketEls[i] ? ketEls[i].value : '',
+        debit: parseFloat(debitEls[i] ? debitEls[i].value : 0) || 0,
+        kredit: parseFloat(kreditEls[i] ? kreditEls[i].value : 0) || 0
+      });
+    }
+    action.lines = newLines;
+  } else if (action.type === 'topup_pc' || action.type === 'pengeluaran_pc') {
+    var tanggalEl2 = document.getElementById('edit-action-tanggal');
+    var jumlahEl = document.getElementById('edit-action-jumlah');
+    var ketEl2 = document.getElementById('edit-action-keterangan');
+    if (tanggalEl2) action.tanggal = tanggalEl2.value;
+    if (jumlahEl) action.jumlah = parseFloat(jumlahEl.value) || 0;
+    if (ketEl2) action.keterangan = ketEl2.value;
+  } else if (action.type === 'hapus_jurnal') {
+    var idEl2 = document.getElementById('edit-action-id');
+    var alasanEl = document.getElementById('edit-action-alasan');
+    if (idEl2) action.id = idEl2.value;
+    if (alasanEl) action.alasan = alasanEl.value;
+  } else if (action.type === 'analisis_akun') {
+    var kodeEl = document.getElementById('edit-action-kodeAkun');
+    var periodeEl = document.getElementById('edit-action-periode');
+    if (kodeEl) action.kodeAkun = kodeEl.value;
+    if (periodeEl) action.periode = periodeEl.value;
+  } else if (action.type === 'laporan_ringkasan') {
+    var jenisEl = document.getElementById('edit-action-jenis');
+    var periodeEl2 = document.getElementById('edit-action-periode');
+    if (jenisEl) action.jenis = jenisEl.value;
+    if (periodeEl2) action.periode = periodeEl2.value;
+  }
+
+  _pendingAIAction = action;
+
+  // Remove edit form and re-render confirmation
+  var editForm = document.getElementById('ai-edit-action');
+  if (editForm) editForm.remove();
+  var chatEl = document.getElementById('ai-chat-messages');
+  chatEl.innerHTML += renderActionConfirmation(action);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function batalEditAIAction() {
+  var editForm = document.getElementById('ai-edit-action');
+  if (editForm) editForm.remove();
 }
 
 function escapeHtml(text) {

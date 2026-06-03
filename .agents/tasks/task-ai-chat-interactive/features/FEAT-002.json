@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Add new action types (koreksi_jurnal, analisis_akun, laporan_ringkasan) to the frontend execution engine, enhance the action confirmation UI with edit capability, and add richer action previews.",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "1. Add handling for 'koreksi_jurnal' action type in renderActionConfirmation() in keuangan-app.js. This action edits an existing journal entry. Display the old values vs new values in a comparison table. The action JSON format: {type:'koreksi_jurnal', id:'jurnal_id', changes:{keterangan:'new', tanggal:'new', lines:[...]}}",
     "2. Add handling for 'analisis_akun' action type in renderActionConfirmation(). This action shows a detailed analysis of a specific account. Display it as a summary card with account info. The action JSON format: {type:'analisis_akun', kodeAkun:'1-1100', periode:'2024-01'}. The confirmation button should say 'Tampilkan Analisis'.",
