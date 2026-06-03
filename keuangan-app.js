@@ -5196,7 +5196,7 @@ async function kirimChatAI() {
     reply = await localAIReply(msg);
   }
 
-  _aiChatHistory.push({ role: 'assistant', content: reply });
+  _aiChatHistory.push({ role: 'assistant', content: reply.replace(/###ACTION:.*?###/g, '').trim() });
 
   // Hapus typing indicator
   var typing = document.getElementById('ai-typing');
@@ -5231,62 +5231,62 @@ async function kirimChatAI() {
 var _pendingAIAction = null;
 
 function renderActionConfirmation(action) {
-  var html = '<div style="margin:8px 0;padding:12px;background:#fff3e0;border:1.5px solid #ff9800;border-radius:10px">';
+  var html = '<div class="ai-action-confirmation" style="margin:8px 0;padding:12px;background:#fff3e0;border:1.5px solid #ff9800;border-radius:10px">';
   html += '<div style="font-weight:700;color:#e65100;margin-bottom:8px">⚡ AI ingin melakukan aksi berikut:</div>';
 
   if (action.type === 'jurnal') {
     html += '<div style="font-size:0.85rem;margin-bottom:8px">'
       + '<b>Buat Jurnal Umum</b><br>'
-      + 'Tanggal: ' + (action.tanggal||today()) + '<br>'
-      + 'Keterangan: ' + (action.keterangan||'-') + '<br>'
+      + 'Tanggal: ' + escapeHtml(action.tanggal||today()) + '<br>'
+      + 'Keterangan: ' + escapeHtml(action.keterangan||'-') + '<br>'
       + '<table style="width:100%;font-size:0.82rem;margin-top:6px;border-collapse:collapse">'
       + '<tr style="background:#1a237e;color:white"><th style="padding:4px 8px">Akun</th><th style="padding:4px 8px">Ket</th><th style="padding:4px 8px">Debit</th><th style="padding:4px 8px">Kredit</th></tr>';
     (action.lines||[]).forEach(function(l) {
-      html += '<tr style="border-bottom:1px solid #ddd"><td style="padding:4px 8px">' + (l.akun||'-') + '</td><td style="padding:4px 8px">' + (l.ket||'-') + '</td><td style="padding:4px 8px">' + fmtRp(l.debit||0) + '</td><td style="padding:4px 8px">' + fmtRp(l.kredit||0) + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid #ddd"><td style="padding:4px 8px">' + escapeHtml(l.akun||'-') + '</td><td style="padding:4px 8px">' + escapeHtml(l.ket||'-') + '</td><td style="padding:4px 8px">' + fmtRp(l.debit||0) + '</td><td style="padding:4px 8px">' + fmtRp(l.kredit||0) + '</td></tr>';
     });
     html += '</table></div>';
   } else if (action.type === 'topup_pc') {
     html += '<div style="font-size:0.85rem;margin-bottom:8px">'
       + '<b>Top-up Petty Cash</b><br>'
-      + 'Tanggal: ' + (action.tanggal||today()) + '<br>'
+      + 'Tanggal: ' + escapeHtml(action.tanggal||today()) + '<br>'
       + 'Jumlah: ' + fmtRp(action.jumlah||0) + '<br>'
-      + 'Keterangan: ' + (action.keterangan||'-') + '</div>';
+      + 'Keterangan: ' + escapeHtml(action.keterangan||'-') + '</div>';
   } else if (action.type === 'pengeluaran_pc') {
     html += '<div style="font-size:0.85rem;margin-bottom:8px">'
       + '<b>Pengeluaran Petty Cash</b><br>'
-      + 'Tanggal: ' + (action.tanggal||today()) + '<br>'
+      + 'Tanggal: ' + escapeHtml(action.tanggal||today()) + '<br>'
       + 'Jumlah: ' + fmtRp(action.jumlah||0) + '<br>'
-      + 'Akun Beban: ' + (action.akunBeban||'-') + '<br>'
-      + 'Keterangan: ' + (action.keterangan||'-') + '</div>';
+      + 'Akun Beban: ' + escapeHtml(action.akunBeban||'-') + '<br>'
+      + 'Keterangan: ' + escapeHtml(action.keterangan||'-') + '</div>';
   } else if (action.type === 'hapus_jurnal') {
     html += '<div style="font-size:0.85rem;margin-bottom:8px">'
       + '<b>Hapus Jurnal</b><br>'
-      + 'ID: ' + (action.id||'-') + '<br>'
-      + 'Alasan: ' + (action.alasan||'-') + '</div>';
+      + 'ID: ' + escapeHtml(action.id||'-') + '<br>'
+      + 'Alasan: ' + escapeHtml(action.alasan||'-') + '</div>';
   } else if (action.type === 'koreksi_jurnal') {
     html += '<div style="font-size:0.85rem;margin-bottom:8px">'
       + '<b>Koreksi Jurnal</b><br>'
-      + 'ID Jurnal: ' + (action.id||'-') + '<br>'
-      + 'Tanggal Baru: ' + (action.tanggal||'-') + '<br>'
-      + 'Keterangan Baru: ' + (action.keterangan||'-') + '<br>'
+      + 'ID Jurnal: ' + escapeHtml(action.id||'-') + '<br>'
+      + 'Tanggal Baru: ' + escapeHtml(action.tanggal||'-') + '<br>'
+      + 'Keterangan Baru: ' + escapeHtml(action.keterangan||'-') + '<br>'
       + '<table style="width:100%;font-size:0.82rem;margin-top:6px;border-collapse:collapse">'
       + '<tr style="background:#1a237e;color:white"><th style="padding:4px 8px">Akun</th><th style="padding:4px 8px">Ket</th><th style="padding:4px 8px">Debit</th><th style="padding:4px 8px">Kredit</th></tr>';
     (action.lines||[]).forEach(function(l) {
-      html += '<tr style="border-bottom:1px solid #ddd"><td style="padding:4px 8px">' + (l.akun||'-') + '</td><td style="padding:4px 8px">' + (l.ket||'-') + '</td><td style="padding:4px 8px">' + fmtRp(l.debit||0) + '</td><td style="padding:4px 8px">' + fmtRp(l.kredit||0) + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid #ddd"><td style="padding:4px 8px">' + escapeHtml(l.akun||'-') + '</td><td style="padding:4px 8px">' + escapeHtml(l.ket||'-') + '</td><td style="padding:4px 8px">' + fmtRp(l.debit||0) + '</td><td style="padding:4px 8px">' + fmtRp(l.kredit||0) + '</td></tr>';
     });
     html += '</table></div>';
   } else if (action.type === 'analisis_akun') {
     html += '<div style="font-size:0.85rem;margin-bottom:8px">'
       + '<b>Analisis Akun</b><br>'
-      + 'Kode Akun: ' + (action.kodeAkun||'-') + '<br>'
-      + 'Periode: ' + (action.periode||'-') + '</div>';
+      + 'Kode Akun: ' + escapeHtml(action.kodeAkun||'-') + '<br>'
+      + 'Periode: ' + escapeHtml(action.periode||'-') + '</div>';
   } else if (action.type === 'laporan_ringkasan') {
     html += '<div style="font-size:0.85rem;margin-bottom:8px">'
       + '<b>Generate Laporan Ringkasan</b><br>'
-      + 'Jenis: ' + (action.jenis||'-') + '<br>'
-      + 'Periode: ' + (action.periode||'-') + '</div>';
+      + 'Jenis: ' + escapeHtml(action.jenis||'-') + '<br>'
+      + 'Periode: ' + escapeHtml(action.periode||'-') + '</div>';
   } else {
-    html += '<div style="font-size:0.85rem">Aksi: ' + JSON.stringify(action) + '</div>';
+    html += '<div style="font-size:0.85rem">Aksi: ' + escapeHtml(JSON.stringify(action)) + '</div>';
   }
 
   // Completeness warning check
@@ -5442,6 +5442,14 @@ async function eksekusiAIAction() {
         updated.lines = action.lines;
         var tdKoreksi = 0, tkKoreksi = 0;
         action.lines.forEach(function(l) { tdKoreksi += (l.debit||0); tkKoreksi += (l.kredit||0); });
+        if (Math.abs(tdKoreksi - tkKoreksi) > 1) {
+          showAlert('Koreksi jurnal tidak balance! Debit: ' + fmtRp(tdKoreksi) + ' \u2260 Kredit: ' + fmtRp(tkKoreksi), 'danger');
+          var balanceFailMsg2 = pickRandom(failureFollowUps);
+          _aiChatHistory.push({ role: 'assistant', content: balanceFailMsg2 });
+          chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + balanceFailMsg2 + '</div></div>';
+          chatEl.scrollTop = chatEl.scrollHeight;
+          return;
+        }
         updated.totalDebit = tdKoreksi;
         updated.totalKredit = tkKoreksi;
       }
@@ -5705,6 +5713,9 @@ function simpanEditAIAction() {
   var editForm = document.getElementById('ai-edit-action');
   if (editForm) editForm.remove();
   var chatEl = document.getElementById('ai-chat-messages');
+  // Remove old confirmation card to avoid duplicates
+  var oldConfirmation = chatEl.querySelector('.ai-action-confirmation');
+  if (oldConfirmation) oldConfirmation.remove();
   chatEl.innerHTML += renderActionConfirmation(action);
   chatEl.scrollTop = chatEl.scrollHeight;
 }
@@ -5748,7 +5759,7 @@ async function callGeminiChat(msg, history) {
     var historyPayload = [];
     if (Array.isArray(history)) {
       historyPayload = history.slice(-10).map(function(h) {
-        return { role: h.role, content: h.content };
+        return { role: h.role, content: (h.content || '').slice(0, 2000) };
       });
     }
 
