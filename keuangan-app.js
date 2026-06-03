@@ -5188,9 +5188,8 @@ async function kirimChatAI() {
   _aiChatHistory.push({ role: 'user', content: msg });
 
   var reply = '';
-  try {
-    reply = await callGeminiChat(msg);
-  } catch(e) {
+  reply = await callGeminiChat(msg);
+  if (reply.startsWith('Error:')) {
     reply = await localAIReply(msg);
   }
 

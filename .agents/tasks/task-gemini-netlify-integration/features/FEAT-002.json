@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Address semantic review issues: fix dead localAIReply fallback, restrict CORS origin, add body size limit, cap context length server-side",
+  "status": "in_progress",
+  "steps": [
+    "Fix keuangan-app.js kirimChatAI: replace try/catch with reply check for 'Error:' prefix to trigger localAIReply fallback",
+    "Fix netlify/functions/gemini.js: restrict CORS origin using process.env.URL with fallback to '*'",
+    "Fix netlify/functions/gemini.js: add body size limit check (50KB) before parsing JSON",
+    "Fix netlify/functions/gemini.js: cap financialContext to 10K chars server-side"
+  ],
+  "acceptance_criteria": [
+    "kirimChatAI falls back to localAIReply when callGeminiChat returns a string starting with 'Error:'",
+    "CORS origin uses process.env.URL when available, falling back to '*'",
+    "Requests with body larger than 50KB return 413 status",
+    "financialContext is truncated to 10000 characters server-side",
+    "Both files pass node --check"
+  ],
+  "verification": [
+    "Run: node --check netlify/functions/gemini.js",
+    "Run: node --check keuangan-app.js"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}

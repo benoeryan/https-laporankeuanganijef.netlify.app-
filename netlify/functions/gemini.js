@@ -1,7 +1,8 @@
 exports.handler = async function(event, context) {
-  // CORS headers
+  // CORS headers - restrict origin in production
+  const allowedOrigin = process.env.URL || '*';
   const headers = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json'
@@ -19,6 +20,12 @@ exports.handler = async function(event, context) {
       headers,
       body: JSON.stringify({ error: 'Method not allowed' })
     };
+  }
+
+  // Body size limit
+  const MAX_BODY_SIZE = 50000; // 50KB limit
+  if (event.body && event.body.length > MAX_BODY_SIZE) {
+    return { statusCode: 413, headers, body: JSON.stringify({ error: 'Request body too large' }) };
   }
 
   // Check API key
@@ -52,6 +59,9 @@ exports.handler = async function(event, context) {
     };
   }
 
+  // Cap context length to prevent abuse
+  const safeContext = (financialContext || '').slice(0, 10000);
+
   // Build system prompt
   const systemPrompt = 'Kamu adalah AI asisten keuangan untuk perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas.\n\n'
     + 'KEMAMPUAN AKSI: Kamu bisa membantu user melakukan aksi berikut. Jika user meminta aksi, respond dengan format JSON khusus di akhir pesan (setelah penjelasan):\n\n'
@@ -62,7 +72,7 @@ exports.handler = async function(event, context) {
     + '###ACTION:{"type":"hapus_jurnal","id":"jurnal_id","alasan":"..."}###\n\n'
     + 'PENTING: Selalu berikan penjelasan dulu baru action JSON. User akan konfirmasi sebelum eksekusi.\n'
     + 'Jika user hanya bertanya (bukan minta aksi), jawab biasa tanpa ACTION.\n\n'
-    + 'Berikut konteks data:\n\n' + (financialContext || '');
+    + 'Berikut konteks data:\n\n' + safeContext;
 
   const contents = [
     { role: 'user', parts: [{ text: systemPrompt + '\n\nPertanyaan/perintah user: ' + message }] }
