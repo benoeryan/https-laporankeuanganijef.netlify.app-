@@ -1,0 +1,7 @@
+{
+  "task_id": "task-ai-chat-interactive",
+  "task_description": "Make the AI chat feature more interactive and conversational: send conversation history to Gemini for context continuity, improve system prompt for better action generation and interactive Q&A behavior, make localAIReply more dynamic, add new action types (koreksi, analisis, laporan), and enhance action confirmation UI with edit capability.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

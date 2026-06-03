@@ -5187,8 +5187,11 @@ async function kirimChatAI() {
 
   _aiChatHistory.push({ role: 'user', content: msg });
 
+  // Prepare conversation history (last 10 messages excluding the one just pushed)
+  var recentHistory = _aiChatHistory.slice(-11, -1);
+
   var reply = '';
-  reply = await callGeminiChat(msg);
+  reply = await callGeminiChat(msg, recentHistory);
   if (reply.startsWith('Error:')) {
     reply = await localAIReply(msg);
   }
@@ -5277,12 +5280,30 @@ async function eksekusiAIAction() {
   _pendingAIAction = null;
   var chatEl = document.getElementById('ai-chat-messages');
 
+  function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  var successFollowUps = [
+    'Aksi berhasil! Ada yang lain yang bisa saya bantu? Mau buat jurnal lagi, cek saldo, atau diskusi sesuatu?',
+    'Done! Transaksi sudah tercatat. Mau lanjut dengan hal lain? Saya siap membantu.',
+    'Berhasil dicatat! Selanjutnya mau ngapain? Bisa cek saldo, buat transaksi lain, atau tanya-tanya.',
+    'Sukses! Kalau ada yang perlu dicatat lagi atau mau cek data, langsung bilang saja ya.'
+  ];
+  var failureFollowUps = [
+    'Maaf ada kendala. Mau coba lagi atau diskusi alternatifnya?',
+    'Hmm, sepertinya ada masalah. Mau saya bantu cari solusi lain?',
+    'Gagal diproses. Bisa coba ulangi dengan detail yang berbeda, atau mau saya bantu cara lain?',
+    'Ada error nih. Mau coba lagi atau saya bantu troubleshoot?'
+  ];
+
   try {
     if (action.type === 'jurnal') {
       var totalD = 0, totalK = 0;
       (action.lines||[]).forEach(function(l) { totalD += l.debit||0; totalK += l.kredit||0; });
       if (Math.abs(totalD - totalK) > 1) {
         showAlert('Jurnal tidak balance! Debit: ' + fmtRp(totalD) + ' ≠ Kredit: ' + fmtRp(totalK), 'danger');
+        var balanceFailMsg = pickRandom(failureFollowUps);
+        _aiChatHistory.push({ role: 'assistant', content: balanceFailMsg });
+        chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + balanceFailMsg + '</div></div>';
+        chatEl.scrollTop = chatEl.scrollHeight;
         return;
       }
       var id = genId('JU');
@@ -5353,10 +5374,21 @@ async function eksekusiAIAction() {
 
     } else {
       showAlert('Tipe aksi tidak dikenali: ' + action.type, 'warning');
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return;
     }
+
+    // Follow-up message after success
+    var followUp = pickRandom(successFollowUps);
+    _aiChatHistory.push({ role: 'assistant', content: followUp });
+    chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + followUp + '</div></div>';
   } catch(e) {
     chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#ffcdd2;padding:8px 14px;border-radius:8px;font-size:0.85rem">❌ Gagal: ' + e.message + '</div></div>';
     showAlert('Gagal eksekusi: ' + e.message, 'danger');
+    // Follow-up message after failure
+    var failMsg = pickRandom(failureFollowUps);
+    _aiChatHistory.push({ role: 'assistant', content: failMsg });
+    chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + failMsg + '</div></div>';
   }
   chatEl.scrollTop = chatEl.scrollHeight;
 }
@@ -5365,6 +5397,17 @@ function batalAIAction() {
   _pendingAIAction = null;
   var chatEl = document.getElementById('ai-chat-messages');
   chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#ffecb3;padding:8px 14px;border-radius:8px;font-size:0.85rem">⚠️ Aksi dibatalkan oleh user.</div></div>';
+
+  // Follow-up message after cancel
+  var cancelFollowUps = [
+    'Oke, saya batalkan. Mau saya bantu hal lain?',
+    'Baik, tidak jadi. Ada yang lain yang bisa saya bantu?',
+    'Sudah dibatalkan. Kalau mau revisi atau coba yang lain, bilang saja ya.',
+    'Oke, aksi tidak dijalankan. Mau diskusi alternatif atau ada pertanyaan lain?'
+  ];
+  var followUp = cancelFollowUps[Math.floor(Math.random() * cancelFollowUps.length)];
+  _aiChatHistory.push({ role: 'assistant', content: followUp });
+  chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6">' + followUp + '</div></div>';
   chatEl.scrollTop = chatEl.scrollHeight;
 }
 
@@ -5374,7 +5417,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-async function callGeminiChat(msg) {
+async function callGeminiChat(msg, history) {
   try {
     // Kumpulkan konteks keuangan ringkas
     var fd = await getFinancialData();
@@ -5398,10 +5441,18 @@ async function callGeminiChat(msg) {
     var coaList = akunList.slice(0, 30).map(function(a) { return a.kode + ' - ' + a.nama + ' (' + a.kategori + ')'; }).join('\n');
     konteks += '\n- Daftar Akun COA:\n' + coaList + '\n';
 
+    // Format history for API
+    var historyPayload = [];
+    if (Array.isArray(history)) {
+      historyPayload = history.slice(-10).map(function(h) {
+        return { role: h.role, content: h.content };
+      });
+    }
+
     var response = await fetch('/.netlify/functions/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, context: konteks })
+      body: JSON.stringify({ message: msg, context: konteks, history: historyPayload })
     });
 
     var data = await response.json();
@@ -5415,12 +5466,17 @@ async function callGeminiChat(msg) {
 }
 
 async function localAIReply(msg) {
-  // Analisis lokal tanpa API — berdasarkan keyword matching
+  // Analisis lokal tanpa API — berdasarkan keyword matching dengan variasi respons
   var lower = msg.toLowerCase();
   var fd = await getFinancialData();
   var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
   var pcList = await KDB.getAll('pettycash');
   var jurnal = await KDB.getAll('jurnal');
+  var now = new Date();
+  var waktu = now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  var jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+  function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
   // Deteksi perintah aksi: buat jurnal
   if ((lower.includes('buat') || lower.includes('catat') || lower.includes('input')) && lower.includes('jurnal')) {
@@ -5436,14 +5492,26 @@ async function localAIReply(msg) {
       if (lower.includes('atk') || lower.includes('alat tulis')) akunDebit = akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('atk'); }) ? akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('atk'); }).kode : '5-2200';
 
       var ket = msg.replace(/buat(kan)?|catat(kan)?|input(kan)?|jurnal/gi, '').trim() || 'Jurnal dari AI Chat';
-      return 'Saya akan buatkan jurnal:\n'
-        + '• Keterangan: ' + ket + '\n'
-        + '• Debit: ' + akunDebit + ' → Rp ' + nominal.toLocaleString('id-ID') + '\n'
-        + '• Kredit: ' + akunKredit + ' → Rp ' + nominal.toLocaleString('id-ID') + '\n\n'
+      var jurnalIntros = [
+        'Baik, saya siapkan jurnalnya untuk kamu:',
+        'Oke! Ini jurnal yang akan saya buat:',
+        'Siap, berikut detail jurnal yang akan dicatat:',
+        'Done, saya sudah susun jurnalnya seperti ini:'
+      ];
+      return pickRandom(jurnalIntros) + '\n'
+        + '- Keterangan: ' + ket + '\n'
+        + '- Debit: ' + akunDebit + ' = Rp ' + nominal.toLocaleString('id-ID') + '\n'
+        + '- Kredit: ' + akunKredit + ' = Rp ' + nominal.toLocaleString('id-ID') + '\n\n'
         + 'Klik Konfirmasi untuk menyimpan.\n'
         + '###ACTION:{"type":"jurnal","tanggal":"' + today() + '","keterangan":"' + ket.replace(/"/g,'\\"') + '","lines":[{"akun":"' + akunDebit + '","ket":"' + ket.replace(/"/g,'\\"') + '","debit":' + nominal + ',"kredit":0},{"akun":"' + akunKredit + '","ket":"Kas keluar","debit":0,"kredit":' + nominal + '}]}###';
     }
-    return 'Untuk membuat jurnal, sebutkan nominal dan keterangan. Contoh:\n"Buatkan jurnal beban listrik 500000"';
+    var jurnalAskVariations = [
+      'Untuk membuat jurnal, saya perlu info nominal dan keterangannya. Contoh:\n"Buatkan jurnal beban listrik 500000"',
+      'Boleh, mau buat jurnal apa? Sebutkan nominal dan deskripsinya ya.\nContoh: "Catat jurnal beban gaji 3000000"',
+      'Siap bantu buat jurnal! Tolong sebutkan:\n1. Nominal berapa?\n2. Untuk apa?\n\nContoh: "Buatkan jurnal beban listrik 500000"',
+      'Oke, mau jurnal apa nih? Kasih tau nominal sama keterangannya ya. Misal:\n"Input jurnal beban ATK 150000"'
+    ];
+    return pickRandom(jurnalAskVariations);
   }
 
   // Deteksi perintah topup petty cash
@@ -5451,13 +5519,24 @@ async function localAIReply(msg) {
     var nominalMatch2 = msg.match(/(\d[\d.,]*)/);
     var nominal2 = nominalMatch2 ? parseFloat(nominalMatch2[1].replace(/\./g,'').replace(',','.')) : 0;
     if (nominal2 > 0) {
-      return 'Saya akan top-up petty cash:\n'
-        + '• Jumlah: Rp ' + nominal2.toLocaleString('id-ID') + '\n'
-        + '• Tanggal: ' + today() + '\n\n'
+      var topupIntros = [
+        'Oke, saya proses top-up petty cash:',
+        'Siap! Berikut detail top-up yang akan dicatat:',
+        'Baik, top-up kas kecil akan saya buat seperti ini:',
+        'Done! Ini rincian top-up-nya:'
+      ];
+      return pickRandom(topupIntros) + '\n'
+        + '- Jumlah: Rp ' + nominal2.toLocaleString('id-ID') + '\n'
+        + '- Tanggal: ' + today() + '\n\n'
         + 'Klik Konfirmasi untuk menyimpan.\n'
         + '###ACTION:{"type":"topup_pc","tanggal":"' + today() + '","jumlah":' + nominal2 + ',"keterangan":"Top-up kas kecil dari AI Chat"}###';
     }
-    return 'Sebutkan jumlah yang mau di-topup. Contoh:\n"Topup petty cash 1000000"';
+    var topupAskVariations = [
+      'Berapa jumlah yang mau di-topup? Contoh:\n"Topup petty cash 1000000"',
+      'Mau top-up berapa? Sebutkan nominalnya ya.\nContoh: "Isi kas kecil 2000000"',
+      'Siap bantu topup! Nominalnya berapa?\nMisal: "Top up petty cash 1500000"'
+    ];
+    return pickRandom(topupAskVariations);
   }
 
   // Deteksi pengeluaran petty cash
@@ -5466,13 +5545,24 @@ async function localAIReply(msg) {
     var nominal3 = nominalMatch3 ? parseFloat(nominalMatch3[1].replace(/\./g,'').replace(',','.')) : 0;
     if (nominal3 > 0) {
       var ket3 = msg.replace(/buat(kan)?|catat(kan)?|input(kan)?|pengeluaran|keluar|petty|kas kecil/gi, '').trim() || 'Pengeluaran petty cash';
-      return 'Saya akan catat pengeluaran petty cash:\n'
-        + '• Jumlah: Rp ' + nominal3.toLocaleString('id-ID') + '\n'
-        + '• Keterangan: ' + ket3 + '\n\n'
+      var pengeluaranIntros = [
+        'Oke, pengeluaran petty cash akan saya catat:',
+        'Siap, ini detail pengeluaran kas kecil:',
+        'Baik! Berikut pencatatan pengeluaran yang akan dibuat:',
+        'Done, saya siapkan pencatatannya:'
+      ];
+      return pickRandom(pengeluaranIntros) + '\n'
+        + '- Jumlah: Rp ' + nominal3.toLocaleString('id-ID') + '\n'
+        + '- Keterangan: ' + ket3 + '\n\n'
         + 'Klik Konfirmasi untuk menyimpan.\n'
         + '###ACTION:{"type":"pengeluaran_pc","tanggal":"' + today() + '","jumlah":' + nominal3 + ',"keterangan":"' + ket3.replace(/"/g,'\\"') + '","akunBeban":"5-2200"}###';
     }
-    return 'Sebutkan jumlah dan keterangan. Contoh:\n"Catat pengeluaran petty cash 50000 beli ATK"';
+    var pengeluaranAskVariations = [
+      'Sebutkan jumlah dan keterangan. Contoh:\n"Catat pengeluaran petty cash 50000 beli ATK"',
+      'Mau catat pengeluaran berapa? Untuk apa?\nContoh: "Pengeluaran kas kecil 75000 beli snack meeting"',
+      'Siap bantu! Nominal dan keterangannya apa?\nMisal: "Input pengeluaran petty cash 100000 ongkir paket"'
+    ];
+    return pickRandom(pengeluaranAskVariations);
   }
 
   if (lower.includes('saldo') || lower.includes('kas') || lower.includes('petty')) {
@@ -5484,12 +5574,18 @@ async function localAIReply(msg) {
       else keluar += Math.abs(parseFloat(p.jumlah)||0);
     });
     var saldoPC = pcSaldo + masuk - keluar;
-    return 'Posisi saldo petty cash saat ini:\n'
-      + '• Saldo awal: Rp ' + pcSaldo.toLocaleString('id-ID') + '\n'
-      + '• Total masuk (tahun ' + tahun + '): Rp ' + masuk.toLocaleString('id-ID') + '\n'
-      + '• Total keluar (tahun ' + tahun + '): Rp ' + keluar.toLocaleString('id-ID') + '\n'
-      + '• Saldo saat ini: Rp ' + saldoPC.toLocaleString('id-ID') + '\n\n'
-      + 'Untuk detail akun lain, cek menu Posisi Saldo Hari Ini.';
+    var saldoIntros = [
+      'Per ' + waktu + ' pukul ' + jam + ', ini posisi petty cash kamu:',
+      'Berikut ringkasan kas kecil per hari ini (' + waktu + '):',
+      'Update saldo petty cash saat ini (' + jam + '):',
+      'Ini data kas kecil terkini per ' + waktu + ':'
+    ];
+    return pickRandom(saldoIntros) + '\n'
+      + '- Saldo awal: Rp ' + pcSaldo.toLocaleString('id-ID') + '\n'
+      + '- Total masuk (tahun ' + tahun + '): Rp ' + masuk.toLocaleString('id-ID') + '\n'
+      + '- Total keluar (tahun ' + tahun + '): Rp ' + keluar.toLocaleString('id-ID') + '\n'
+      + '- Saldo saat ini: Rp ' + saldoPC.toLocaleString('id-ID') + '\n\n'
+      + 'Mau lihat detail akun lain atau ada yang bisa saya bantu?';
   }
 
   if (lower.includes('neraca') || lower.includes('balance')) {
@@ -5502,20 +5598,29 @@ async function localAIReply(msg) {
       else if (prefix === '3') totalEku += (s.kredit||0) - (s.debit||0);
     });
     var laba = totalAset - totalKew - totalEku;
-    return 'Ringkasan Neraca:\n'
-      + '• Total Aset: Rp ' + totalAset.toLocaleString('id-ID') + '\n'
-      + '• Total Kewajiban: Rp ' + totalKew.toLocaleString('id-ID') + '\n'
-      + '• Total Ekuitas: Rp ' + totalEku.toLocaleString('id-ID') + '\n'
-      + '• Laba Periode: Rp ' + laba.toLocaleString('id-ID') + '\n'
-      + '• Status: Neraca Balance ✓';
+    var neracaIntros = [
+      'Ini ringkasan neraca per ' + waktu + ':',
+      'Berikut posisi neraca terkini (update ' + jam + '):',
+      'Ringkasan Neraca IJEF Corp (' + waktu + '):',
+      'Data neraca per hari ini:'
+    ];
+    return pickRandom(neracaIntros) + '\n'
+      + '- Total Aset: Rp ' + totalAset.toLocaleString('id-ID') + '\n'
+      + '- Total Kewajiban: Rp ' + totalKew.toLocaleString('id-ID') + '\n'
+      + '- Total Ekuitas: Rp ' + totalEku.toLocaleString('id-ID') + '\n'
+      + '- Laba Periode: Rp ' + laba.toLocaleString('id-ID') + '\n'
+      + '- Status: Neraca Balance\n\n'
+      + 'Mau saya jelaskan lebih detail salah satu komponen, atau ada pertanyaan lain?';
   }
 
   if (lower.includes('jurnal') || lower.includes('penyesuaian')) {
-    return 'Saya bisa bantu buatkan jurnal! Contoh perintah:\n'
-      + '• "Buatkan jurnal beban listrik 500000"\n'
-      + '• "Catat pengeluaran petty cash 50000 beli ATK"\n'
-      + '• "Topup petty cash 1000000"\n\n'
-      + 'Atau tanya tentang cara jurnal penyesuaian, saya jelaskan langkahnya.';
+    var jurnalInfoVariations = [
+      'Saya bisa bantu buatkan jurnal! Beberapa contoh perintah:\n- "Buatkan jurnal beban listrik 500000"\n- "Catat pengeluaran petty cash 50000 beli ATK"\n- "Topup petty cash 1000000"\n\nAtau mau tanya cara jurnal penyesuaian? Saya jelaskan.',
+      'Mau buat jurnal apa? Kasih tau saja detailnya:\n- Nominal berapa\n- Untuk keperluan apa\n- Tanggal kapan (atau pakai hari ini)\n\nContoh: "Buatkan jurnal beban gaji 5000000"',
+      'Siap bantu urusan jurnal! Kamu bisa:\n1. Minta saya buatkan jurnal (sebutkan detail)\n2. Tanya cara buat jurnal penyesuaian\n3. Cek jurnal yang sudah ada\n\nMau yang mana?',
+      'Oke! Per ' + waktu + ' sudah ada ' + jurnal.length + ' jurnal tercatat.\nMau buat jurnal baru? Sebutkan nominal dan keterangannya.\nAtau mau tanya seputar jurnal penyesuaian?'
+    ];
+    return pickRandom(jurnalInfoVariations);
   }
 
   if (lower.includes('posisi') || lower.includes('keuangan') || lower.includes('kesehatan')) {
@@ -5527,29 +5632,66 @@ async function localAIReply(msg) {
       if (prefix === '5' || prefix === '6') totalBeban += (s.debit||0) - (s.kredit||0);
     });
     var laba2 = totalPendapatan - totalBeban;
-    return 'Posisi keuangan saat ini:\n'
-      + '• Total jurnal tercatat: ' + jurnal.length + '\n'
-      + '• Pendapatan: Rp ' + totalPendapatan.toLocaleString('id-ID') + '\n'
-      + '• Beban: Rp ' + totalBeban.toLocaleString('id-ID') + '\n'
-      + '• Laba/Rugi: Rp ' + laba2.toLocaleString('id-ID') + (laba2 >= 0 ? ' (Laba)' : ' (Rugi)') + '\n\n'
-      + 'Untuk analisis lebih detail, klik tombol "Jalankan Analisis Lengkap" di atas.';
+    var posisiIntros = [
+      'Ini gambaran posisi keuangan per ' + waktu + ' (' + jam + '):',
+      'Update posisi keuangan IJEF Corp hari ini:',
+      'Berikut kondisi keuangan terkini per ' + waktu + ':',
+      'Ringkasan keuangan saat ini (diambil pukul ' + jam + '):'
+    ];
+    return pickRandom(posisiIntros) + '\n'
+      + '- Total jurnal tercatat: ' + jurnal.length + '\n'
+      + '- Pendapatan: Rp ' + totalPendapatan.toLocaleString('id-ID') + '\n'
+      + '- Beban: Rp ' + totalBeban.toLocaleString('id-ID') + '\n'
+      + '- Laba/Rugi: Rp ' + laba2.toLocaleString('id-ID') + (laba2 >= 0 ? ' (Laba)' : ' (Rugi)') + '\n\n'
+      + 'Ada yang mau ditanyakan lebih lanjut? Saya bisa bantu analisis detail per akun.';
   }
 
   if (lower.includes('transaksi') || lower.includes('perhatian') || lower.includes('anomali')) {
     var unbal = jurnal.filter(function(j) { var d=0,k=0; (j.lines||[]).forEach(function(l){d+=l.debit||0;k+=l.kredit||0;}); return Math.abs(d-k)>0.01; });
     if (unbal.length > 0) {
-      return '⚠️ Ditemukan ' + unbal.length + ' jurnal tidak balance!\n'
-        + 'Ini perlu segera diperbaiki. Gunakan tombol "Cek Jurnal Balance" di atas untuk melihat detailnya.';
+      var anomaliWarnings = [
+        'Perlu perhatian! Ada ' + unbal.length + ' jurnal yang tidak balance.\nSebaiknya segera diperbaiki. Gunakan tombol "Cek Jurnal Balance" di atas untuk detailnya.',
+        'Saya temukan ' + unbal.length + ' transaksi bermasalah (debit tidak sama dengan kredit).\nMau saya bantu review satu per satu?',
+        'Ada ' + unbal.length + ' jurnal tidak seimbang yang perlu dicek. Ini bisa jadi kesalahan input.\nKlik "Cek Jurnal Balance" untuk melihat daftarnya.'
+      ];
+      return pickRandom(anomaliWarnings);
     }
-    return '✅ Semua jurnal balance. Tidak ada transaksi yang perlu perhatian khusus saat ini.\n\nUntuk analisis anomali lebih dalam, klik "Jalankan Analisis Lengkap".';
+    var allGoodVariations = [
+      'Semua jurnal balance. Tidak ada anomali yang terdeteksi per ' + waktu + '.\nMau saya cek hal lain?',
+      'Kabar baik! Semua transaksi tercatat dengan benar (debit = kredit). Tidak ada yang perlu dikhawatirkan saat ini.',
+      'Per ' + jam + ' hari ini, semua ' + jurnal.length + ' jurnal dalam kondisi balance.\nAda yang lain yang bisa saya bantu?'
+    ];
+    return pickRandom(allGoodVariations);
   }
 
-  return 'Saya bisa bantu:\n'
-    + '• Tanya: saldo, neraca, posisi keuangan, transaksi anomali\n'
-    + '• Aksi: "Buatkan jurnal beban listrik 500000"\n'
-    + '• Aksi: "Topup petty cash 1000000"\n'
-    + '• Aksi: "Catat pengeluaran petty cash 50000 beli ATK"\n\n'
-    + 'Untuk fitur chat AI yang lebih cerdas, gunakan pertanyaan spesifik tentang data keuangan Anda.';
+  // Default fallback - more helpful with varied suggestions
+  var defaultResponses = [
+    'Halo! Per ' + waktu + ' pukul ' + jam + ', saya siap membantu. Beberapa hal yang bisa kamu tanyakan:\n'
+      + '- Posisi keuangan atau saldo kas\n'
+      + '- Buat jurnal baru (sebutkan detail)\n'
+      + '- Top-up atau pengeluaran petty cash\n'
+      + '- Cek neraca atau laporan keuangan\n\n'
+      + 'Apa yang bisa saya bantu?',
+    'Saya bisa bantu berbagai hal tentang keuangan IJEF Corp. Contoh:\n'
+      + '- "Berapa saldo kas kecil saat ini?"\n'
+      + '- "Buatkan jurnal beban listrik 500000"\n'
+      + '- "Bagaimana posisi keuangan perusahaan?"\n'
+      + '- "Ada transaksi yang perlu diperhatikan?"\n\n'
+      + 'Silakan tanya apa saja!',
+    'Hai! Saya AI Assistant keuangan kamu. Saat ini (' + jam + ', ' + waktu + ') saya bisa bantu:\n'
+      + '1. Cek saldo dan posisi keuangan\n'
+      + '2. Buat atau catat transaksi baru\n'
+      + '3. Analisis jurnal dan neraca\n'
+      + '4. Jawab pertanyaan akuntansi\n\n'
+      + 'Mau mulai dari mana?',
+    'Tentu, saya siap membantu! Per ' + waktu + ', perusahaan punya ' + jurnal.length + ' jurnal tercatat.\n'
+      + 'Kamu bisa minta saya untuk:\n'
+      + '- Cek saldo atau neraca\n'
+      + '- Buat jurnal, topup, atau catat pengeluaran\n'
+      + '- Analisis kondisi keuangan\n\n'
+      + 'Apa yang kamu butuhkan?'
+  ];
+  return pickRandom(defaultResponses);
 }
 
 async function runAIAnalysis() {

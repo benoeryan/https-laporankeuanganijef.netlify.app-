@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add new action types (koreksi_jurnal, analisis_akun, laporan_ringkasan) to the frontend execution engine, enhance the action confirmation UI with edit capability, and add richer action previews.",
+  "status": "pending",
+  "steps": [
+    "1. Add handling for 'koreksi_jurnal' action type in renderActionConfirmation() in keuangan-app.js. This action edits an existing journal entry. Display the old values vs new values in a comparison table. The action JSON format: {type:'koreksi_jurnal', id:'jurnal_id', changes:{keterangan:'new', tanggal:'new', lines:[...]}}",
+    "2. Add handling for 'analisis_akun' action type in renderActionConfirmation(). This action shows a detailed analysis of a specific account. Display it as a summary card with account info. The action JSON format: {type:'analisis_akun', kodeAkun:'1-1100', periode:'2024-01'}. The confirmation button should say 'Tampilkan Analisis'.",
+    "3. Add handling for 'laporan_ringkasan' action type in renderActionConfirmation(). This generates a summary report. Format: {type:'laporan_ringkasan', jenis:'neraca|laba_rugi|arus_kas', periode:'2024-01'}. The confirmation button should say 'Generate Laporan'.",
+    "4. Implement eksekusiAIAction() handlers for the new action types: (a) koreksi_jurnal - load existing jurnal by id using KDB.get(), apply changes, save back using KDB.save(), (b) analisis_akun - compute account analysis using getFinancialData() and display in chat, (c) laporan_ringkasan - generate summary text from financial data and display in chat.",
+    "5. Add an 'Edit' button to the action confirmation UI (renderActionConfirmation) that shows editable fields for the action parameters. When user clicks edit, display input fields pre-filled with the action data. On save, update _pendingAIAction with new values and re-render the confirmation.",
+    "6. Make the action confirmation UI show a warning when action data seems incomplete (e.g., missing tanggal, zero amounts) with a message suggesting the user ask the AI to provide more details."
+  ],
+  "acceptance_criteria": [
+    "renderActionConfirmation() handles koreksi_jurnal, analisis_akun, and laporan_ringkasan action types with appropriate UI",
+    "eksekusiAIAction() correctly processes all new action types - koreksi saves changes, analisis displays analysis, laporan generates summary",
+    "An 'Edit' button appears on action confirmations allowing users to modify action parameters before execution",
+    "Incomplete action data shows a warning to the user",
+    "node --check passes for keuangan-app.js",
+    "All existing action types (jurnal, topup_pc, pengeluaran_pc, hapus_jurnal) continue to work unchanged"
+  ],
+  "verification": [
+    "node --check /projects/sandbox/https-laporankeuanganijef.netlify.app-/keuangan-app.js",
+    "node --check /projects/sandbox/https-laporankeuanganijef.netlify.app-/netlify/functions/gemini.js"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -1,0 +1,20 @@
+{
+  "project_type": "Vanilla JavaScript financial management web app (SPA) deployed on Netlify with Netlify Functions backend",
+  "language": "JavaScript (ES5/ES6 mix, no bundler, no framework)",
+  "build_system": "None - plain HTML/JS served directly. Netlify Functions use esbuild bundler.",
+  "test_framework": "None - no automated test infrastructure. Validation is via syntax check (node --check) and manual testing.",
+  "build_command": "node --check keuangan-app.js && node --check netlify/functions/gemini.js",
+  "test_command": "node --check keuangan-app.js && node --check netlify/functions/gemini.js",
+  "verification_instructions": "1. Run node --check on both JS files to verify no syntax errors. 2. Verify the Netlify Function handles the new request format (conversation history). 3. Verify the frontend correctly builds and sends conversation history to the API.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - plain JS files. Node.js available for syntax checking.",
+  "environment_constraints": "OPEN_INTERNET network mode. No test framework. No build tool. Cannot run the app (needs Firebase + Netlify env vars). Validation limited to syntax checks and code review.",
+  "contribution_requirements": "No formal contributing guide. Code follows existing patterns: var declarations in function scope, async/await with try/catch, HTML string concatenation for UI.",
+  "key_patterns": "UI rendered via HTML string concatenation. State in global variables. KDB abstraction for Firestore CRUD. AI chat uses _aiChatHistory array, _pendingAIAction for pending actions. Netlify Function at /.netlify/functions/gemini accepts POST with {message, context}. Gemini API called with contents array. Action format: ###ACTION:{json}### embedded in response text.",
+  "relevant_files": [
+    "netlify/functions/gemini.js",
+    "keuangan-app.js (lines 5128-5620 for AI chat section)",
+    "keuangan-firebase.js (KDB database layer)"
+  ],
+  "directory_structure": "Root: index.html (entry), keuangan-app.js (9058 lines, full app logic), keuangan-firebase.js (Firebase/Firestore layer), netlify.toml (config), netlify/functions/gemini.js (API proxy)"
+}

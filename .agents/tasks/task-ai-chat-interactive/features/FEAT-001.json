@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Overhaul the AI chat to be truly conversational: send conversation history to Gemini, improve the system prompt for interactive behavior and proper action generation, and make localAIReply more dynamic as fallback.",
+  "status": "in_progress",
+  "steps": [
+    "1. Modify callGeminiChat() in keuangan-app.js (around line 5377) to send the last 10 messages from _aiChatHistory as a 'history' array in the request body alongside 'message' and 'context'. Format each history entry as {role: 'user'|'assistant', content: text}.",
+    "2. Update the Netlify Function (netlify/functions/gemini.js) to accept the new 'history' field from the request body. Build the Gemini API 'contents' array as a proper multi-turn conversation: first a system instruction (using systemInstruction field or as first user message), then the history messages mapped to Gemini's role format (user/model), then the current user message last.",
+    "3. Completely rewrite the system prompt in netlify/functions/gemini.js to be much more detailed and interactive. The new prompt should: (a) Instruct Gemini to be conversational - ask clarifying questions before proposing actions, (b) Define EXACTLY when to use ###ACTION:{json}### format (only when all required info is gathered and confirmed with user), (c) Provide complete JSON schema examples for each action type with field descriptions, (d) List ALL available action types including the new ones: jurnal, topup_pc, pengeluaran_pc, hapus_jurnal, koreksi_jurnal, analisis_akun, laporan_ringkasan, (e) Instruct Gemini to reference the financial context data actively in answers, (f) Tell Gemini to respond differently each time even for similar questions - vary greetings, structure, examples.",
+    "4. Improve localAIReply() in keuangan-app.js (around line 5416) to be more varied: (a) Add randomized response variations for each category (use arrays of possible responses and pick randomly), (b) Include the current date/time context in responses, (c) Make the default fallback response more helpful with a dynamic suggestion based on the last user message.",
+    "5. After eksekusiAIAction() succeeds or fails, automatically add a follow-up message to the chat from the AI (appended to _aiChatHistory and displayed) asking if the user wants to do anything else or modify the action. This makes the conversation feel continuous.",
+    "6. Update kirimChatAI() to pass the last 10 messages of _aiChatHistory to callGeminiChat() so the function can include them in the request."
+  ],
+  "acceptance_criteria": [
+    "callGeminiChat() sends a 'history' array with up to 10 recent messages to the Netlify Function",
+    "The Netlify Function constructs proper multi-turn Gemini API contents from history",
+    "The system prompt clearly defines all action types with exact JSON format examples",
+    "The system prompt instructs Gemini to ask clarifying questions before proposing actions",
+    "localAIReply() uses randomized response arrays so the same question gets varied answers",
+    "After action execution (success or failure), a follow-up AI message is appended to continue the conversation",
+    "node --check passes for both keuangan-app.js and netlify/functions/gemini.js"
+  ],
+  "verification": [
+    "node --check /projects/sandbox/https-laporankeuanganijef.netlify.app-/keuangan-app.js",
+    "node --check /projects/sandbox/https-laporankeuanganijef.netlify.app-/netlify/functions/gemini.js"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
