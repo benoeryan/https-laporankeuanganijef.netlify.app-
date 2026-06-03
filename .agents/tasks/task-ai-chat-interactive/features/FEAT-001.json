@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Overhaul the AI chat to be truly conversational: send conversation history to Gemini, improve the system prompt for interactive behavior and proper action generation, and make localAIReply more dynamic as fallback.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "1. Modify callGeminiChat() in keuangan-app.js (around line 5377) to send the last 10 messages from _aiChatHistory as a 'history' array in the request body alongside 'message' and 'context'. Format each history entry as {role: 'user'|'assistant', content: text}.",
     "2. Update the Netlify Function (netlify/functions/gemini.js) to accept the new 'history' field from the request body. Build the Gemini API 'contents' array as a proper multi-turn conversation: first a system instruction (using systemInstruction field or as first user message), then the history messages mapped to Gemini's role format (user/model), then the current user message last.",
@@ -25,5 +25,5 @@
     "node --check /projects/sandbox/https-laporankeuanganijef.netlify.app-/netlify/functions/gemini.js"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All changes pass node --check syntax validation. The system_instruction field is used for the Gemini API system prompt (supported by gemini-2.0-flash and later). History is properly sliced to last 10 messages to keep payload under 100KB limit. The pickRandom helper is defined locally in each function scope to avoid polluting global scope and match the existing code pattern."
 }
