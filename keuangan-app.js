@@ -6192,6 +6192,12 @@ async function runAIJurnalCheck() {
     return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td>' + fmtRp(td) + '</td><td>' + fmtRp(tk) + '</td><td class="text-red fw-bold">' + fmtRp(Math.abs(td-tk)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + j.id + '\')">Hapus</button></td></tr>';
   }).join('');
   el.innerHTML = '<div class="card"><div class="card-header"><h2>❌ Jurnal Tidak Balance (' + problems.length + ')</h2></div>'
+    + '<div class="alert alert-warning" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'
+    + '<span>Ditemukan <b>' + problems.length + '</b> jurnal tidak balance. Pilih aksi:</span>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + '<button class="btn btn-danger btn-sm" onclick="hapusBatchJurnalUnbalance()">🗑️ Hapus Semua yang Tidak Balance</button>'
+    + '<button class="btn btn-warning btn-sm" onclick="fixBatchJurnalBalance()">🔧 Auto-Fix Balance (tambah selisih ke akun penyesuaian)</button>'
+    + '</div></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Selisih</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
@@ -6400,6 +6406,64 @@ async function batchBuatJurnalPC() {
   showLoading(false);
   showAlert('Berhasil membuat ' + count + ' jurnal dari petty cash!');
   runAIPettyCashCheck(); // Refresh
+}
+
+// ===== FUNGSI FIX OTOMATIS DARI ANALISIS =====
+
+async function hapusBatchJurnalUnbalance() {
+  var allJurnal = await KDB.getAll('jurnal');
+  var problems = allJurnal.filter(function(j) {
+    var td = 0, tk = 0;
+    (j.lines||[]).forEach(function(l) { td += l.debit||0; tk += l.kredit||0; });
+    return Math.abs(td - tk) > 0.01;
+  });
+  if (problems.length === 0) { showAlert('Tidak ada jurnal yang tidak balance', 'info'); return; }
+  if (!confirm('HAPUS ' + problems.length + ' jurnal yang tidak balance?\n\nAksi ini TIDAK BISA DIBATALKAN!\nJurnal yang dihapus:\n' + problems.slice(0,5).map(function(j){ return '• ' + (j.noRef||j.id) + ' - ' + (j.keterangan||''); }).join('\n') + (problems.length > 5 ? '\n... dan ' + (problems.length-5) + ' lainnya' : ''))) return;
+
+  showLoading(true);
+  var count = 0;
+  for (var i = 0; i < problems.length; i++) {
+    await KDB.delete('jurnal', problems[i].id);
+    count++;
+  }
+  showLoading(false);
+  showAlert(count + ' jurnal tidak balance berhasil dihapus!');
+  runAIJurnalCheck();
+}
+
+async function fixBatchJurnalBalance() {
+  var allJurnal = await KDB.getAll('jurnal');
+  var problems = allJurnal.filter(function(j) {
+    var td = 0, tk = 0;
+    (j.lines||[]).forEach(function(l) { td += l.debit||0; tk += l.kredit||0; });
+    return Math.abs(td - tk) > 0.01;
+  });
+  if (problems.length === 0) { showAlert('Tidak ada jurnal yang perlu di-fix', 'info'); return; }
+  if (!confirm('Auto-fix ' + problems.length + ' jurnal tidak balance?\n\nSelisih akan ditambahkan ke akun "Selisih Pembulatan" (9-9999) agar jurnal menjadi balance.\n\nAnda bisa edit akun tersebut nanti jika perlu.')) return;
+
+  showLoading(true);
+  var count = 0;
+  for (var i = 0; i < problems.length; i++) {
+    var j = problems[i];
+    var td = 0, tk = 0;
+    (j.lines||[]).forEach(function(l) { td += l.debit||0; tk += l.kredit||0; });
+    var selisih = td - tk;
+    var newLines = (j.lines||[]).slice();
+    if (selisih > 0) {
+      // Debit lebih besar — tambah kredit untuk balance
+      newLines.push({ akun: '9-9999', ket: 'Penyesuaian auto-fix balance', debit: 0, kredit: selisih });
+    } else {
+      // Kredit lebih besar — tambah debit untuk balance
+      newLines.push({ akun: '9-9999', ket: 'Penyesuaian auto-fix balance', debit: Math.abs(selisih), kredit: 0 });
+    }
+    var newTotalD = newLines.reduce(function(s,l){ return s+(l.debit||0); }, 0);
+    var newTotalK = newLines.reduce(function(s,l){ return s+(l.kredit||0); }, 0);
+    await KDB.save('jurnal', j.id, Object.assign({}, j, { lines: newLines, totalDebit: newTotalD, totalKredit: newTotalK }));
+    count++;
+  }
+  showLoading(false);
+  showAlert(count + ' jurnal berhasil di-fix balance!');
+  runAIJurnalCheck();
 }
 
 // Cocokkan nama akun dari sheets dengan kode COA di sistem
