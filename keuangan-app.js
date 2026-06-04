@@ -5128,6 +5128,12 @@ const SHEET_COLS = {
 
 // ===== AI ASSISTANT - Analisis & Deteksi Kesalahan Otomatis =====
 async function renderAIAssistant() {
+  var currentProvider = localStorage.getItem('k_ai_provider') || 'lokal';
+  var apiKey = localStorage.getItem('k_ai_apikey') || '';
+  var statusBadge = apiKey && currentProvider === 'openrouter'
+    ? '<span class="badge badge-success">✓ OpenRouter Aktif</span>'
+    : '<span class="badge badge-neutral">Mode Lokal</span>';
+
   return '<div class="page-title">🤖 AI Assistant Keuangan</div>'
     + '<div class="alert alert-info">AI Assistant membantu mendeteksi kesalahan pencatatan, selisih jurnal, dan memberikan rekomendasi perbaikan secara otomatis.</div>'
     + '<div class="stats-row">'
@@ -5136,9 +5142,8 @@ async function renderAIAssistant() {
     + '<div class="stat-box"><button class="btn btn-info" onclick="runAIPettyCashCheck()" style="width:100%">💵 Cek Petty Cash</button></div>'
     + '<div class="stat-box"><button class="btn btn-success" onclick="runAINeracaCheck()" style="width:100%">📊 Cek Neraca</button></div>'
     + '</div>'
-    // Chat / Diskusi Langsung
     + '<div class="card" style="margin-top:16px">'
-    + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2><span class="text-muted" style="font-size:0.78rem">Tanya apa saja tentang keuangan, akuntansi, atau data kamu</span></div>'
+    + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2>' + statusBadge + '</div>'
     + '<div id="ai-chat-messages" style="max-height:400px;overflow-y:auto;padding:12px;background:#f8f9ff;border-radius:8px;margin-bottom:12px;min-height:120px">'
     + '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Mulai diskusi — ketik pertanyaan di bawah</div>'
     + '</div>'
@@ -5151,28 +5156,27 @@ async function renderAIAssistant() {
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Apa saja transaksi yang perlu diperhatikan bulan ini?\')">⚠️ Transaksi Perhatian</button>'
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Jelaskan cara membuat jurnal penyesuaian\')">📝 Cara Jurnal</button>'
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Berapa saldo kas dan petty cash saat ini?\')">💰 Saldo Kas</button>'
-    + '</div>'
-    + '</div>'
-    // API Key setting
-    + '<div class="card" style="margin-top:12px">'
-    + '<div class="card-header"><h2>⚙️ Pengaturan AI Chat</h2></div>'
-    + '<div class="form-grid">'
-    + '<div class="fg full"><label>API Key (Gemini / OpenRouter)</label>'
-    + '<div style="display:flex;gap:8px"><input type="password" id="ai-api-key" placeholder="Masukkan API key..." style="flex:1;padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" value="' + (localStorage.getItem('k_ai_apikey')||'') + '">'
-    + '<button class="btn btn-sm btn-success" onclick="simpanAIKey()">Simpan</button></div>'
-    + '<div style="font-size:0.75rem;color:#888;margin-top:6px">'
-    + '<b>Opsi API Key (gratis):</b><br>'
-    + '• <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> — Gemini (perlu setup billing jika quota 0)<br>'
-    + '• <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a> — Gratis $1 credit, support banyak model<br>'
-    + '• Tanpa API key = chat lokal (tetap bisa eksekusi aksi dasar)</div>'
-    + '</div>'
-    + '<div class="fg full"><label>Provider</label>'
-    + '<select id="ai-provider" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" onchange="simpanAIProvider()">'
-    + '<option value="gemini"' + ((localStorage.getItem('k_ai_provider')||'gemini')==='gemini'?' selected':'') + '>Google Gemini</option>'
-    + '<option value="openrouter"' + ((localStorage.getItem('k_ai_provider')||'')==='openrouter'?' selected':'') + '>OpenRouter (recommended)</option>'
-    + '</select></div>'
     + '</div></div>'
-    // Hasil analisis
+    + '<div class="card" style="margin-top:12px"><div class="card-header"><h2>⚙️ Pilih Mode AI</h2></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + '<div style="border:2px solid ' + (currentProvider==='lokal'?'#4caf50':'#ddd') + ';border-radius:10px;padding:14px;cursor:pointer" onclick="pilihProviderAI(\'lokal\')">'
+    + '<div style="font-weight:700;font-size:0.95rem;margin-bottom:6px">💻 Mode Lokal</div>'
+    + '<div style="font-size:0.8rem;color:#555;line-height:1.5">Tanpa API. Jawab dari data lokal. Bisa eksekusi aksi dasar.</div>'
+    + '<div style="margin-top:6px;font-size:0.75rem;color:#888">✓ Gratis tanpa registrasi</div></div>'
+    + '<div style="border:2px solid ' + (currentProvider==='openrouter'?'#4caf50':'#ddd') + ';border-radius:10px;padding:14px;cursor:pointer" onclick="pilihProviderAI(\'openrouter\')">'
+    + '<div style="font-weight:700;font-size:0.95rem;margin-bottom:6px">🌐 OpenRouter <span class="badge badge-info" style="font-size:0.65rem">Recommended</span></div>'
+    + '<div style="font-size:0.8rem;color:#555;line-height:1.5">AI cerdas. Jawab apa saja dengan konteks data kamu.</div>'
+    + '<div style="margin-top:6px;font-size:0.75rem;color:#888">✓ Gratis $1 credit</div></div></div>'
+    + '<div id="ai-openrouter-setup" style="margin-top:12px;display:' + (currentProvider==='openrouter'?'block':'none') + '">'
+    + '<div style="background:#f0f8ff;border-radius:8px;padding:12px;border-left:4px solid #1a237e">'
+    + '<div style="font-weight:600;margin-bottom:8px">Setup OpenRouter:</div>'
+    + '<ol style="font-size:0.82rem;padding-left:18px;line-height:2;margin:0">'
+    + '<li>Buka <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a></li>'
+    + '<li>Sign up (Google account) → Create Key</li>'
+    + '<li>Paste key di bawah → Simpan</li></ol>'
+    + '<div style="display:flex;gap:8px;margin-top:10px">'
+    + '<input type="password" id="ai-api-key" placeholder="sk-or-..." style="flex:1;padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" value="' + apiKey + '">'
+    + '<button class="btn btn-success" onclick="simpanAIKey()">Simpan</button></div></div></div></div>'
     + '<div id="ai-result" style="margin-top:16px"></div>';
 }
 
@@ -5206,14 +5210,10 @@ async function kirimChatAI() {
 
   var reply = '';
   var apiKey = localStorage.getItem('k_ai_apikey') || '';
-  var provider = localStorage.getItem('k_ai_provider') || 'gemini';
+  var provider = localStorage.getItem('k_ai_provider') || 'lokal';
 
-  if (apiKey) {
-    if (provider === 'openrouter') {
-      reply = await callOpenRouterChat(msg, apiKey);
-    } else {
-      reply = await callGeminiChat(msg, apiKey);
-    }
+  if (provider === 'openrouter' && apiKey) {
+    reply = await callOpenRouterChat(msg, apiKey);
   } else {
     reply = await localAIReply(msg);
   }
@@ -5403,12 +5403,17 @@ function simpanAIKey() {
   var key = (document.getElementById('ai-api-key')||{}).value || '';
   localStorage.setItem('k_ai_apikey', key);
   showAlert(key ? 'API Key disimpan!' : 'API Key dihapus');
+  navigate('ai-assistant');
 }
 
 function simpanAIProvider() {
-  var provider = (document.getElementById('ai-provider')||{}).value || 'gemini';
+  var provider = (document.getElementById('ai-provider')||{}).value || 'lokal';
   localStorage.setItem('k_ai_provider', provider);
-  showAlert('Provider diubah ke: ' + provider);
+}
+
+function pilihProviderAI(provider) {
+  localStorage.setItem('k_ai_provider', provider);
+  navigate('ai-assistant');
 }
 
 async function callGeminiChat(msg, apiKey) {
