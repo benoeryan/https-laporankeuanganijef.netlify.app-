@@ -5153,8 +5153,23 @@ async function renderAIAssistant() {
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Berapa saldo kas dan petty cash saat ini?\')">💰 Saldo Kas</button>'
     + '</div>'
     + '</div>'
-    // Info AI Assistant
-    + '<div class="card" style="margin-top:12px"><div class="card-header"><h2>ℹ️ Tentang AI Assistant</h2></div><div style="padding:4px 0;font-size:0.85rem;color:#555">AI Assistant menggunakan Google Gemini (gemini-2.0-flash) melalui server. Tidak perlu memasukkan API key — sudah dikonfigurasi di server.</div></div>'
+    // Pilih Mode AI — 2 opsi saja
+    + '<div class="card" style="margin-top:12px"><div class="card-header"><h2>⚙️ Pilih Mode AI</h2></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + '<div style="border:2px solid ' + ((localStorage.getItem('k_ai_provider')||'lokal')==='lokal'?'#4caf50':'#ddd') + ';border-radius:10px;padding:14px;cursor:pointer" onclick="pilihProviderAI(\'lokal\')">'
+    + '<div style="font-weight:700;margin-bottom:6px">💻 Mode Lokal</div>'
+    + '<div style="font-size:0.8rem;color:#555">Tanpa API. Jawab dari data lokal. Bisa eksekusi aksi dasar.</div>'
+    + '<div style="margin-top:6px;font-size:0.75rem;color:#888">✓ Gratis tanpa registrasi</div></div>'
+    + '<div style="border:2px solid ' + ((localStorage.getItem('k_ai_provider')||'')==='openrouter'?'#4caf50':'#ddd') + ';border-radius:10px;padding:14px;cursor:pointer" onclick="pilihProviderAI(\'openrouter\')">'
+    + '<div style="font-weight:700;margin-bottom:6px">🌐 OpenRouter <span class="badge badge-info" style="font-size:0.65rem">Recommended</span></div>'
+    + '<div style="font-size:0.8rem;color:#555">AI cerdas (Gemini/Claude). Jawab pertanyaan apa saja.</div>'
+    + '<div style="margin-top:6px;font-size:0.75rem;color:#888">✓ Gratis $1 credit</div></div></div>'
+    + '<div id="ai-openrouter-setup" style="margin-top:12px;display:' + ((localStorage.getItem('k_ai_provider')||'')==='openrouter'?'block':'none') + '">'
+    + '<div style="background:#f0f8ff;border-radius:8px;padding:12px;border-left:4px solid #1a237e">'
+    + '<b>Setup OpenRouter:</b> <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> → Sign up → Create Key → Paste di bawah'
+    + '<div style="display:flex;gap:8px;margin-top:8px">'
+    + '<input type="password" id="ai-api-key" placeholder="sk-or-..." style="flex:1;padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" value="' + (localStorage.getItem('k_ai_apikey')||'') + '">'
+    + '<button class="btn btn-success" onclick="simpanAIKey()">Simpan</button></div></div></div></div>'
     // Hasil analisis
     + '<div id="ai-result" style="margin-top:16px"></div>';
 }
@@ -5167,6 +5182,18 @@ function chatQuickQ(q) {
   kirimChatAI();
 }
 
+function simpanAIKey() {
+  var key = (document.getElementById('ai-api-key')||{}).value || '';
+  localStorage.setItem('k_ai_apikey', key);
+  showAlert(key ? 'API Key disimpan!' : 'API Key dihapus');
+  navigate('ai-assistant');
+}
+
+function pilihProviderAI(provider) {
+  localStorage.setItem('k_ai_provider', provider);
+  navigate('ai-assistant');
+}
+
 async function kirimChatAI() {
   var input = document.getElementById('ai-chat-input');
   var msg = (input.value||'').trim();
@@ -5174,22 +5201,23 @@ async function kirimChatAI() {
   input.value = '';
 
   var chatEl = document.getElementById('ai-chat-messages');
-  // Hapus placeholder jika ada
   if (_aiChatHistory.length === 0) chatEl.innerHTML = '';
 
-  // Tampilkan pesan user
   chatEl.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div style="background:#1a237e;color:white;padding:8px 14px;border-radius:14px 14px 2px 14px;max-width:75%;font-size:0.88rem">' + escapeHtml(msg) + '</div></div>';
   chatEl.scrollTop = chatEl.scrollHeight;
 
-  // Loading
   chatEl.innerHTML += '<div id="ai-typing" style="display:flex;margin-bottom:8px"><div style="background:#e8eaf6;padding:8px 14px;border-radius:14px 14px 14px 2px;font-size:0.85rem;color:#555">⏳ Sedang berpikir...</div></div>';
   chatEl.scrollTop = chatEl.scrollHeight;
 
   _aiChatHistory.push({ role: 'user', content: msg });
 
   var reply = '';
-  reply = await callGeminiChat(msg);
-  if (reply.startsWith('Error:')) {
+  var provider = localStorage.getItem('k_ai_provider') || 'lokal';
+  var apiKey = localStorage.getItem('k_ai_apikey') || '';
+
+  if (provider === 'openrouter' && apiKey) {
+    reply = await callOpenRouterChat(msg, apiKey);
+  } else {
     reply = await localAIReply(msg);
   }
 
@@ -5411,6 +5439,45 @@ async function callGeminiChat(msg) {
     return data.reply || 'Tidak ada respon.';
   } catch(e) {
     return 'Error: ' + e.message + '. Pastikan koneksi internet aktif.';
+  }
+}
+
+async function callOpenRouterChat(msg, apiKey) {
+  try {
+    var fd = await getFinancialData();
+    var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
+    var jurnal = await KDB.getAll('jurnal');
+    var akunList = await getAkun();
+
+    var konteks = 'Data keuangan:\n- Total jurnal: ' + jurnal.length + '\n- Saldo petty cash: Rp ' + pcSaldo.toLocaleString('id-ID') + '\n';
+    var akunPenting = Object.keys(fd.saldo).slice(0, 15).map(function(k) {
+      var s = fd.saldo[k]; return '  ' + k + ' (' + (s.akun.nama||k) + '): Rp ' + ((s.debit||0)-(s.kredit||0)).toLocaleString('id-ID');
+    }).join('\n');
+    konteks += '- Saldo akun:\n' + akunPenting + '\n';
+    var coaList = akunList.slice(0, 25).map(function(a) { return a.kode + ' - ' + a.nama; }).join('\n');
+    konteks += '\n- COA:\n' + coaList + '\n';
+
+    var systemMsg = 'Kamu adalah AI asisten keuangan perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat.\n\n'
+      + 'AKSI: Jika user minta aksi, taruh di akhir pesan:\n'
+      + '###ACTION:{"type":"jurnal","tanggal":"YYYY-MM-DD","keterangan":"...","lines":[{"akun":"kode","ket":"...","debit":0,"kredit":0}]}###\n'
+      + '###ACTION:{"type":"topup_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"..."}###\n'
+      + '###ACTION:{"type":"pengeluaran_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"...","akunBeban":"kode"}###\n\n'
+      + 'Konteks:\n' + konteks;
+
+    var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.href, 'X-Title': 'IJEF Keuangan' },
+      body: JSON.stringify({ model: 'google/gemini-2.0-flash-exp:free', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
+    });
+    if (!response.ok) {
+      var errData = await response.json().catch(function(){ return {}; });
+      return 'Error OpenRouter: ' + (errData.error ? (errData.error.message||JSON.stringify(errData.error)) : response.status);
+    }
+    var data = await response.json();
+    if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content || 'Tidak ada respon.';
+    return 'Tidak ada respon.';
+  } catch(e) {
+    return 'Error: ' + e.message;
   }
 }
 
