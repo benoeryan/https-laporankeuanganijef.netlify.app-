@@ -5128,12 +5128,6 @@ const SHEET_COLS = {
 
 // ===== AI ASSISTANT - Analisis & Deteksi Kesalahan Otomatis =====
 async function renderAIAssistant() {
-  var currentProvider = localStorage.getItem('k_ai_provider') || 'lokal';
-  var apiKey = localStorage.getItem('k_ai_apikey') || '';
-  var statusBadge = apiKey && currentProvider === 'openrouter'
-    ? '<span class="badge badge-success">✓ OpenRouter Aktif</span>'
-    : '<span class="badge badge-neutral">Mode Lokal</span>';
-
   return '<div class="page-title">🤖 AI Assistant Keuangan</div>'
     + '<div class="alert alert-info">AI Assistant membantu mendeteksi kesalahan pencatatan, selisih jurnal, dan memberikan rekomendasi perbaikan secara otomatis.</div>'
     + '<div class="stats-row">'
@@ -5142,8 +5136,9 @@ async function renderAIAssistant() {
     + '<div class="stat-box"><button class="btn btn-info" onclick="runAIPettyCashCheck()" style="width:100%">💵 Cek Petty Cash</button></div>'
     + '<div class="stat-box"><button class="btn btn-success" onclick="runAINeracaCheck()" style="width:100%">📊 Cek Neraca</button></div>'
     + '</div>'
+    // Chat / Diskusi Langsung
     + '<div class="card" style="margin-top:16px">'
-    + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2>' + statusBadge + '</div>'
+    + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2><span class="text-muted" style="font-size:0.78rem">Tanya apa saja tentang keuangan, akuntansi, atau data kamu</span></div>'
     + '<div id="ai-chat-messages" style="max-height:400px;overflow-y:auto;padding:12px;background:#f8f9ff;border-radius:8px;margin-bottom:12px;min-height:120px">'
     + '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Mulai diskusi — ketik pertanyaan di bawah</div>'
     + '</div>'
@@ -5156,27 +5151,11 @@ async function renderAIAssistant() {
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Apa saja transaksi yang perlu diperhatikan bulan ini?\')">⚠️ Transaksi Perhatian</button>'
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Jelaskan cara membuat jurnal penyesuaian\')">📝 Cara Jurnal</button>'
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Berapa saldo kas dan petty cash saat ini?\')">💰 Saldo Kas</button>'
-    + '</div></div>'
-    + '<div class="card" style="margin-top:12px"><div class="card-header"><h2>⚙️ Pilih Mode AI</h2></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-    + '<div style="border:2px solid ' + (currentProvider==='lokal'?'#4caf50':'#ddd') + ';border-radius:10px;padding:14px;cursor:pointer" onclick="pilihProviderAI(\'lokal\')">'
-    + '<div style="font-weight:700;font-size:0.95rem;margin-bottom:6px">💻 Mode Lokal</div>'
-    + '<div style="font-size:0.8rem;color:#555;line-height:1.5">Tanpa API. Jawab dari data lokal. Bisa eksekusi aksi dasar.</div>'
-    + '<div style="margin-top:6px;font-size:0.75rem;color:#888">✓ Gratis tanpa registrasi</div></div>'
-    + '<div style="border:2px solid ' + (currentProvider==='openrouter'?'#4caf50':'#ddd') + ';border-radius:10px;padding:14px;cursor:pointer" onclick="pilihProviderAI(\'openrouter\')">'
-    + '<div style="font-weight:700;font-size:0.95rem;margin-bottom:6px">🌐 OpenRouter <span class="badge badge-info" style="font-size:0.65rem">Recommended</span></div>'
-    + '<div style="font-size:0.8rem;color:#555;line-height:1.5">AI cerdas. Jawab apa saja dengan konteks data kamu.</div>'
-    + '<div style="margin-top:6px;font-size:0.75rem;color:#888">✓ Gratis $1 credit</div></div></div>'
-    + '<div id="ai-openrouter-setup" style="margin-top:12px;display:' + (currentProvider==='openrouter'?'block':'none') + '">'
-    + '<div style="background:#f0f8ff;border-radius:8px;padding:12px;border-left:4px solid #1a237e">'
-    + '<div style="font-weight:600;margin-bottom:8px">Setup OpenRouter:</div>'
-    + '<ol style="font-size:0.82rem;padding-left:18px;line-height:2;margin:0">'
-    + '<li>Buka <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a></li>'
-    + '<li>Sign up (Google account) → Create Key</li>'
-    + '<li>Paste key di bawah → Simpan</li></ol>'
-    + '<div style="display:flex;gap:8px;margin-top:10px">'
-    + '<input type="password" id="ai-api-key" placeholder="sk-or-..." style="flex:1;padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" value="' + apiKey + '">'
-    + '<button class="btn btn-success" onclick="simpanAIKey()">Simpan</button></div></div></div></div>'
+    + '</div>'
+    + '</div>'
+    // Info AI Assistant
+    + '<div class="card" style="margin-top:12px"><div class="card-header"><h2>ℹ️ Tentang AI Assistant</h2></div><div style="padding:4px 0;font-size:0.85rem;color:#555">AI Assistant menggunakan Google Gemini (gemini-2.0-flash) melalui server. Tidak perlu memasukkan API key — sudah dikonfigurasi di server.</div></div>'
+    // Hasil analisis
     + '<div id="ai-result" style="margin-top:16px"></div>';
 }
 
@@ -5209,12 +5188,8 @@ async function kirimChatAI() {
   _aiChatHistory.push({ role: 'user', content: msg });
 
   var reply = '';
-  var apiKey = localStorage.getItem('k_ai_apikey') || '';
-  var provider = localStorage.getItem('k_ai_provider') || 'lokal';
-
-  if (provider === 'openrouter' && apiKey) {
-    reply = await callOpenRouterChat(msg, apiKey);
-  } else {
+  reply = await callGeminiChat(msg);
+  if (reply.startsWith('Error:')) {
     reply = await localAIReply(msg);
   }
 
@@ -5399,24 +5374,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function simpanAIKey() {
-  var key = (document.getElementById('ai-api-key')||{}).value || '';
-  localStorage.setItem('k_ai_apikey', key);
-  showAlert(key ? 'API Key disimpan!' : 'API Key dihapus');
-  navigate('ai-assistant');
-}
-
-function simpanAIProvider() {
-  var provider = (document.getElementById('ai-provider')||{}).value || 'lokal';
-  localStorage.setItem('k_ai_provider', provider);
-}
-
-function pilihProviderAI(provider) {
-  localStorage.setItem('k_ai_provider', provider);
-  navigate('ai-assistant');
-}
-
-async function callGeminiChat(msg, apiKey) {
+async function callGeminiChat(msg) {
   try {
     // Kumpulkan konteks keuangan ringkas
     var fd = await getFinancialData();
@@ -5440,134 +5398,19 @@ async function callGeminiChat(msg, apiKey) {
     var coaList = akunList.slice(0, 30).map(function(a) { return a.kode + ' - ' + a.nama + ' (' + a.kategori + ')'; }).join('\n');
     konteks += '\n- Daftar Akun COA:\n' + coaList + '\n';
 
-    var systemPrompt = 'Kamu adalah AI asisten keuangan untuk perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas.\n\n'
-      + 'KEMAMPUAN AKSI: Kamu bisa membantu user melakukan aksi berikut. Jika user meminta aksi, respond dengan format JSON khusus di akhir pesan (setelah penjelasan):\n\n'
-      + 'Format aksi (taruh di baris terakhir):\n'
-      + '###ACTION:{"type":"jurnal","tanggal":"YYYY-MM-DD","keterangan":"...","lines":[{"akun":"kode","ket":"...","debit":number,"kredit":number}]}###\n'
-      + '###ACTION:{"type":"topup_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"..."}###\n'
-      + '###ACTION:{"type":"pengeluaran_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"...","akunBeban":"kode"}###\n'
-      + '###ACTION:{"type":"hapus_jurnal","id":"jurnal_id","alasan":"..."}###\n\n'
-      + 'PENTING: Selalu berikan penjelasan dulu baru action JSON. User akan konfirmasi sebelum eksekusi.\n'
-      + 'Jika user hanya bertanya (bukan minta aksi), jawab biasa tanpa ACTION.\n\n'
-      + 'Berikut konteks data:\n\n' + konteks;
-
-    var messages = [
-      { role: 'user', parts: [{ text: systemPrompt + '\n\nPertanyaan/perintah user: ' + msg }] }
-    ];
-
-    // Coba model gemini-2.0-flash dulu, fallback ke gemini-1.5-flash jika blocked
-    var models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
-    var response = null;
-    var lastError = '';
-
-    for (var mi = 0; mi < models.length; mi++) {
-      try {
-        response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[mi] + ':generateContent?key=' + apiKey, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: messages })
-        });
-        if (response.ok) break;
-        var errBody = await response.json().catch(function(){ return {}; });
-        lastError = errBody.error ? errBody.error.message : ('HTTP ' + response.status);
-        if (response.status === 400 || response.status === 404) continue; // model not available, try next
-        if (response.status === 403) continue; // blocked, try next
-        if (response.status === 429) continue; // quota exceeded, try next model
-        break; // other errors, stop
-      } catch(fetchErr) {
-        lastError = fetchErr.message;
-        continue;
-      }
-    }
-
-    if (!response || !response.ok) {
-      // Fallback: coba OpenRouter free tier jika Gemini gagal semua
-      try {
-        var orResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-          body: JSON.stringify({
-            model: 'google/gemini-2.0-flash-exp:free',
-            messages: [{ role: 'user', content: systemPrompt + '\n\nPertanyaan/perintah user: ' + msg }]
-          })
-        });
-        if (orResponse.ok) {
-          var orData = await orResponse.json();
-          if (orData.choices && orData.choices[0]) {
-            return orData.choices[0].message.content || 'Tidak ada respon.';
-          }
-        }
-      } catch(orErr) { /* ignore */ }
-
-      return 'Error API: ' + lastError + '\n\nKemungkinan quota habis atau region diblokir. Opsi:\n1. Setup billing di Google AI Studio (tetap gratis)\n2. Tunggu beberapa jam lalu coba lagi\n3. Chat tanpa API key (fitur lokal tetap jalan)';
-    }
-
-    var data = await response.json();
-    var text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : 'Tidak ada respon.';
-    return text;
-  } catch(e) {
-    return 'Error: ' + e.message + '. Pastikan koneksi internet aktif dan API key valid.';
-  }
-}
-
-async function callOpenRouterChat(msg, apiKey) {
-  try {
-    var fd = await getFinancialData();
-    var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
-    var jurnal = await KDB.getAll('jurnal');
-    var akunList = await getAkun();
-
-    var konteks = 'Data keuangan perusahaan saat ini:\n'
-      + '- Total jurnal: ' + jurnal.length + '\n'
-      + '- Saldo petty cash (setting): Rp ' + pcSaldo.toLocaleString('id-ID') + '\n';
-
-    var akunPenting = Object.keys(fd.saldo).slice(0, 15).map(function(k) {
-      var s = fd.saldo[k];
-      var net = (s.debit||0) - (s.kredit||0);
-      return '  ' + k + ' (' + (s.akun.nama||k) + '): Rp ' + net.toLocaleString('id-ID');
-    }).join('\n');
-    konteks += '- Saldo akun:\n' + akunPenting + '\n';
-
-    var coaList = akunList.slice(0, 30).map(function(a) { return a.kode + ' - ' + a.nama + ' (' + a.kategori + ')'; }).join('\n');
-    konteks += '\n- Daftar Akun COA:\n' + coaList + '\n';
-
-    var systemMsg = 'Kamu adalah AI asisten keuangan untuk perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas.\n\n'
-      + 'KEMAMPUAN AKSI: Jika user meminta aksi, respond dengan format JSON di akhir pesan:\n'
-      + '###ACTION:{"type":"jurnal","tanggal":"YYYY-MM-DD","keterangan":"...","lines":[{"akun":"kode","ket":"...","debit":number,"kredit":number}]}###\n'
-      + '###ACTION:{"type":"topup_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"..."}###\n'
-      + '###ACTION:{"type":"pengeluaran_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"...","akunBeban":"kode"}###\n\n'
-      + 'PENTING: Selalu berikan penjelasan dulu baru action JSON. Jika hanya tanya, jawab biasa tanpa ACTION.\n\n'
-      + 'Konteks data:\n' + konteks;
-
-    var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    var response = await fetch('/.netlify/functions/gemini', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + apiKey,
-        'HTTP-Referer': window.location.href,
-        'X-Title': 'IJEF Corp Keuangan'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
-        messages: [
-          { role: 'system', content: systemMsg },
-          { role: 'user', content: msg }
-        ]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, context: konteks })
     });
 
-    if (!response.ok) {
-      var errData = await response.json().catch(function(){ return {}; });
-      return 'Error OpenRouter: ' + (errData.error ? (errData.error.message||JSON.stringify(errData.error)) : response.status);
-    }
-
     var data = await response.json();
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      return data.choices[0].message.content || 'Tidak ada respon.';
+    if (!response.ok) {
+      return 'Error: ' + (data.error || 'Server error');
     }
-    return 'Tidak ada respon dari OpenRouter.';
+    return data.reply || 'Tidak ada respon.';
   } catch(e) {
-    return 'Error: ' + e.message;
+    return 'Error: ' + e.message + '. Pastikan koneksi internet aktif.';
   }
 }
 
@@ -5706,7 +5549,7 @@ async function localAIReply(msg) {
     + '• Aksi: "Buatkan jurnal beban listrik 500000"\n'
     + '• Aksi: "Topup petty cash 1000000"\n'
     + '• Aksi: "Catat pengeluaran petty cash 50000 beli ATK"\n\n'
-    + 'Untuk fitur chat AI yang lebih cerdas, masukkan API key Gemini (gratis) di pengaturan.';
+    + 'Untuk fitur chat AI yang lebih cerdas, gunakan pertanyaan spesifik tentang data keuangan Anda.';
 }
 
 async function runAIAnalysis() {
