@@ -5467,7 +5467,7 @@ async function callOpenRouterChat(msg, apiKey) {
     var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.href, 'X-Title': 'IJEF Keuangan' },
-      body: JSON.stringify({ model: 'google/gemini-2.0-flash-exp:free', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
+      body: JSON.stringify({ model: 'google/gemini-2.0-flash-001', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
     });
     if (!response.ok) {
       var errData = await response.json().catch(function(){ return {}; });
