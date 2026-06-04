@@ -5152,6 +5152,12 @@ async function renderAIAssistant() {
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Jelaskan cara membuat jurnal penyesuaian\')">📝 Cara Jurnal</button>'
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Berapa saldo kas dan petty cash saat ini?\')">💰 Saldo Kas</button>'
     + '</div>'
+    + '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">'
+    + '<span style="font-size:0.75rem;color:#888;align-self:center">Aksi cepat:</span>'
+    + '<button class="btn btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1px solid #4caf50" onclick="chatQuickQ(\'Topup petty cash 500000\')">➕ Top-up PC</button>'
+    + '<button class="btn btn-sm" style="background:#fff3e0;color:#e65100;border:1px solid #ff9800" onclick="chatQuickQ(\'Catat pengeluaran petty cash 50000 beli ATK\')">➖ Pengeluaran PC</button>'
+    + '<button class="btn btn-sm" style="background:#e3f2fd;color:#1565c0;border:1px solid #1976d2" onclick="chatQuickQ(\'Buatkan jurnal beban operasional 100000\')">📓 Buat Jurnal</button>'
+    + '</div>'
     + '</div>'
     // Pilih Mode AI — 2 opsi saja
     + '<div class="card" style="margin-top:12px"><div class="card-header"><h2>⚙️ Pilih Mode AI</h2></div>'
