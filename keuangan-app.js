@@ -473,6 +473,8 @@ async function renderSection(id) {
     el.innerHTML = '<div class="alert alert-danger">Error: ' + e.message + '</div>';
   }
   showLoading(false);
+  // Auto-reapply filter jurnal jika kembali ke halaman jurnal
+  if (id === 'jurnal-umum') { setTimeout(reapplyJurnalFilter, 100); }
 }
 
 function loadSavedApiKey() {
@@ -1715,7 +1717,8 @@ async function hapusJurnal(id) {
   await KDB.getAll('jurnal');
   showAlert('Jurnal dihapus.', 'warning');
   navigate('jurnal-umum');
-  setTimeout(reapplyJurnalFilter, 200);
+  setTimeout(reapplyJurnalFilter, 500);
+  setTimeout(reapplyJurnalFilter, 1000);
 }
 
 async function hapusDuplikatJurnal(dupId, origId) {
@@ -1869,7 +1872,8 @@ async function simpanEditJurnal(id) {
   closeModalDirect();
   showAlert('Jurnal berhasil diperbarui!');
   navigate('jurnal-umum');
-  setTimeout(reapplyJurnalFilter, 200);
+  setTimeout(reapplyJurnalFilter, 500);
+  setTimeout(reapplyJurnalFilter, 1000);
 }
 
 async function lihatJurnal(id) {
