@@ -6021,7 +6021,10 @@ async function runAIAnalysis() {
     var duplicates = [];
     allJurnal.forEach(function(j) {
       if (j.tipe === 'penutup') return;
-      if (!j.noRef) return; // skip journals without ref - they're manual entries that may legitimately have same amount
+      if (!j.noRef) return;
+      // Hanya deteksi duplikat jika TANGGAL SAMA + NOMINAL SAMA + REF SAMA + KETERANGAN SAMA
+      // Dan nominal minimal Rp 10.000 (exclude recurring charges kecil seperti biaya admin/bunga)
+      if ((j.totalDebit||0) < 10000) return;
       var key = (j.tanggal||'') + '_' + (j.totalDebit||0).toFixed(0) + '_' + (j.noRef||'') + '_' + (j.keterangan||'').substring(0,50);
       if (refMap[key]) {
         duplicates.push({ id1: refMap[key].id, id2: j.id, ref: j.noRef, jumlah: j.totalDebit, tanggal: j.tanggal, ket: j.keterangan });
