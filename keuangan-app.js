@@ -1811,6 +1811,36 @@ function abaikanOutlier(key) {
   runAIAnalysis();
 }
 
+async function reviewOutlierDetail(jurnalId) {
+  var jurnal = await KDB.getAll('jurnal');
+  var j = jurnal.find(function(x) { return x.id === jurnalId; });
+  if (!j) { showAlert('Jurnal tidak ditemukan', 'warning'); return; }
+
+  var linesHtml = (j.lines||[]).map(function(l) {
+    return '<tr><td>' + (l.akun||'-') + '</td><td>' + (l.ket||'-') + '</td><td class="text-green">' + fmtRp(l.debit||0) + '</td><td class="text-red">' + fmtRp(l.kredit||0) + '</td></tr>';
+  }).join('');
+
+  var html = '<div style="font-size:0.85rem;line-height:1.9;margin-bottom:12px">'
+    + '<b>ID:</b> ' + j.id + '<br>'
+    + '<b>Tanggal:</b> ' + fmtDate(j.tanggal) + '<br>'
+    + '<b>No. Ref:</b> ' + (j.noRef||'-') + '<br>'
+    + '<b>Keterangan:</b> ' + (j.keterangan||'-') + '<br>'
+    + '<b>Sumber:</b> ' + (j.sumber||'manual') + '<br>'
+    + '<b>Dibuat:</b> ' + (j.createdAt ? new Date(j.createdAt).toLocaleString('id-ID') : '-') + '<br>'
+    + '<b>Oleh:</b> ' + (j.createdBy||'-') + '<br>'
+    + '<b>Total Debit:</b> <span class="text-green fw-bold">' + fmtRp(j.totalDebit||0) + '</span> | <b>Total Kredit:</b> <span class="text-red fw-bold">' + fmtRp(j.totalKredit||0) + '</span>'
+    + '</div>'
+    + '<table style="width:100%;font-size:0.82rem"><thead><tr style="background:#1a237e;color:white"><th>Akun</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>' + linesHtml + '</tbody></table>'
+    + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'
+    + '<button class="btn btn-success" onclick="abaikanOutlier(\'' + (j.tanggal||'') + '_' + (j.noRef||j.id) + '_' + (j.totalDebit||0) + '\');closeModalDirect()">✅ Sudah Benar</button>'
+    + '<button class="btn btn-warning" onclick="editJurnal(\'' + j.id + '\');closeModalDirect()">✏️ Edit Jurnal</button>'
+    + '<button class="btn btn-danger" onclick="hapusJurnal(\'' + j.id + '\');closeModalDirect()">🗑️ Hapus</button>'
+    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
+    + '</div>';
+
+  openModal(html, '👁️ Review Transaksi Outlier');
+}
+
 function abaikanSemuaOutlier() {
   if (!confirm('Tandai semua outlier sebagai "Sudah Benar"? Tidak akan muncul lagi di analisis.')) return;
   var excluded = JSON.parse(localStorage.getItem('k_outlier_excluded') || '[]');
@@ -6399,8 +6429,8 @@ async function runAIAnalysis() {
       // Skip jurnal penutup — nominalnya memang besar (total pendapatan/beban) dan bukan anomali
       if (j.tipe === 'penutup') return;
       (j.lines||[]).forEach(function(l) {
-        if ((l.debit||0) > 0) allAmounts.push({ val: l.debit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'debit' });
-        if ((l.kredit||0) > 0) allAmounts.push({ val: l.kredit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'kredit' });
+        if ((l.debit||0) > 0) allAmounts.push({ val: l.debit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'debit', jurnalId: j.id });
+        if ((l.kredit||0) > 0) allAmounts.push({ val: l.kredit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'kredit', jurnalId: j.id });
       });
     });
     var outliers = [];
@@ -6426,7 +6456,7 @@ async function runAIAnalysis() {
       }
     }
     if (outliers.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button> <button class="btn btn-success btn-sm" onclick="abaikanSemuaOutlier()">✅ Abaikan Semua</button>', detail: outliers.map(function(o) { var oKey = (o.tanggal||'') + '_' + (o.ref||'') + '_' + o.val; return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td><td><button class="btn btn-xs btn-success" onclick="abaikanOutlier(\'' + oKey.replace(/'/g,'') + '\')">✅ Sudah Benar</button></td></tr>'; }).join('') + '<tr><td colspan="6" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th><th>Aksi</th>', group: 'anomali' });
+      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button> <button class="btn btn-success btn-sm" onclick="abaikanSemuaOutlier()">✅ Abaikan Semua</button>', detail: outliers.map(function(o) { var oKey = (o.tanggal||'') + '_' + (o.ref||'') + '_' + o.val; return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="reviewOutlierDetail(\'' + o.jurnalId + '\')">👁️ Review</button> <button class="btn btn-xs btn-success" onclick="abaikanOutlier(\'' + oKey.replace(/'/g,'') + '\')">✅ Benar</button></td></tr>'; }).join('') + '<tr><td colspan="6" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th><th>Aksi</th>', group: 'anomali' });
     } else {
       info.push('✅ Tidak ditemukan transaksi outlier (nominal tidak lazim)');
     }
