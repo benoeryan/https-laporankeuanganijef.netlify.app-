@@ -1751,6 +1751,43 @@ function tampilkanSemuaDuplikat() {
   if (showAllRow) showAllRow.style.display = 'none';
 }
 
+async function tampilkanPasanganDuplikat(id1, id2) {
+  var jurnal = await KDB.getAll('jurnal');
+  var j1 = jurnal.find(function(x){ return x.id === id1; });
+  var j2 = jurnal.find(function(x){ return x.id === id2; });
+  if (!j1 || !j2) { showAlert('Data jurnal tidak ditemukan', 'warning'); return; }
+
+  function renderJurnalDetail(j, label, color) {
+    var linesHtml = (j.lines||[]).map(function(l) {
+      return '<tr><td>' + (l.akun||'-') + '</td><td>' + (l.ket||'-') + '</td><td class="text-green">' + fmtRp(l.debit||0) + '</td><td class="text-red">' + fmtRp(l.kredit||0) + '</td></tr>';
+    }).join('');
+    return '<div style="border:2px solid ' + color + ';border-radius:8px;padding:12px;flex:1;min-width:280px">'
+      + '<div style="font-weight:700;color:' + color + ';margin-bottom:8px">' + label + '</div>'
+      + '<div style="font-size:0.82rem;line-height:1.8">'
+      + '<b>ID:</b> ' + j.id + '<br>'
+      + '<b>Tanggal:</b> ' + fmtDate(j.tanggal) + '<br>'
+      + '<b>No. Ref:</b> ' + (j.noRef||'-') + '<br>'
+      + '<b>Keterangan:</b> ' + (j.keterangan||'-') + '<br>'
+      + '<b>Sumber:</b> ' + (j.sumber||'-') + '<br>'
+      + '<b>Dibuat:</b> ' + (j.createdAt ? new Date(j.createdAt).toLocaleString('id-ID') : '-') + '<br>'
+      + '<b>Oleh:</b> ' + (j.createdBy||'-') + '</div>'
+      + '<table style="width:100%;font-size:0.8rem;margin-top:8px"><thead><tr style="background:#eee"><th>Akun</th><th>Ket</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>' + linesHtml + '</tbody></table>'
+      + '</div>';
+  }
+
+  var html = '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+    + renderJurnalDetail(j1, '📄 Data Asli (Dipertahankan)', '#2e7d32')
+    + renderJurnalDetail(j2, '📋 Duplikat (Akan Dihapus)', '#c62828')
+    + '</div>'
+    + '<div style="margin-top:16px;padding:12px;background:#fff3e0;border-radius:8px;text-align:center">'
+    + '<p style="margin-bottom:10px;font-size:0.88rem"><b>Apakah data kedua ini memang duplikat?</b></p>'
+    + '<button class="btn btn-danger" onclick="hapusDuplikatJurnal(\'' + id2 + '\',\'' + id1 + '\');closeModalDirect()">🗑️ Ya, Hapus Duplikat</button>'
+    + ' <button class="btn btn-outline" onclick="closeModalDirect()">Bukan Duplikat, Batal</button>'
+    + '</div>';
+
+  openModal(html, '👁️ Bandingkan Data Duplikat');
+}
+
 function togglePilihSemuaDuplikat(checked) {
   document.querySelectorAll('.dup-chk').forEach(function(chk) {
     if (chk.closest('tr').style.display !== 'none') chk.checked = checked;
@@ -6068,8 +6105,8 @@ async function runAIAnalysis() {
     });
     if (duplicates.length > 0) {
       window._aiDuplicates = duplicates;
-      var dupRows = duplicates.slice(0, 10).map(function(d) { return '<tr><td><input type="checkbox" class="dup-chk" value="' + d.id2 + '" onchange="updateDupSelection()"></td><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')">Hapus Duplikat</button></td></tr>'; }).join('');
-      var hiddenRows = duplicates.length > 10 ? duplicates.slice(10).map(function(d) { return '<tr class="dup-hidden-row" style="display:none"><td><input type="checkbox" class="dup-chk" value="' + d.id2 + '" onchange="updateDupSelection()"></td><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id1 + '\')">Lihat Asli</button> <button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + d.id2 + '\')">Review Duplikat</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')">Hapus Duplikat</button></td></tr>'; }).join('') : '';
+      var dupRows = duplicates.slice(0, 10).map(function(d) { return '<tr style="background:#fff8e1"><td><input type="checkbox" class="dup-chk" value="' + d.id2 + '" onchange="updateDupSelection()"></td><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="tampilkanPasanganDuplikat(\'' + d.id1 + '\',\'' + d.id2 + '\')">👁️ Bandingkan</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')">Hapus Duplikat</button></td></tr>'; }).join('');
+      var hiddenRows = duplicates.length > 10 ? duplicates.slice(10).map(function(d) { return '<tr class="dup-hidden-row" style="display:none;background:#fff8e1"><td><input type="checkbox" class="dup-chk" value="' + d.id2 + '" onchange="updateDupSelection()"></td><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="tampilkanPasanganDuplikat(\'' + d.id1 + '\',\'' + d.id2 + '\')">👁️ Bandingkan</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')">Hapus Duplikat</button></td></tr>'; }).join('') : '';
       var showAllBtn = duplicates.length > 10 ? '<tr id="dup-show-all-row"><td colspan="6" style="text-align:center;padding:8px"><button class="btn btn-sm btn-outline" onclick="tampilkanSemuaDuplikat()">📋 Tampilkan Semua (' + duplicates.length + ' data duplikat)</button></td></tr>' : '';
 
       warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', 
