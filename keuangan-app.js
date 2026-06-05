@@ -1835,6 +1835,70 @@ async function hapusJurnalTerpilih() {
   setTimeout(reapplyJurnalFilter, 500);
 }
 
+// === Checkbox untuk PC Anomali di Analisis ===
+function togglePilihSemuaPCAnomali(checked) {
+  document.querySelectorAll('.pc-anomali-chk').forEach(function(chk) { chk.checked = checked; });
+  updatePCAnomaliSelection();
+}
+
+function updatePCAnomaliSelection() {
+  var checked = document.querySelectorAll('.pc-anomali-chk:checked');
+  var count = checked.length;
+  var btnHapus = document.getElementById('btn-hapus-pc-sel');
+  var btnJurnal = document.getElementById('btn-jurnal-pc-sel');
+  var countEl = document.getElementById('pc-sel-count');
+  if (btnHapus) btnHapus.style.display = count > 0 ? 'inline-block' : 'none';
+  if (btnJurnal) btnJurnal.style.display = count > 0 ? 'inline-block' : 'none';
+  if (countEl) countEl.textContent = count > 0 ? count + ' dipilih' : '';
+}
+
+async function hapusPCTerpilih() {
+  var checked = document.querySelectorAll('.pc-anomali-chk:checked');
+  var ids = [];
+  checked.forEach(function(chk) { ids.push(chk.value); });
+  if (ids.length === 0) { showAlert('Tidak ada yang dipilih', 'warning'); return; }
+  if (!confirm('Hapus ' + ids.length + ' transaksi petty cash yang dipilih?\n\nTindakan ini TIDAK BISA DIBATALKAN!')) return;
+  showLoading(true);
+  for (var i = 0; i < ids.length; i++) {
+    await KDB.delete('pettycash', ids[i]);
+  }
+  showLoading(false);
+  showAlert(ids.length + ' transaksi petty cash dihapus!', 'warning');
+  runAIAnalysis();
+}
+
+async function batchBuatJurnalPCTerpilih() {
+  var checked = document.querySelectorAll('.pc-anomali-chk:checked');
+  var ids = [];
+  checked.forEach(function(chk) { ids.push(chk.value); });
+  if (ids.length === 0) { showAlert('Tidak ada yang dipilih', 'warning'); return; }
+  if (!confirm('Buat jurnal untuk ' + ids.length + ' transaksi petty cash yang dipilih?')) return;
+  showLoading(true);
+  var akunPC = await getAkunPettyCash();
+  var akunBank = await getAkunKasBank();
+  var pcList = await KDB.getAll('pettycash');
+  var count = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var pc = pcList.find(function(x) { return x.id === ids[i]; });
+    if (!pc || pc.jurnalId) continue;
+    var jumlah = Math.abs(parseFloat(pc.jumlah)||0);
+    if (jumlah <= 0) continue;
+    var jId = genId('JU');
+    var lines;
+    if (pc.tipe === 'masuk') {
+      lines = [{ akun: akunPC, ket: pc.keterangan||'Top-up', debit: jumlah, kredit: 0 }, { akun: akunBank, ket: 'Transfer', debit: 0, kredit: jumlah }];
+    } else {
+      lines = [{ akun: pc.akunDebit||'5-2200', ket: pc.keterangan||'Pengeluaran', debit: jumlah, kredit: 0 }, { akun: akunPC, ket: 'Kas kecil keluar', debit: 0, kredit: jumlah }];
+    }
+    await KDB.save('jurnal', jId, { id: jId, tanggal: pc.tanggal||today(), keterangan: pc.keterangan||'Pengeluaran PC', noRef: pc.noRef||pc.id, tipe: 'umum', sumber: 'petty-cash', lines: lines, totalDebit: jumlah, totalKredit: jumlah, createdBy: KU.username, createdAt: new Date().toISOString() });
+    await KDB.save('pettycash', pc.id, Object.assign({}, pc, { jurnalId: jId }));
+    count++;
+  }
+  showLoading(false);
+  showAlert(count + ' jurnal berhasil dibuat dari petty cash terpilih!');
+  runAIAnalysis();
+}
+
 async function editJurnal(id) {
   var jurnal = await KDB.getAll('jurnal');
   var j = jurnal.find(function(x){ return x.id === id; });
@@ -5914,11 +5978,16 @@ async function runAIAnalysis() {
     if (pcNoJurnal.length > 0) {
       var pcTotal = pcNoJurnal.reduce(function(s,p){ return s + Math.abs(parseFloat(p.jumlah)||0); }, 0);
       warnings.push({ severity: 'warning', title: '⚠️ Petty Cash Belum Terintegrasi Jurnal (' + pcNoJurnal.length + ' transaksi, total ' + fmtRp(pcTotal) + ')', detail: '<p style="margin-bottom:8px">Transaksi petty cash lama yang diinput sebelum fitur integrasi jurnal otomatis. Klik tombol di bawah untuk membuat jurnal secara batch.</p>'
-        + '<button class="btn btn-success btn-sm" onclick="batchBuatJurnalPC()" style="margin-bottom:10px">🔄 Buat Jurnal Semua (' + pcNoJurnal.length + ' transaksi)</button>'
-        + '<button class="btn btn-info btn-sm" onclick="navigate(\'kalk-pettycash\')" style="margin-left:8px;margin-bottom:10px">💵 Buka Petty Cash</button>'
-        + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jumlah</th><th>Ref</th><th>Aksi</th></tr></thead><tbody>'
-        + pcNoJurnal.slice(0,20).map(function(p) { return '<tr><td>' + fmtDate(p.tanggal) + '</td><td>' + (p.keterangan||'-') + '</td><td>' + fmtRp(Math.abs(parseFloat(p.jumlah)||0)) + '</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.noRef||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatPettyCashDetail(\'' + p.id + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editPettyCash(\'' + p.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusPettyCash(\'' + p.id + '\')">Hapus</button> <button class="btn btn-xs btn-success" onclick="buatJurnalDariPC(\'' + p.id + '\')">Buat Jurnal</button></td></tr>'; }).join('')
-        + (pcNoJurnal.length > 20 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (pcNoJurnal.length - 20) + ' transaksi lainnya</td></tr>' : '')
+        + '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">'
+        + '<button class="btn btn-success btn-sm" onclick="batchBuatJurnalPC()">🔄 Buat Jurnal Semua (' + pcNoJurnal.length + ')</button>'
+        + '<button class="btn btn-info btn-sm" onclick="navigate(\'kalk-pettycash\')">💵 Buka Petty Cash</button>'
+        + '<button class="btn btn-danger btn-sm" onclick="hapusPCTerpilih()" id="btn-hapus-pc-sel" style="display:none">🗑️ Hapus Terpilih</button>'
+        + '<button class="btn btn-warning btn-sm" onclick="batchBuatJurnalPCTerpilih()" id="btn-jurnal-pc-sel" style="display:none">📓 Buat Jurnal Terpilih</button>'
+        + '<span id="pc-sel-count" style="font-size:0.82rem;color:#555;align-self:center"></span>'
+        + '</div>'
+        + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem" id="tbl-pc-anomali"><thead><tr><th style="width:28px"><input type="checkbox" onchange="togglePilihSemuaPCAnomali(this.checked)"></th><th>Tanggal</th><th>Keterangan</th><th>Jumlah</th><th>Ref</th><th>Aksi</th></tr></thead><tbody>'
+        + pcNoJurnal.slice(0,30).map(function(p) { return '<tr><td><input type="checkbox" class="pc-anomali-chk" value="' + p.id + '" onchange="updatePCAnomaliSelection()"></td><td>' + fmtDate(p.tanggal) + '</td><td>' + (p.keterangan||'-') + '</td><td>' + fmtRp(Math.abs(parseFloat(p.jumlah)||0)) + '</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.noRef||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatPettyCashDetail(\'' + p.id + '\')">Review</button> <button class="btn btn-xs btn-warning" onclick="editPettyCash(\'' + p.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusPettyCash(\'' + p.id + '\')">Hapus</button> <button class="btn btn-xs btn-success" onclick="buatJurnalDariPC(\'' + p.id + '\')">Buat Jurnal</button></td></tr>'; }).join('')
+        + (pcNoJurnal.length > 30 ? '<tr><td colspan="6" style="text-align:center;color:#888">... dan ' + (pcNoJurnal.length - 30) + ' transaksi lainnya</td></tr>' : '')
         + '</tbody></table></div>', isTable: false, group: 'anomali' });
     } else {
       info.push('✅ Semua petty cash terintegrasi dengan jurnal');
