@@ -1715,6 +1715,7 @@ async function hapusJurnal(id) {
   await KDB.getAll('jurnal');
   showAlert('Jurnal dihapus.', 'warning');
   navigate('jurnal-umum');
+  setTimeout(reapplyJurnalFilter, 200);
 }
 
 async function hapusDuplikatJurnal(dupId, origId) {
@@ -1868,6 +1869,7 @@ async function simpanEditJurnal(id) {
   closeModalDirect();
   showAlert('Jurnal berhasil diperbarui!');
   navigate('jurnal-umum');
+  setTimeout(reapplyJurnalFilter, 200);
 }
 
 async function lihatJurnal(id) {
@@ -8178,12 +8180,15 @@ function applyJurnalFilter() {
   var sumber = (document.getElementById('jurnal-filter-sumber')||{}).value||'';
   var tglDari = (document.getElementById('jurnal-filter-tgl-dari')||{}).value||'';
   var tglSampai = (document.getElementById('jurnal-filter-tgl-sampai')||{}).value||'';
+
+  // Simpan state filter ke localStorage
+  localStorage.setItem('k_jurnal_filter', JSON.stringify({ q:q, akun:akunFilter, month:month, sumber:sumber, tglDari:tglDari, tglSampai:tglSampai }));
+
   document.querySelectorAll('#tbl-jurnal tbody tr').forEach(function(r) {
     var text = r.textContent.toLowerCase();
     var dateStr = r.dataset ? r.dataset.tanggal : '';
     var rowAkun = r.dataset ? (r.dataset.akun||'') : '';
     var rowSumber = r.dataset ? (r.dataset.sumber||'') : '';
-    // Parse date from cell text if no dataset
     if (!dateStr) {
       var tglCell = r.cells[0] ? r.cells[0].textContent.trim() : '';
       var parsed = parseFlexDate(tglCell);
@@ -8203,9 +8208,27 @@ function applyJurnalFilter() {
   });
 }
 
+function reapplyJurnalFilter() {
+  try {
+    var saved = JSON.parse(localStorage.getItem('k_jurnal_filter') || '{}');
+    if (!saved.q && !saved.akun && !saved.month && !saved.sumber && !saved.tglDari && !saved.tglSampai) return;
+    // Restore input values
+    var el;
+    if (saved.q) { el = document.getElementById('jurnal-search-q'); if (el) el.value = saved.q; }
+    if (saved.akun) { el = document.getElementById('jurnal-filter-akun'); if (el) el.value = saved.akun; }
+    if (saved.month) { el = document.getElementById('jurnal-filter-month'); if (el) el.value = saved.month; }
+    if (saved.sumber) { el = document.getElementById('jurnal-filter-sumber'); if (el) el.value = saved.sumber; }
+    if (saved.tglDari) { el = document.getElementById('jurnal-filter-tgl-dari'); if (el) el.value = saved.tglDari; }
+    if (saved.tglSampai) { el = document.getElementById('jurnal-filter-tgl-sampai'); if (el) el.value = saved.tglSampai; }
+    // Re-apply filter
+    applyJurnalFilter();
+  } catch(e) {}
+}
+
 function resetJurnalFilter() {
   var ids = ['jurnal-search-q','jurnal-filter-akun','jurnal-filter-month','jurnal-filter-sumber','jurnal-filter-tgl-dari','jurnal-filter-tgl-sampai'];
   ids.forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
+  localStorage.removeItem('k_jurnal_filter');
   document.querySelectorAll('#tbl-jurnal tbody tr').forEach(function(r){ r.style.display = ''; });
 }
 
