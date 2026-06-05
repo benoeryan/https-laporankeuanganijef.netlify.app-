@@ -1803,6 +1803,26 @@ async function tandaiBukanDuplikat(id1, id2) {
   runAIAnalysis();
 }
 
+function abaikanOutlier(key) {
+  var excluded = JSON.parse(localStorage.getItem('k_outlier_excluded') || '[]');
+  excluded.push(key);
+  localStorage.setItem('k_outlier_excluded', JSON.stringify(excluded));
+  showAlert('Transaksi ditandai sudah benar — tidak akan muncul lagi');
+  runAIAnalysis();
+}
+
+function abaikanSemuaOutlier() {
+  if (!confirm('Tandai semua outlier sebagai "Sudah Benar"? Tidak akan muncul lagi di analisis.')) return;
+  var excluded = JSON.parse(localStorage.getItem('k_outlier_excluded') || '[]');
+  document.querySelectorAll('.btn-xs.btn-success[onclick*="abaikanOutlier"]').forEach(function(btn) {
+    var match = btn.getAttribute('onclick').match(/abaikanOutlier\('(.+?)'\)/);
+    if (match) excluded.push(match[1]);
+  });
+  localStorage.setItem('k_outlier_excluded', JSON.stringify(excluded));
+  showAlert('Semua outlier ditandai sudah benar');
+  runAIAnalysis();
+}
+
 function togglePilihSemuaDuplikat(checked) {
   document.querySelectorAll('.dup-chk').forEach(function(chk) {
     if (chk.closest('tr').style.display !== 'none') chk.checked = checked;
@@ -6393,15 +6413,20 @@ async function runAIAnalysis() {
       var stdDev = Math.sqrt(sumSqDiff / allAmounts.length);
       var threshold = meanVal + 3 * stdDev;
       if (threshold > 0) {
+        var outlierExcluded = JSON.parse(localStorage.getItem('k_outlier_excluded') || '[]');
         allAmounts.forEach(function(a) {
-          if (a.val > threshold) outliers.push(a);
+          if (a.val > threshold) {
+            // Skip jika sudah ditandai "sudah benar"
+            var outlierKey = a.tanggal + '_' + a.ref + '_' + a.val;
+            if (outlierExcluded.indexOf(outlierKey) === -1) outliers.push(a);
+          }
         });
         outliers.sort(function(a,b) { return b.val - a.val; });
-        outliers = outliers.slice(0,5);
+        outliers = outliers.slice(0,10);
       }
     }
     if (outliers.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button>', detail: outliers.map(function(o) { return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td></tr>'; }).join('') + '<tr><td colspan="5" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th>', group: 'anomali' });
+      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button> <button class="btn btn-success btn-sm" onclick="abaikanSemuaOutlier()">✅ Abaikan Semua</button>', detail: outliers.map(function(o) { var oKey = (o.tanggal||'') + '_' + (o.ref||'') + '_' + o.val; return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td><td><button class="btn btn-xs btn-success" onclick="abaikanOutlier(\'' + oKey.replace(/'/g,'') + '\')">✅ Sudah Benar</button></td></tr>'; }).join('') + '<tr><td colspan="6" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th><th>Aksi</th>', group: 'anomali' });
     } else {
       info.push('✅ Tidak ditemukan transaksi outlier (nominal tidak lazim)');
     }
