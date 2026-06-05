@@ -1613,17 +1613,18 @@ async function renderJurnalUmum() {
 
   const rows = sorted.length ? sorted.map(function(j) {
     const bal = Math.abs((j.totalDebit||0)-(j.totalKredit||0)) < 1;
-    // Allow leader and above to delete — with confirmation
     const hapusBtn = hasRole('leader') ? '<button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + j.id + '\')" title="Hapus jurnal ini">Hapus</button>' : '';
     const editBtn = hasRole('leader') ? '<button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button>' : '';
     const sumberChip = j.sumber ? '<span class="chip" style="font-size:0.68rem;background:#e8f0fe;color:#1a237e">' + j.sumber + '</span> ' : '';
     const akunCodes = (j.lines||[]).map(function(l){ return l.akun||''; }).join(',');
-    return '<tr data-tanggal="' + (j.tanggal||'') + '" data-sumber="' + (j.sumber||'') + '" data-akun="' + akunCodes + '"><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||'-') + '</td>'
+    return '<tr data-id="' + j.id + '" data-tanggal="' + (j.tanggal||'') + '" data-sumber="' + (j.sumber||'') + '" data-akun="' + akunCodes + '">'
+      + '<td><input type="checkbox" class="jurnal-chk" value="' + j.id + '" onchange="updateJurnalSelection()"></td>'
+      + '<td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||'-') + '</td>'
       + '<td>' + sumberChip + (j.keterangan||'-') + '</td>'
       + '<td class="text-green">' + fmtRp(j.totalDebit) + '</td><td class="text-red">' + fmtRp(j.totalKredit) + '</td>'
       + '<td><span class="badge ' + (bal?'badge-success':'badge-danger') + '">' + (bal?'Balance':'Unbalance') + '</span></td>'
       + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\')">Detail</button>' + editBtn + hapusBtn + '</td></tr>';
-  }).join('') : '<tr><td colspan="7" class="text-center text-muted">Belum ada jurnal</td></tr>';
+  }).join('') : '<tr><td colspan="8" class="text-center text-muted">Belum ada jurnal</td></tr>';
 
   return '<div class="page-title">📓 Jurnal Umum</div>' + addForm
     + '<div class="card"><div class="card-header"><h2>Daftar Jurnal (' + jurnal.length + ')</h2>'
@@ -1639,7 +1640,12 @@ async function renderJurnalUmum() {
     + '<button class="btn btn-sm btn-outline" onclick="resetJurnalFilter()">Reset</button>'
     + (hasRole('admin') ? '<button class="btn btn-sm btn-danger" onclick="hapusSemuaJurnal()">Hapus Semua</button>' : '')
     + '</div></div>'
-    + '<div class="table-wrap"><table id="tbl-jurnal"><thead><tr><th>Tanggal</th><th>No. Ref</th><th>Keterangan</th><th>Total Debit</th><th>Total Kredit</th><th>Balance</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    + '<div id="jurnal-batch-bar" style="display:none;padding:8px 12px;background:#fff3e0;border-radius:8px;margin-bottom:8px;display:none;align-items:center;gap:8px">'
+    + '<span id="jurnal-selected-count" style="font-size:0.85rem;font-weight:600">0 dipilih</span>'
+    + '<button class="btn btn-sm btn-danger" onclick="hapusJurnalTerpilih()">🗑️ Hapus Terpilih</button>'
+    + '<button class="btn btn-sm btn-outline" onclick="togglePilihSemuaJurnal(false)">Batal Pilih</button>'
+    + '</div>'
+    + '<div class="table-wrap"><table id="tbl-jurnal"><thead><tr><th style="width:30px"><input type="checkbox" id="jurnal-chk-all" onchange="togglePilihSemuaJurnal(this.checked)"></th><th>Tanggal</th><th>No. Ref</th><th>Keterangan</th><th>Total Debit</th><th>Total Kredit</th><th>Balance</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
 async function addJurnalLine() {
@@ -1789,6 +1795,44 @@ async function hapusSemuaJurnal() {
   showLoading(false);
   showAlert('Semua jurnal dihapus!', 'warning');
   navigate('jurnal-umum');
+}
+
+function togglePilihSemuaJurnal(checked) {
+  // Hanya pilih yang visible (sesuai filter)
+  document.querySelectorAll('#tbl-jurnal tbody tr').forEach(function(r) {
+    if (r.style.display === 'none') return;
+    var chk = r.querySelector('.jurnal-chk');
+    if (chk) chk.checked = checked;
+  });
+  var chkAll = document.getElementById('jurnal-chk-all');
+  if (chkAll) chkAll.checked = checked;
+  updateJurnalSelection();
+}
+
+function updateJurnalSelection() {
+  var checked = document.querySelectorAll('.jurnal-chk:checked');
+  var count = checked.length;
+  var bar = document.getElementById('jurnal-batch-bar');
+  var countEl = document.getElementById('jurnal-selected-count');
+  if (bar) bar.style.display = count > 0 ? 'flex' : 'none';
+  if (countEl) countEl.textContent = count + ' dipilih';
+}
+
+async function hapusJurnalTerpilih() {
+  var checked = document.querySelectorAll('.jurnal-chk:checked');
+  var ids = [];
+  checked.forEach(function(chk) { ids.push(chk.value); });
+  if (ids.length === 0) { showAlert('Tidak ada jurnal yang dipilih', 'warning'); return; }
+  if (!confirm('Hapus ' + ids.length + ' jurnal yang dipilih?\n\nTindakan ini TIDAK BISA DIBATALKAN!')) return;
+  showLoading(true);
+  for (var i = 0; i < ids.length; i++) {
+    await KDB.delete('jurnal', ids[i]);
+  }
+  await KDB.getAll('jurnal');
+  showLoading(false);
+  showAlert(ids.length + ' jurnal berhasil dihapus!', 'warning');
+  navigate('jurnal-umum');
+  setTimeout(reapplyJurnalFilter, 500);
 }
 
 async function editJurnal(id) {
