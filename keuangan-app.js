@@ -5138,9 +5138,9 @@ async function renderAIAssistant() {
     + '</div>'
     // Chat / Diskusi Langsung
     + '<div class="card" style="margin-top:16px">'
-    + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2><span class="text-muted" style="font-size:0.78rem">Tanya apa saja tentang keuangan, akuntansi, atau data kamu</span></div>'
+    + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2><button class="btn btn-sm btn-outline" onclick="resetChatAI()" style="margin-left:auto">🗑️ Chat Baru</button></div>'
     + '<div id="ai-chat-messages" style="max-height:400px;overflow-y:auto;padding:12px;background:#f8f9ff;border-radius:8px;margin-bottom:12px;min-height:120px">'
-    + '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Mulai diskusi — ketik pertanyaan di bawah</div>'
+    + buildChatHistoryHtml()
     + '</div>'
     + '<div style="display:flex;gap:8px">'
     + '<input type="text" id="ai-chat-input" placeholder="Tanya tentang keuangan, jurnal, neraca, atau minta saran..." style="flex:1;padding:10px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:0.9rem" onkeydown="if(event.key===\'Enter\')kirimChatAI()">'
@@ -5182,6 +5182,28 @@ async function renderAIAssistant() {
 
 // ===== AI CHAT =====
 var _aiChatHistory = [];
+
+function buildChatHistoryHtml() {
+  if (_aiChatHistory.length === 0) {
+    return '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Mulai diskusi — ketik pertanyaan di bawah</div>';
+  }
+  var html = '';
+  _aiChatHistory.forEach(function(m) {
+    if (m.role === 'user') {
+      html += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div style="background:#1a237e;color:white;padding:8px 14px;border-radius:14px 14px 2px 14px;max-width:75%;font-size:0.88rem">' + escapeHtml(m.content) + '</div></div>';
+    } else {
+      var displayText = (m.content||'').replace(/###ACTION:.*?###/g, '').trim();
+      html += '<div style="display:flex;margin-bottom:8px"><div style="background:#e8f5e9;padding:8px 14px;border-radius:14px 14px 14px 2px;max-width:85%;font-size:0.88rem;line-height:1.6;white-space:pre-wrap">' + escapeHtml(displayText) + '</div></div>';
+    }
+  });
+  return html;
+}
+
+function resetChatAI() {
+  _aiChatHistory = [];
+  var chatEl = document.getElementById('ai-chat-messages');
+  if (chatEl) chatEl.innerHTML = '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Chat baru dimulai — ketik pertanyaan di bawah</div>';
+}
 
 function chatQuickQ(q) {
   document.getElementById('ai-chat-input').value = q;
