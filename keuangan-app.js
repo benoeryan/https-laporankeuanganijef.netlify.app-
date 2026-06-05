@@ -6376,6 +6376,8 @@ async function runAIAnalysis() {
       try {
     var allAmounts = [];
     allJurnal.forEach(function(j) {
+      // Skip jurnal penutup — nominalnya memang besar (total pendapatan/beban) dan bukan anomali
+      if (j.tipe === 'penutup') return;
       (j.lines||[]).forEach(function(l) {
         if ((l.debit||0) > 0) allAmounts.push({ val: l.debit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'debit' });
         if ((l.kredit||0) > 0) allAmounts.push({ val: l.kredit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'kredit' });
