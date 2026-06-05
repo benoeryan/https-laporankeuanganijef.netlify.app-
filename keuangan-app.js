@@ -5181,7 +5181,11 @@ async function renderAIAssistant() {
 }
 
 // ===== AI CHAT =====
-var _aiChatHistory = [];
+var _aiChatHistory = JSON.parse(localStorage.getItem('k_ai_chat_history') || '[]');
+
+function _saveChatHistory() {
+  try { localStorage.setItem('k_ai_chat_history', JSON.stringify(_aiChatHistory)); } catch(e) {}
+}
 
 function buildChatHistoryHtml() {
   if (_aiChatHistory.length === 0) {
@@ -5201,6 +5205,7 @@ function buildChatHistoryHtml() {
 
 function resetChatAI() {
   _aiChatHistory = [];
+  _saveChatHistory();
   var chatEl = document.getElementById('ai-chat-messages');
   if (chatEl) chatEl.innerHTML = '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Chat baru dimulai — ketik pertanyaan di bawah</div>';
 }
@@ -5238,6 +5243,7 @@ async function kirimChatAI() {
   chatEl.scrollTop = chatEl.scrollHeight;
 
   _aiChatHistory.push({ role: 'user', content: msg });
+  _saveChatHistory();
 
   var reply = '';
   var provider = localStorage.getItem('k_ai_provider') || 'lokal';
@@ -5250,6 +5256,7 @@ async function kirimChatAI() {
   }
 
   _aiChatHistory.push({ role: 'assistant', content: reply });
+  _saveChatHistory();
 
   // Hapus typing indicator
   var typing = document.getElementById('ai-typing');
