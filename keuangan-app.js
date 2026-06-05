@@ -3721,7 +3721,12 @@ async function tutupBukuPettyCash() {
 async function hapusPettyCash(id) {
   if (!confirm('Hapus?')) return;
   await KDB.delete('pettycash', id);
-  navigate('kalk-pettycash');
+  // Tetap di panel yang sama
+  if (currentSection === 'ai-assistant') {
+    runAIAnalysis();
+  } else {
+    navigate('kalk-pettycash');
+  }
 }
 
 // Edit/Hapus Permohonan Dana dari Petty Cash
@@ -5290,12 +5295,23 @@ async function renderAIAssistant() {
     + '<div style="display:flex;gap:8px;margin-top:8px">'
     + '<input type="password" id="ai-api-key" placeholder="sk-or-..." style="flex:1;padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" value="' + (localStorage.getItem('k_ai_apikey')||'') + '">'
     + '<button class="btn btn-success" onclick="simpanAIKey()">Simpan</button></div></div></div></div>'
-    // Hasil analisis
-    + '<div id="ai-result" style="margin-top:16px"></div>';
+    // Hasil analisis — restore dari cache jika ada
+    + '<div id="ai-result" style="margin-top:16px">' + (_aiAnalysisCache||'') + '</div>';
 }
 
 // ===== AI CHAT =====
 var _aiChatHistory = JSON.parse(localStorage.getItem('k_ai_chat_history') || '[]');
+var _aiAnalysisCache = '';
+
+function _saveAIResult() {
+  var el = document.getElementById('ai-result');
+  if (el && el.innerHTML) _aiAnalysisCache = el.innerHTML;
+}
+
+// Auto-save hasil analisis setiap kali berubah
+setInterval(function() {
+  if (currentSection === 'ai-assistant') _saveAIResult();
+}, 2000);
 
 function _saveChatHistory() {
   try { localStorage.setItem('k_ai_chat_history', JSON.stringify(_aiChatHistory)); } catch(e) {}
@@ -6602,7 +6618,12 @@ async function buatJurnalDariPC(pcId) {
   // Update petty cash record dengan jurnalId
   await KDB.save('pettycash', pcId, Object.assign({}, pc, { jurnalId: jId }));
   showAlert('Jurnal berhasil dibuat dari petty cash: ' + fmtRp(jumlah));
-  runAIPettyCashCheck(); // Refresh
+  // Tetap di panel yang sama — refresh sesuai konteks
+  if (currentSection === 'ai-assistant') {
+    runAIAnalysis();
+  } else {
+    runAIPettyCashCheck();
+  }
 }
 
 async function batchBuatJurnalPC() {
@@ -6658,7 +6679,11 @@ async function batchBuatJurnalPC() {
   }
   showLoading(false);
   showAlert('Berhasil membuat ' + count + ' jurnal dari petty cash!');
-  runAIPettyCashCheck(); // Refresh
+  if (currentSection === 'ai-assistant') {
+    runAIAnalysis();
+  } else {
+    runAIPettyCashCheck();
+  }
 }
 
 // ===== FUNGSI FIX OTOMATIS DARI ANALISIS =====
