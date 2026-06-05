@@ -5294,6 +5294,20 @@ function renderActionConfirmation(action) {
       + '<b>Hapus Jurnal</b><br>'
       + 'ID: ' + (action.id||'-') + '<br>'
       + 'Alasan: ' + (action.alasan||'-') + '</div>';
+  } else if (action.type === 'reklasifikasi') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Reklasifikasi Akun</b><br>'
+      + 'Jurnal ID: ' + (action.jurnal_id||'-') + '<br>'
+      + 'Akun Asal: ' + (action.akun_asal||'-') + ' → Akun Tujuan: ' + (action.akun_tujuan||'-') + '</div>';
+  } else if (action.type === 'fix_coa_jurnal') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Fix COA di Semua Jurnal</b><br>'
+      + 'Akun Lama: ' + (action.akun_lama||'-') + ' → Akun Baru: ' + (action.akun_baru||'-') + '<br>'
+      + '<i>Semua jurnal yang menggunakan akun lama akan diubah</i></div>';
+  } else if (action.type === 'sinkron_pc') {
+    html += '<div style="font-size:0.85rem;margin-bottom:8px">'
+      + '<b>Sinkronisasi Petty Cash → Jurnal</b><br>'
+      + 'Membuat jurnal otomatis untuk semua transaksi petty cash yang belum terintegrasi.</div>';
   } else {
     html += '<div style="font-size:0.85rem">Aksi: ' + JSON.stringify(action) + '</div>';
   }
@@ -5385,6 +5399,64 @@ async function eksekusiAIAction() {
       chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Jurnal ' + action.id + ' berhasil dihapus.</div></div>';
       showAlert('Jurnal dihapus dari AI Chat!');
 
+    } else if (action.type === 'reklasifikasi') {
+      // Reklasifikasi: ganti akun di jurnal tertentu
+      if (!action.jurnal_id || !action.akun_asal || !action.akun_tujuan) { showAlert('Data reklasifikasi tidak lengkap', 'danger'); return; }
+      var jData = await KDB.get('jurnal', action.jurnal_id);
+      if (!jData) { showAlert('Jurnal tidak ditemukan: ' + action.jurnal_id, 'danger'); return; }
+      var newLines = (jData.lines||[]).map(function(l) {
+        if (l.akun === action.akun_asal) return Object.assign({}, l, { akun: action.akun_tujuan });
+        return l;
+      });
+      await KDB.save('jurnal', action.jurnal_id, Object.assign({}, jData, { lines: newLines }));
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Reklasifikasi berhasil! Akun ' + action.akun_asal + ' → ' + action.akun_tujuan + ' di jurnal ' + action.jurnal_id + '</div></div>';
+      showAlert('Reklasifikasi berhasil!');
+
+    } else if (action.type === 'fix_coa_jurnal') {
+      // Fix batch: ganti semua akun lama ke akun baru di semua jurnal
+      if (!action.akun_lama || !action.akun_baru) { showAlert('Data fix COA tidak lengkap', 'danger'); return; }
+      var allJ = await KDB.getAll('jurnal');
+      var fixCount = 0;
+      for (var fi = 0; fi < allJ.length; fi++) {
+        var jj = allJ[fi];
+        var changed = false;
+        var fixLines = (jj.lines||[]).map(function(l) {
+          if (l.akun === action.akun_lama) { changed = true; return Object.assign({}, l, { akun: action.akun_baru }); }
+          return l;
+        });
+        if (changed) { await KDB.save('jurnal', jj.id, Object.assign({}, jj, { lines: fixLines })); fixCount++; }
+      }
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Fix COA selesai! ' + fixCount + ' jurnal diubah: ' + action.akun_lama + ' → ' + action.akun_baru + '</div></div>';
+      showAlert(fixCount + ' jurnal berhasil di-fix!');
+
+    } else if (action.type === 'sinkron_pc') {
+      // Sinkronisasi: buat jurnal dari transaksi petty cash yang belum ada jurnalnya
+      var pcAll = await KDB.getAll('pettycash');
+      var jrnAll = await KDB.getAll('jurnal');
+      var pcJrnRefs = {};
+      jrnAll.filter(function(j){ return j.sumber === 'petty-cash'; }).forEach(function(j){ if(j.noRef) pcJrnRefs[j.noRef]=true; });
+      var akunPC = await getAkunPettyCash();
+      var akunBank = await getAkunKasBank();
+      var syncCount = 0;
+      for (var si = 0; si < pcAll.length; si++) {
+        var pc = pcAll[si];
+        if (pc.jurnalId || (pc.noRef && pcJrnRefs[pc.noRef]) || (pc.id && pcJrnRefs[pc.id])) continue;
+        var jml = Math.abs(parseFloat(pc.jumlah)||0);
+        if (jml <= 0) continue;
+        var sjId = genId('JU');
+        var lines;
+        if (pc.tipe === 'masuk') {
+          lines = [{ akun: akunPC, ket: pc.keterangan||'Top-up', debit: jml, kredit: 0 }, { akun: akunBank, ket: 'Transfer', debit: 0, kredit: jml }];
+        } else {
+          lines = [{ akun: pc.akunDebit||'5-2200', ket: pc.keterangan||'Pengeluaran', debit: jml, kredit: 0 }, { akun: akunPC, ket: 'Kas kecil keluar', debit: 0, kredit: jml }];
+        }
+        await KDB.save('jurnal', sjId, { id: sjId, tanggal: pc.tanggal||today(), keterangan: pc.keterangan||'Sinkron PC', noRef: pc.noRef||pc.id, tipe: 'umum', sumber: 'petty-cash', lines: lines, totalDebit: jml, totalKredit: jml, createdBy: KU.username, createdAt: new Date().toISOString() });
+        await KDB.save('pettycash', pc.id, Object.assign({}, pc, { jurnalId: sjId }));
+        syncCount++;
+      }
+      chatEl.innerHTML += '<div style="display:flex;margin:8px 0"><div style="background:#c8e6c9;padding:8px 14px;border-radius:8px;font-size:0.85rem">✅ Sinkronisasi selesai! ' + syncCount + ' transaksi petty cash dibuatkan jurnal.</div></div>';
+      showAlert(syncCount + ' transaksi petty cash disinkronkan!');
+
     } else {
       showAlert('Tipe aksi tidak dikenali: ' + action.type, 'warning');
     }
@@ -5454,20 +5526,53 @@ async function callOpenRouterChat(msg, apiKey) {
     var pcSaldo = await KDB.getSetting('pettycash_saldo', 0);
     var jurnal = await KDB.getAll('jurnal');
     var akunList = await getAkun();
+    var pcList = await KDB.getAll('pettycash');
 
-    var konteks = 'Data keuangan:\n- Total jurnal: ' + jurnal.length + '\n- Saldo petty cash: Rp ' + pcSaldo.toLocaleString('id-ID') + '\n';
-    var akunPenting = Object.keys(fd.saldo).slice(0, 15).map(function(k) {
+    // Hitung ringkasan petty cash tahun ini
+    var tahun = new Date().getFullYear();
+    var pcTahunIni = pcList.filter(function(p) { return p.tanggal && p.tanggal.startsWith(String(tahun)); });
+    var pcMasuk = 0, pcKeluar = 0;
+    pcTahunIni.forEach(function(p) {
+      if (p.tipe === 'masuk') pcMasuk += Math.abs(parseFloat(p.jumlah)||0);
+      else pcKeluar += Math.abs(parseFloat(p.jumlah)||0);
+    });
+    var pcSaldoSaatIni = pcSaldo + pcMasuk - pcKeluar;
+
+    // 10 transaksi petty cash terbaru
+    var pcTerbaru = pcList.slice().sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); }).slice(0, 10);
+    var pcTerbaruStr = pcTerbaru.map(function(p) {
+      return '  ' + (p.tanggal||'-') + ' | ' + (p.tipe||'keluar') + ' | Rp ' + Math.abs(parseFloat(p.jumlah)||0).toLocaleString('id-ID') + ' | ' + (p.keterangan||'-');
+    }).join('\n');
+
+    var konteks = 'Data keuangan perusahaan IJEF Corp:\n'
+      + '- Total jurnal: ' + jurnal.length + '\n'
+      + '- Petty Cash: Saldo awal Rp ' + pcSaldo.toLocaleString('id-ID') + ', Masuk ' + tahun + ': Rp ' + pcMasuk.toLocaleString('id-ID') + ', Keluar ' + tahun + ': Rp ' + pcKeluar.toLocaleString('id-ID') + ', Saldo saat ini: Rp ' + pcSaldoSaatIni.toLocaleString('id-ID') + '\n'
+      + '- Total transaksi petty cash: ' + pcList.length + ' (' + pcTahunIni.length + ' tahun ini)\n';
+
+    var akunPenting = Object.keys(fd.saldo).slice(0, 20).map(function(k) {
       var s = fd.saldo[k]; return '  ' + k + ' (' + (s.akun.nama||k) + '): Rp ' + ((s.debit||0)-(s.kredit||0)).toLocaleString('id-ID');
     }).join('\n');
     konteks += '- Saldo akun:\n' + akunPenting + '\n';
-    var coaList = akunList.slice(0, 25).map(function(a) { return a.kode + ' - ' + a.nama; }).join('\n');
+
+    var coaList = akunList.slice(0, 30).map(function(a) { return a.kode + ' - ' + a.nama + ' [' + a.kategori + ']'; }).join('\n');
     konteks += '\n- COA:\n' + coaList + '\n';
 
-    var systemMsg = 'Kamu adalah AI asisten keuangan perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat.\n\n'
-      + 'AKSI: Jika user minta aksi, taruh di akhir pesan:\n'
+    konteks += '\n- 10 transaksi petty cash terbaru:\n' + pcTerbaruStr + '\n';
+
+    var systemMsg = 'Kamu adalah AI asisten keuangan perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas.\n\n'
+      + 'Kamu BISA mengakses dan memodifikasi data keuangan. Jika user minta aksi, taruh format ACTION di akhir pesan:\n'
       + '###ACTION:{"type":"jurnal","tanggal":"YYYY-MM-DD","keterangan":"...","lines":[{"akun":"kode","ket":"...","debit":0,"kredit":0}]}###\n'
       + '###ACTION:{"type":"topup_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"..."}###\n'
-      + '###ACTION:{"type":"pengeluaran_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"...","akunBeban":"kode"}###\n\n'
+      + '###ACTION:{"type":"pengeluaran_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"...","akunBeban":"kode"}###\n'
+      + '###ACTION:{"type":"reklasifikasi","jurnal_id":"...","akun_asal":"kode","akun_tujuan":"kode"}###\n'
+      + '###ACTION:{"type":"hapus_jurnal","id":"jurnal_id","alasan":"..."}###\n'
+      + '###ACTION:{"type":"fix_coa_jurnal","akun_lama":"kode","akun_baru":"kode"}###\n\n'
+      + '###ACTION:{"type":"sinkron_pc"}###\n\n'
+      + 'PENTING:\n'
+      + '- Selalu jelaskan dulu, baru tambahkan ACTION di akhir\n'
+      + '- Kamu punya akses PENUH ke data petty cash, jurnal, COA\n'
+      + '- Jika user minta sinkronisasi/perbaikan data, lakukan langsung\n'
+      + '- Jika hanya tanya, jawab tanpa ACTION\n\n'
       + 'Konteks:\n' + konteks;
 
     var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
