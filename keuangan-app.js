@@ -1782,10 +1782,25 @@ async function tampilkanPasanganDuplikat(id1, id2) {
     + '<div style="margin-top:16px;padding:12px;background:#fff3e0;border-radius:8px;text-align:center">'
     + '<p style="margin-bottom:10px;font-size:0.88rem"><b>Apakah data kedua ini memang duplikat?</b></p>'
     + '<button class="btn btn-danger" onclick="hapusDuplikatJurnal(\'' + id2 + '\',\'' + id1 + '\');closeModalDirect()">🗑️ Ya, Hapus Duplikat</button>'
-    + ' <button class="btn btn-outline" onclick="closeModalDirect()">Bukan Duplikat, Batal</button>'
+    + ' <button class="btn btn-success" onclick="tandaiBukanDuplikat(\'' + id1 + '\',\'' + id2 + '\')">✅ Bukan Duplikat</button>'
     + '</div>';
 
   openModal(html, '👁️ Bandingkan Data Duplikat');
+}
+
+async function tandaiBukanDuplikat(id1, id2) {
+  // Simpan pasangan ini ke daftar "bukan duplikat" agar tidak muncul lagi di analisis
+  var excluded = JSON.parse(localStorage.getItem('k_dup_excluded') || '[]');
+  excluded.push(id1 + '_' + id2);
+  excluded.push(id2 + '_' + id1);
+  localStorage.setItem('k_dup_excluded', JSON.stringify(excluded));
+
+  // Hapus dari tampilan langsung
+  closeModalDirect();
+  showAlert('Ditandai bukan duplikat — tidak akan muncul lagi di analisis');
+
+  // Refresh analisis
+  runAIAnalysis();
 }
 
 function togglePilihSemuaDuplikat(checked) {
@@ -6090,6 +6105,7 @@ async function runAIAnalysis() {
       try {
     var refMap = {};
     var duplicates = [];
+    var dupExcluded = JSON.parse(localStorage.getItem('k_dup_excluded') || '[]');
     allJurnal.forEach(function(j) {
       if (j.tipe === 'penutup') return;
       if (!j.noRef) return;
@@ -6098,7 +6114,11 @@ async function runAIAnalysis() {
       if ((j.totalDebit||0) < 10000) return;
       var key = (j.tanggal||'') + '_' + (j.totalDebit||0).toFixed(0) + '_' + (j.noRef||'') + '_' + (j.keterangan||'').substring(0,50);
       if (refMap[key]) {
-        duplicates.push({ id1: refMap[key].id, id2: j.id, ref: j.noRef, jumlah: j.totalDebit, tanggal: j.tanggal, ket: j.keterangan });
+        // Cek apakah pasangan ini sudah ditandai "bukan duplikat"
+        var pairKey = refMap[key].id + '_' + j.id;
+        if (dupExcluded.indexOf(pairKey) === -1) {
+          duplicates.push({ id1: refMap[key].id, id2: j.id, ref: j.noRef, jumlah: j.totalDebit, tanggal: j.tanggal, ket: j.keterangan });
+        }
       } else {
         refMap[key] = j;
       }
