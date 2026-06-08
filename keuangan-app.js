@@ -6307,10 +6307,12 @@ async function renderAIAssistant() {
     + '<div id="ai-chat-messages" style="max-height:400px;overflow-y:auto;padding:12px;background:#f8f9ff;border-radius:8px;margin-bottom:12px;min-height:120px">'
     + buildChatHistoryHtml()
     + '</div>'
-    + '<div style="display:flex;gap:8px">'
-    + '<input type="text" id="ai-chat-input" placeholder="Tanya tentang keuangan, jurnal, neraca, atau minta saran..." style="flex:1;padding:10px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:0.9rem" onkeydown="if(event.key===\'Enter\')kirimChatAI()">'
+    + '<div style="display:flex;gap:8px;align-items:center">'
+    + '<label style="cursor:pointer;padding:8px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:1.1rem" title="Upload gambar/file"><input type="file" id="ai-chat-file" accept="image/*,.pdf,.csv,.xlsx" style="display:none" onchange="previewChatFile(this)">📎</label>'
+    + '<input type="text" id="ai-chat-input" placeholder="Tanya tentang keuangan, jurnal, neraca, atau minta saran..." style="flex:1;padding:10px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:0.9rem" onkeydown="if(event.key===\'Enter\')kirimChatAI()" onpaste="handleChatPaste(event)">'
     + '<button class="btn btn-primary" onclick="kirimChatAI()" style="white-space:nowrap">Kirim 💬</button>'
     + '</div>'
+    + '<div id="ai-chat-file-preview" style="display:none;margin-top:6px;padding:8px;background:#f0f4ff;border-radius:6px;font-size:0.82rem"></div>'
     + '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Bagaimana posisi keuangan perusahaan saat ini?\')">📊 Posisi Keuangan</button>'
     + '<button class="btn btn-outline btn-sm" onclick="chatQuickQ(\'Apa saja transaksi yang perlu diperhatikan bulan ini?\')">⚠️ Transaksi Perhatian</button>'
@@ -6386,6 +6388,62 @@ function resetChatAI() {
   if (chatEl) chatEl.innerHTML = '<div style="color:#888;font-size:0.85rem;text-align:center;padding:20px">👋 Chat baru dimulai — ketik pertanyaan di bawah</div>';
 }
 
+var _aiChatAttachment = null;
+
+function previewChatFile(input) {
+  var preview = document.getElementById('ai-chat-file-preview');
+  if (!input.files || !input.files.length) { preview.style.display = 'none'; _aiChatAttachment = null; return; }
+  var file = input.files[0];
+  var isImage = file.type.startsWith('image/');
+  _aiChatAttachment = { name: file.name, type: file.type, size: file.size, file: file };
+
+  if (isImage) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      _aiChatAttachment.dataUrl = e.target.result;
+      preview.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><img src="' + e.target.result + '" style="max-height:60px;border-radius:4px">'
+        + '<div><b>' + file.name + '</b><br><span style="color:#888">' + (file.size/1024).toFixed(1) + ' KB</span></div>'
+        + '<button class="btn btn-xs btn-danger" onclick="removeChatFile()">✕</button></div>';
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  } else {
+    preview.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:1.5rem">📄</span>'
+      + '<div><b>' + file.name + '</b><br><span style="color:#888">' + (file.size/1024).toFixed(1) + ' KB — ' + file.type + '</span></div>'
+      + '<button class="btn btn-xs btn-danger" onclick="removeChatFile()">✕</button></div>';
+    preview.style.display = 'block';
+  }
+}
+
+function removeChatFile() {
+  _aiChatAttachment = null;
+  var preview = document.getElementById('ai-chat-file-preview');
+  if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  var fileInput = document.getElementById('ai-chat-file');
+  if (fileInput) fileInput.value = '';
+}
+
+function handleChatPaste(event) {
+  var items = (event.clipboardData || event.originalEvent.clipboardData).items;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      event.preventDefault();
+      var blob = items[i].getAsFile();
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        _aiChatAttachment = { name: 'pasted-image.png', type: 'image/png', size: blob.size, dataUrl: e.target.result };
+        var preview = document.getElementById('ai-chat-file-preview');
+        preview.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><img src="' + e.target.result + '" style="max-height:60px;border-radius:4px">'
+          + '<div><b>Gambar dari Clipboard</b><br><span style="color:#888">' + (blob.size/1024).toFixed(1) + ' KB</span></div>'
+          + '<button class="btn btn-xs btn-danger" onclick="removeChatFile()">✕</button></div>';
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(blob);
+      break;
+    }
+  }
+}
+
 function chatQuickQ(q) {
   document.getElementById('ai-chat-input').value = q;
   kirimChatAI();
@@ -6412,8 +6470,20 @@ async function kirimChatAI() {
   var chatEl = document.getElementById('ai-chat-messages');
   if (_aiChatHistory.length === 0) chatEl.innerHTML = '';
 
-  chatEl.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div style="background:#1a237e;color:white;padding:8px 14px;border-radius:14px 14px 2px 14px;max-width:75%;font-size:0.88rem">' + escapeHtml(msg) + '</div></div>';
+  // Render pesan user + attachment jika ada
+  var attachHtml = '';
+  if (_aiChatAttachment) {
+    if (_aiChatAttachment.dataUrl) {
+      attachHtml = '<div style="margin-bottom:6px"><img src="' + _aiChatAttachment.dataUrl + '" style="max-width:200px;max-height:120px;border-radius:6px;border:1px solid rgba(255,255,255,0.3)"></div>';
+    } else {
+      attachHtml = '<div style="margin-bottom:6px;padding:4px 8px;background:rgba(255,255,255,0.15);border-radius:4px;font-size:0.78rem">📎 ' + _aiChatAttachment.name + '</div>';
+    }
+  }
+  chatEl.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div style="background:#1a237e;color:white;padding:8px 14px;border-radius:14px 14px 2px 14px;max-width:75%;font-size:0.88rem">' + attachHtml + escapeHtml(msg) + '</div></div>';
   chatEl.scrollTop = chatEl.scrollHeight;
+
+  // Reset attachment setelah kirim
+  removeChatFile();
 
   chatEl.innerHTML += '<div id="ai-typing" style="display:flex;margin-bottom:8px"><div style="background:#e8eaf6;padding:8px 14px;border-radius:14px 14px 14px 2px;font-size:0.85rem;color:#555">⏳ Sedang berpikir...</div></div>';
   chatEl.scrollTop = chatEl.scrollHeight;
