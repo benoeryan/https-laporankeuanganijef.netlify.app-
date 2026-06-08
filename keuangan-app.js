@@ -4379,10 +4379,16 @@ async function prosesCSVBank() {
 
   if (jurnalOnly.length > 0) {
     html += '<div style="margin-top:12px"><div class="fw-bold" style="color:#e65100;margin-bottom:6px">🟠 Ada di Jurnal tapi TIDAK ada di Bank (' + jurnalOnly.length + '):</div>'
-      + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>'
-      + jurnalOnly.map(function(j){ return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.ref||'-') + '</td><td>' + j.ket + '</td><td class="text-green">' + (j.debit?fmtRp(j.debit):'-') + '</td><td class="text-red">' + (j.kredit?fmtRp(j.kredit):'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\')">Detail</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + j.id + '\')">Hapus</button></td></tr>'; }).join('')
+      + '<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">'
+      + '<button class="btn btn-sm btn-danger" onclick="hapusJurnalOnlyTerpilih()">🗑️ Hapus Terpilih</button>'
+      + '<button class="btn btn-sm btn-warning" onclick="pindahAkunJurnalOnly()">🔄 Pindah ke Akun Lain</button>'
+      + '<button class="btn btn-sm btn-info" onclick="tandaiPendingJurnalOnly()">⏳ Tandai Pending</button>'
+      + '<span id="jonly-sel-count" style="font-size:0.82rem;color:#555;align-self:center"></span>'
+      + '</div>'
+      + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem" id="tbl-jurnal-only"><thead><tr><th style="width:28px"><input type="checkbox" onchange="toggleJurnalOnlyAll(this.checked)"></th><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>'
+      + jurnalOnly.map(function(j){ return '<tr><td><input type="checkbox" class="jonly-chk" value="' + j.id + '" onchange="updateJOnlyCount()"></td><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.ref||'-') + '</td><td>' + j.ket + '</td><td class="text-green">' + (j.debit?fmtRp(j.debit):'-') + '</td><td class="text-red">' + (j.kredit?fmtRp(j.kredit):'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\')">Detail</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + j.id + '\')">Hapus</button></td></tr>'; }).join('')
       + '</tbody></table></div>'
-      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini tercatat di sistem tapi tidak ada di mutasi bank. Kemungkinan: pending transfer, salah input, atau belum masuk periode statement.</div></div>';
+      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini tercatat di sistem tapi tidak ada di mutasi bank. Opsi: hapus (jika salah input), edit (pindah akun), atau tandai pending (belum masuk statement).</div></div>';
   }
 
   if (csvOnly.length === 0 && jurnalOnly.length === 0) {
@@ -4449,6 +4455,65 @@ async function buatJurnalDariCSVAll() {
   showLoading(false);
   showAlert(count + ' jurnal berhasil dibuat dari CSV bank!');
   prosesCSVBank(); // Refresh
+}
+
+function toggleJurnalOnlyAll(checked) {
+  document.querySelectorAll('.jonly-chk').forEach(function(chk){ chk.checked = checked; });
+  updateJOnlyCount();
+}
+
+function updateJOnlyCount() {
+  var count = document.querySelectorAll('.jonly-chk:checked').length;
+  var el = document.getElementById('jonly-sel-count');
+  if (el) el.textContent = count > 0 ? count + ' dipilih' : '';
+}
+
+async function hapusJurnalOnlyTerpilih() {
+  var checked = document.querySelectorAll('.jonly-chk:checked');
+  var ids = [];
+  checked.forEach(function(chk){ ids.push(chk.value); });
+  if (ids.length === 0) { showAlert('Centang dulu transaksi yang mau dihapus', 'warning'); return; }
+  if (!confirm('Hapus ' + ids.length + ' jurnal yang dipilih?\n\nJurnal ini ada di sistem tapi tidak ada di mutasi bank.\nKemungkinan salah input.\n\nTindakan TIDAK BISA DIBATALKAN!')) return;
+  showLoading(true);
+  for (var i = 0; i < ids.length; i++) { await KDB.delete('jurnal', ids[i]); }
+  await KDB.getAll('jurnal');
+  showLoading(false);
+  showAlert(ids.length + ' jurnal dihapus!');
+  prosesCSVBank();
+}
+
+async function pindahAkunJurnalOnly() {
+  var checked = document.querySelectorAll('.jonly-chk:checked');
+  var ids = [];
+  checked.forEach(function(chk){ ids.push(chk.value); });
+  if (ids.length === 0) { showAlert('Centang dulu transaksi yang mau dipindah', 'warning'); return; }
+  var akunBaru = prompt('Masukkan kode akun tujuan (contoh: 1-1101-3):\n\nJurnal yang dipilih akan dipindahkan dari akun bank ini ke akun lain.');
+  if (!akunBaru || !akunBaru.trim()) return;
+  akunBaru = akunBaru.trim();
+  var akunLama = window._csvBankAkun;
+  if (!confirm('Pindahkan ' + ids.length + ' jurnal dari akun ' + akunLama + ' ke akun ' + akunBaru + '?')) return;
+  showLoading(true);
+  var allJ = await KDB.getAll('jurnal');
+  var count = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var j = allJ.find(function(x){ return x.id === ids[i]; });
+    if (!j) continue;
+    var newLines = (j.lines||[]).map(function(l) {
+      if (l.akun === akunLama) return Object.assign({}, l, { akun: akunBaru });
+      return l;
+    });
+    await KDB.save('jurnal', j.id, Object.assign({}, j, { lines: newLines }));
+    count++;
+  }
+  showLoading(false);
+  showAlert(count + ' jurnal dipindahkan ke akun ' + akunBaru + '!');
+  prosesCSVBank();
+}
+
+function tandaiPendingJurnalOnly() {
+  var checked = document.querySelectorAll('.jonly-chk:checked');
+  if (checked.length === 0) { showAlert('Centang dulu transaksi yang mau ditandai pending', 'warning'); return; }
+  showAlert(checked.length + ' transaksi ditandai sebagai pending (belum masuk statement bank). Tidak ada perubahan data — ini hanya untuk tracking.');
 }
 
 function parseCSVMutasi(lines) {
