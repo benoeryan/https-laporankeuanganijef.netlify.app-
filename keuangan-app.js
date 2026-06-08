@@ -1863,10 +1863,22 @@ async function recoverDariLocalStorage() {
 async function integrasiPermohonanDanaMasukKeJurnal() {
   var allPD = await KDB.getAll('permohonan');
   var allDM = await KDB.getAll('danamasuk');
+  var allJurnal = await KDB.getAll('jurnal');
+  var jurnalIds = allJurnal.map(function(j){ return j.id; });
 
-  // Filter: Approved Final & belum punya jurnal
-  var pdBelumJurnal = allPD.filter(function(p) { return p.status === 'Approved Final' && !p.jurnalId; });
-  var dmBelumJurnal = allDM.filter(function(d) { return d.status === 'Approved Final' && !d.jurnalId; });
+  // Filter: Approved Final & (belum punya jurnal ATAU jurnalnya sudah terhapus)
+  var pdBelumJurnal = allPD.filter(function(p) {
+    if (p.status !== 'Approved Final') return false;
+    if (!p.jurnalId) return true; // belum ada jurnal
+    if (jurnalIds.indexOf(p.jurnalId) === -1) return true; // jurnal sudah terhapus
+    return false;
+  });
+  var dmBelumJurnal = allDM.filter(function(d) {
+    if (d.status !== 'Approved Final') return false;
+    if (!d.jurnalId) return true;
+    if (jurnalIds.indexOf(d.jurnalId) === -1) return true;
+    return false;
+  });
 
   var totalPD = pdBelumJurnal.reduce(function(s,p){ return s+(parseFloat(p.nominal)||0); },0);
   var totalDM = dmBelumJurnal.reduce(function(s,d){ return s+(parseFloat(d.nominal)||0); },0);
@@ -5772,9 +5784,10 @@ async function renderApprovalCenter() {
   }
 
   if (hasRole('admin')) {
-    // Hitung yang belum dijurnal
-    var pdBelumJurnal = allPD.filter(function(p){ return p.status === 'Approved Final' && !p.jurnalId; }).length;
-    var dmBelumJurnal = allDM.filter(function(d){ return d.status === 'Approved Final' && !d.jurnalId; }).length;
+    // Hitung yang belum dijurnal (atau jurnalnya sudah terhapus)
+    var allJurnalIds = (await KDB.getAll('jurnal')).map(function(j){ return j.id; });
+    var pdBelumJurnal = allPD.filter(function(p){ return p.status === 'Approved Final' && (!p.jurnalId || allJurnalIds.indexOf(p.jurnalId) === -1); }).length;
+    var dmBelumJurnal = allDM.filter(function(d){ return d.status === 'Approved Final' && (!d.jurnalId || allJurnalIds.indexOf(d.jurnalId) === -1); }).length;
     var totalBelumJurnal = pdBelumJurnal + dmBelumJurnal;
     var integrasiBanner = totalBelumJurnal > 0
       ? '<div class="alert alert-warning" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><span>⚠️ <b>' + totalBelumJurnal + '</b> transaksi Approved belum dibuatkan jurnal (' + pdBelumJurnal + ' PD + ' + dmBelumJurnal + ' DM)</span><button class="btn btn-sm btn-success" onclick="integrasiPermohonanDanaMasukKeJurnal()">🔗 Integrasikan Semua ke Jurnal</button></div>'
