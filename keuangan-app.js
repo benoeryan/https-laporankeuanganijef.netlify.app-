@@ -1841,6 +1841,88 @@ async function reviewOutlierDetail(jurnalId) {
   openModal(html, '👁️ Review Transaksi Outlier');
 }
 
+// === Saldo Normal Anomali ===
+async function viewSaldoAnomali(kode) {
+  var allJ = await KDB.getAll('jurnal');
+  var akunList = await getAkun();
+  var akun = akunList.find(function(a){ return a.kode === kode; });
+  var affected = allJ.filter(function(j) {
+    return (j.lines||[]).some(function(l){ return l.akun === kode; });
+  });
+
+  var fd = await getFinancialData();
+  var s = fd.saldo[kode] || { debit: 0, kredit: 0 };
+
+  var rowsHtml = affected.sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); }).slice(0, 20).map(function(j) {
+    var lines = (j.lines||[]).filter(function(l){ return l.akun === kode; });
+    var d = lines.reduce(function(s,l){ return s+(l.debit||0); },0);
+    var k = lines.reduce(function(s,l){ return s+(l.kredit||0); },0);
+    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td class="text-green">' + fmtRp(d) + '</td><td class="text-red">' + fmtRp(k) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\');closeModalDirect()">Detail</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\');closeModalDirect()">Edit</button></td></tr>';
+  }).join('');
+
+  var html = '<div style="font-size:0.88rem;line-height:1.9;margin-bottom:12px">'
+    + '<b>Akun:</b> ' + kode + ' — ' + (akun ? akun.nama : kode) + '<br>'
+    + '<b>Kategori:</b> ' + (akun ? akun.kategori : '-') + ' | <b>Tipe:</b> ' + (akun ? akun.tipe : '-') + '<br>'
+    + '<b>Total Debit:</b> <span class="text-green">' + fmtRp(s.debit) + '</span> | <b>Total Kredit:</b> <span class="text-red">' + fmtRp(s.kredit) + '</span><br>'
+    + '<b>Saldo Bersih:</b> <span class="fw-bold text-red">' + fmtRp((s.debit||0)-(s.kredit||0)) + '</span><br>'
+    + '<b>Jumlah jurnal:</b> ' + affected.length
+    + '</div>'
+    + '<div class="table-wrap" style="max-height:300px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>'
+    + rowsHtml
+    + (affected.length > 20 ? '<tr><td colspan="6" style="text-align:center;color:#888">... dan ' + (affected.length - 20) + ' jurnal lainnya</td></tr>' : '')
+    + '</tbody></table></div>'
+    + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+    + '<button class="btn btn-warning" onclick="buatJurnalKoreksiSaldo(\'' + kode + '\',' + ((s.debit||0)-(s.kredit||0)) + ');closeModalDirect()">🔧 Buat Jurnal Koreksi</button>'
+    + '<button class="btn btn-success" onclick="abaikanSaldoAnomali(\'' + kode + '\');closeModalDirect()">✅ Sudah Benar</button>'
+    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
+    + '</div>';
+
+  openModal(html, '👁️ Detail Saldo Anomali: ' + kode);
+}
+
+async function buatJurnalKoreksiSaldo(kode, saldoNegatif) {
+  var nominal = Math.abs(saldoNegatif);
+  if (nominal <= 0) { showAlert('Saldo sudah nol, tidak perlu koreksi', 'info'); return; }
+  var akunList = await getAkun();
+  var akun = akunList.find(function(a){ return a.kode === kode; });
+  var kat = akun ? akun.kategori : '';
+  var isDebitNormal = kat.includes('Aset') || kat.includes('Beban');
+
+  // Buat jurnal koreksi: jika akun debit-normal tapi saldo negatif, berarti kredit terlalu banyak → tambah debit
+  var lines;
+  if (isDebitNormal) {
+    lines = [
+      { akun: kode, ket: 'Koreksi saldo ' + kode, debit: nominal, kredit: 0 },
+      { akun: '3-1200', ket: 'Penyesuaian koreksi saldo', debit: 0, kredit: nominal }
+    ];
+  } else {
+    lines = [
+      { akun: '3-1200', ket: 'Penyesuaian koreksi saldo', debit: nominal, kredit: 0 },
+      { akun: kode, ket: 'Koreksi saldo ' + kode, debit: 0, kredit: nominal }
+    ];
+  }
+
+  if (!confirm('Buat jurnal koreksi untuk akun ' + kode + '?\n\nNominal: ' + fmtRp(nominal) + '\nAkun lawan: 3-1200 (Laba Ditahan)\n\nSaldo akan menjadi nol setelah koreksi.')) return;
+
+  var jId = genId('JU');
+  await KDB.save('jurnal', jId, {
+    id: jId, tanggal: today(), keterangan: 'Koreksi saldo anomali akun ' + kode,
+    noRef: jId, tipe: 'penyesuaian', sumber: 'ai-koreksi',
+    lines: lines, totalDebit: nominal, totalKredit: nominal,
+    createdBy: KU.username, createdAt: new Date().toISOString()
+  });
+  showAlert('Jurnal koreksi berhasil dibuat! Saldo akun ' + kode + ' akan kembali normal.');
+  runAIAnalysis();
+}
+
+function abaikanSaldoAnomali(kode) {
+  var excluded = JSON.parse(localStorage.getItem('k_saldo_anomali_excluded') || '[]');
+  excluded.push(kode);
+  localStorage.setItem('k_saldo_anomali_excluded', JSON.stringify(excluded));
+  showAlert('Akun ' + kode + ' ditandai sudah benar — tidak muncul lagi');
+  runAIAnalysis();
+}
+
 function abaikanSemuaOutlier() {
   if (!confirm('Tandai semua outlier sebagai "Sudah Benar"? Tidak akan muncul lagi di analisis.')) return;
   var excluded = JSON.parse(localStorage.getItem('k_outlier_excluded') || '[]');
@@ -6381,8 +6463,11 @@ async function runAIAnalysis() {
       updateProgress(10, 'Mengecek saldo normal...');
       try {
     var saldoAnomalies = [];
+    var saldoExcluded = JSON.parse(localStorage.getItem('k_saldo_anomali_excluded') || '[]');
     Object.keys(fd.saldo).forEach(function(kode) {
       var s = fd.saldo[kode];
+      if (!s) return;
+      if (saldoExcluded.indexOf(kode) >= 0) return;
       var d = s.debit || 0, k = s.kredit || 0;
       var kat = (s.akun && s.akun.kategori) || '';
       var nama = (s.akun && s.akun.nama) || kode;
@@ -6396,7 +6481,7 @@ async function runAIAnalysis() {
       }
     });
     if (saldoAnomalies.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Saldo Normal Anomali (' + saldoAnomalies.length + ' akun)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'monitor-buku-besar\')">📚 Buka Buku Besar</button> <button class="btn btn-warning btn-sm" onclick="navigate(\'setup-akun\')">📋 Edit COA</button>', detail: saldoAnomalies.slice(0,15).map(function(a) { return '<tr><td>' + a.kode + '</td><td>' + a.nama + '</td><td class="text-red">' + fmtRp(a.net) + '</td><td>' + a.expected + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="navigate(\'monitor-buku-besar\')">Buku Besar</button> <button class="btn btn-xs btn-warning" onclick="navigate(\'setup-akun\')">Edit COA</button></td></tr>'; }).join('') + (saldoAnomalies.length > 15 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (saldoAnomalies.length - 15) + ' akun lainnya</td></tr>' : ''), isTable: true, headers: '<th>Kode</th><th>Nama Akun</th><th>Saldo</th><th>Seharusnya</th><th>Aksi</th>', group: 'anomali', recommendation: 'Periksa ulang jurnal manual terkait akun-akun ini. Saldo yang berlawanan dengan tipe normal bisa mengindikasikan kesalahan pencatatan.' });
+      warnings.push({ severity: 'warning', title: '⚠️ Saldo Normal Anomali (' + saldoAnomalies.length + ' akun)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'monitor-buku-besar\')">📚 Buka Buku Besar</button> <button class="btn btn-warning btn-sm" onclick="navigate(\'setup-akun\')">📋 Edit COA</button>', detail: saldoAnomalies.slice(0,15).map(function(a) { return '<tr><td>' + a.kode + '</td><td>' + a.nama + '</td><td class="text-red">' + fmtRp(a.net) + '</td><td>' + a.expected + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewSaldoAnomali(\'' + a.kode + '\')">👁️ View</button> <button class="btn btn-xs btn-warning" onclick="buatJurnalKoreksiSaldo(\'' + a.kode + '\',' + a.net + ')">🔧 Koreksi</button> <button class="btn btn-xs btn-success" onclick="abaikanSaldoAnomali(\'' + a.kode + '\')">✅ Benar</button></td></tr>'; }).join('') + (saldoAnomalies.length > 15 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (saldoAnomalies.length - 15) + ' akun lainnya</td></tr>' : ''), isTable: true, headers: '<th>Kode</th><th>Nama Akun</th><th>Saldo</th><th>Seharusnya</th><th>Aksi</th>', group: 'anomali', recommendation: 'Periksa ulang jurnal manual terkait akun-akun ini. Saldo yang berlawanan dengan tipe normal bisa mengindikasikan kesalahan pencatatan.' });
     } else {
       info.push('✅ Semua akun memiliki saldo normal sesuai tipe');
     }
