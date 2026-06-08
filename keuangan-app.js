@@ -1640,6 +1640,7 @@ async function renderJurnalUmum() {
     + '<button class="btn btn-sm btn-outline" onclick="resetJurnalFilter()">Reset</button>'
     + (hasRole('admin') ? '<button class="btn btn-sm btn-danger" onclick="hapusSemuaJurnal()">Hapus Semua</button>' : '')
     + '<button class="btn btn-sm btn-outline" onclick="lihatTrashJurnal()" style="color:#888">🗑️ Tempat Sampah</button>'
+    + '<button class="btn btn-sm btn-outline" onclick="recoverDariLocalStorage()" style="color:#2e7d32">♻️ Recover</button>'
     + '</div></div>'
     + '<div id="jurnal-batch-bar" style="display:none;padding:8px 12px;background:#fff3e0;border-radius:8px;margin-bottom:8px;display:none;align-items:center;gap:8px">'
     + '<span id="jurnal-selected-count" style="font-size:0.85rem;font-weight:600">0 dipilih</span>'
@@ -1810,6 +1811,51 @@ async function kosongkanTrash() {
   showLoading(false);
   showAlert('Tempat sampah dikosongkan.');
   closeModalDirect();
+}
+
+// ===== RECOVER DATA DARI LOCALSTORAGE =====
+async function recoverDariLocalStorage() {
+  // Kumpulkan semua jurnal dari localStorage individual keys
+  var recovered = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var key = localStorage.key(i);
+    if (key && key.startsWith('k_jurnal_') && key !== 'k_jurnal_all' && key !== 'k_jurnal_trash_all') {
+      try {
+        var data = JSON.parse(localStorage.getItem(key));
+        if (data && data.id && data.tanggal) recovered.push(data);
+      } catch(e) {}
+    }
+  }
+  // Juga cek k_jurnal_all
+  try {
+    var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
+    allCache.forEach(function(j) {
+      if (j && j.id && !recovered.find(function(r){ return r.id === j.id; })) recovered.push(j);
+    });
+  } catch(e) {}
+
+  if (recovered.length === 0) { showAlert('Tidak ada data jurnal di localStorage untuk di-recover', 'warning'); return; }
+
+  // Bandingkan dengan yang ada di Firebase
+  var existing = await KDB.getAll('jurnal');
+  var existingIds = existing.map(function(j){ return j.id; });
+  var toRestore = recovered.filter(function(j) { return existingIds.indexOf(j.id) === -1; });
+
+  if (toRestore.length === 0) { showAlert('Semua data di localStorage sudah ada di database. Tidak perlu recover.', 'info'); return; }
+
+  if (!confirm('Ditemukan ' + toRestore.length + ' jurnal di localStorage yang TIDAK ada di database.\n\n(Dari total ' + recovered.length + ' jurnal di cache)\n\nRestore semua ke Firebase?')) return;
+
+  showLoading(true);
+  var count = 0;
+  for (var i = 0; i < toRestore.length; i++) {
+    try {
+      await KDB.save('jurnal', toRestore[i].id, toRestore[i]);
+      count++;
+    } catch(e) { console.warn('Recover error:', e); }
+  }
+  showLoading(false);
+  showAlert('Berhasil recover ' + count + ' jurnal dari localStorage ke Firebase!');
+  navigate('jurnal-umum');
 }
 
 async function hapusDuplikatJurnal(dupId, origId) {
