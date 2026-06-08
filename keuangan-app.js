@@ -4300,27 +4300,87 @@ async function viewBankRecDetail(kode, saldoSistem) {
   var allJ = await KDB.getAll('jurnal');
   var savedActual = parseFloat(localStorage.getItem('k_bankrec_actual_' + kode) || '0');
   var selisih = saldoSistem - savedActual;
+  var tahun = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahun, {});
+  var saldoAwal = parseFloat(saldoAwalData[kode]) || 0;
 
   // Ambil jurnal terkait akun ini, sort terbaru
   var related = allJ.filter(function(j) {
     return (j.lines||[]).some(function(l){ return l.akun === kode; });
   }).sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); });
 
+  // Hitung total debit dan kredit dari jurnal
+  var totalDebit = 0, totalKredit = 0;
+  related.forEach(function(j) {
+    (j.lines||[]).forEach(function(l) {
+      if (l.akun === kode) { totalDebit += l.debit||0; totalKredit += l.kredit||0; }
+    });
+  });
+
+  // Deteksi jurnal "pending" — 7 hari terakhir yang mungkin belum masuk bank
+  var now = new Date();
+  var weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+  var weekAgoStr = weekAgo.toISOString().split('T')[0];
+  var pendingJurnal = related.filter(function(j) { return j.tanggal >= weekAgoStr; });
+  var pendingDebit = 0, pendingKredit = 0;
+  pendingJurnal.forEach(function(j) {
+    (j.lines||[]).forEach(function(l) {
+      if (l.akun === kode) { pendingDebit += l.debit||0; pendingKredit += l.kredit||0; }
+    });
+  });
+
+  // Buat breakdown analisis selisih
+  var breakdownHtml = '';
+  if (savedActual && Math.abs(selisih) >= 1) {
+    breakdownHtml = '<div style="margin:14px 0;padding:12px;background:#fff8e1;border-radius:8px;border-left:4px solid #ff9800">'
+      + '<div style="font-weight:700;color:#e65100;margin-bottom:8px">🔍 Analisis Penyebab Selisih ' + fmtRp(selisih) + '</div>'
+      + '<table style="width:100%;font-size:0.85rem"><tbody>'
+      + '<tr><td>Saldo Awal (Setup)</td><td class="text-right fw-bold">' + fmtRp(saldoAwal) + '</td></tr>'
+      + '<tr><td>+ Total Debit (masuk) dari jurnal</td><td class="text-right text-green">' + fmtRp(totalDebit) + '</td></tr>'
+      + '<tr><td>- Total Kredit (keluar) dari jurnal</td><td class="text-right text-red">' + fmtRp(totalKredit) + '</td></tr>'
+      + '<tr style="border-top:2px solid #333"><td><b>= Saldo Sistem</b></td><td class="text-right fw-bold">' + fmtRp(saldoAwal + totalDebit - totalKredit) + '</td></tr>'
+      + '<tr><td><b>Saldo Aktual Rekening</b></td><td class="text-right fw-bold text-green">' + fmtRp(savedActual) + '</td></tr>'
+      + '<tr style="background:#ffebee"><td><b>Selisih</b></td><td class="text-right fw-bold text-red">' + fmtRp(selisih) + '</td></tr>'
+      + '</tbody></table>'
+      + '<div style="margin-top:10px;font-size:0.82rem;color:#555"><b>Kemungkinan penyebab:</b><ul style="margin:4px 0 0 16px;line-height:1.8">'
+      + (selisih > 0 ? '<li>Ada jurnal dana masuk yang belum realisasi di rekening (pending transfer)</li><li>Saldo awal yang di-set terlalu besar</li><li>Jurnal salah akun (harusnya akun lain)</li>' : '<li>Ada transaksi masuk di bank yang belum dijurnal</li><li>Saldo awal terlalu kecil</li>')
+      + '</ul></div></div>';
+
+    // Jurnal pending (7 hari terakhir)
+    if (pendingJurnal.length > 0) {
+      breakdownHtml += '<div style="margin:10px 0;padding:12px;background:#e3f2fd;border-radius:8px;border-left:4px solid #1976d2">'
+        + '<div style="font-weight:700;color:#1565c0;margin-bottom:6px">⏳ Kemungkinan Pending — Jurnal 7 Hari Terakhir (' + pendingJurnal.length + ' transaksi)</div>'
+        + '<div style="font-size:0.82rem;margin-bottom:6px">Debit (masuk): <b class="text-green">' + fmtRp(pendingDebit) + '</b> | Kredit (keluar): <b class="text-red">' + fmtRp(pendingKredit) + '</b> | Net: <b>' + fmtRp(pendingDebit - pendingKredit) + '</b></div>'
+        + '<div class="table-wrap" style="max-height:150px;overflow-y:auto"><table style="font-size:0.8rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>'
+        + pendingJurnal.slice(0,10).map(function(j) {
+          var d=0,k=0; (j.lines||[]).forEach(function(l){ if(l.akun===kode){d+=l.debit||0;k+=l.kredit||0;} });
+          return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id).substring(0,15) + '</td><td>' + (j.keterangan||'-').substring(0,30) + '</td><td class="text-green">' + (d?fmtRp(d):'-') + '</td><td class="text-red">' + (k?fmtRp(k):'-') + '</td></tr>';
+        }).join('')
+        + '</tbody></table></div>'
+        + '<div style="font-size:0.78rem;color:#666;margin-top:4px">Transaksi ini mungkin belum masuk/keluar di rekening bank karena masih dalam proses.</div></div>';
+    }
+  }
+
   var rowsHtml = related.slice(0, 20).map(function(j) {
     var lines = (j.lines||[]).filter(function(l){ return l.akun === kode; });
     var d = lines.reduce(function(s,l){ return s+(l.debit||0); },0);
     var k = lines.reduce(function(s,l){ return s+(l.kredit||0); },0);
-    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id).substring(0,20) + '</td><td>' + (j.keterangan||'-').substring(0,40) + '</td><td class="text-green">' + (d?fmtRp(d):'-') + '</td><td class="text-red">' + (k?fmtRp(k):'-') + '</td></tr>';
+    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id).substring(0,20) + '</td><td>' + (j.keterangan||'-').substring(0,40) + '</td><td class="text-green">' + (d?fmtRp(d):'-') + '</td><td class="text-red">' + (k?fmtRp(k):'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\');closeModalDirect()">Detail</button></td></tr>';
   }).join('');
 
   var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'
     + '<div style="background:#e3f2fd;border-radius:8px;padding:14px;text-align:center"><div style="font-size:0.75rem;color:#888">Saldo Sistem</div><div class="fw-bold" style="font-size:1.2rem;color:#1a237e">' + fmtRp(saldoSistem) + '</div></div>'
     + '<div style="background:#e8f5e9;border-radius:8px;padding:14px;text-align:center"><div style="font-size:0.75rem;color:#888">Saldo Aktual Rekening</div><div class="fw-bold" style="font-size:1.2rem;color:#2e7d32">' + (savedActual ? fmtRp(savedActual) : '<span style="color:#999">Belum diisi</span>') + '</div></div>'
     + '</div>'
-    + (savedActual ? '<div style="text-align:center;padding:10px;background:' + (Math.abs(selisih)<1?'#e8f5e9':'#ffebee') + ';border-radius:8px;margin-bottom:14px"><b>Selisih: </b><span class="fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '" style="font-size:1.1rem">' + fmtRp(selisih) + '</span>' + (selisih > 0 ? ' (Sistem lebih besar — kemungkinan ada dana masuk di jurnal yg belum masuk rekening)' : selisih < 0 ? ' (Rekening lebih besar — kemungkinan ada pemasukan yg belum dijurnal)' : ' ✓ Cocok!') + '</div>' : '')
-    + '<div style="font-weight:600;margin-bottom:6px">20 Jurnal Terakhir yang menggunakan akun ini:</div>'
-    + '<div class="table-wrap" style="max-height:300px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit (Masuk)</th><th>Kredit (Keluar)</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
-    + '<div style="margin-top:12px;font-size:0.82rem;color:#666"><b>Tips:</b> Bandingkan daftar jurnal di atas dengan mutasi rekening kamu. Cari transaksi yang ada di salah satu saja.</div>';
+    + (savedActual ? '<div style="text-align:center;padding:10px;background:' + (Math.abs(selisih)<1?'#e8f5e9':'#ffebee') + ';border-radius:8px;margin-bottom:14px"><b>Selisih: </b><span class="fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '" style="font-size:1.1rem">' + fmtRp(selisih) + '</span></div>' : '')
+    + breakdownHtml
+    + '<div style="font-weight:600;margin-bottom:6px">20 Jurnal Terakhir:</div>'
+    + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th><th>Aksi</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
+    + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+    + (savedActual && Math.abs(selisih)>=1 ? '<button class="btn btn-warning" onclick="koreksiSaldoAwalBank(\'' + kode + '\',' + saldoSistem + ',' + savedActual + ');closeModalDirect()">🔧 Koreksi Saldo Awal</button>' : '')
+    + '<button class="btn btn-info" onclick="navigate(\'monitor-buku-besar\');closeModalDirect()">📚 Buku Besar</button>'
+    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
+    + '</div>';
 
   openModal(html, '🏦 Detail Rekonsiliasi: ' + (akun ? akun.nama : kode));
 }
