@@ -6258,25 +6258,26 @@ async function callOpenRouterChat(msg, apiKey) {
     konteks += '\n- 10 transaksi petty cash terbaru:\n' + pcTerbaruStr + '\n';
 
     var systemMsg = 'Kamu adalah AI asisten keuangan perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas.\n\n'
-      + 'Kamu BISA mengakses dan memodifikasi data keuangan. Jika user minta aksi, taruh format ACTION di akhir pesan:\n'
+      + 'ATURAN PENTING:\n'
+      + '1. Jika user bertanya/minta ANALISA → JAWAB dengan analisa dari data yang tersedia. JANGAN langsung menawarkan aksi.\n'
+      + '2. Jika user EKSPLISIT minta aksi (buatkan jurnal, sinkronkan, hapus, fix) → baru tambahkan ACTION.\n'
+      + '3. JANGAN PERNAH menyarankan sinkronisasi petty cash kecuali user SECARA SPESIFIK minta soal petty cash.\n'
+      + '4. Jika user tanya soal selisih bank/mandiri/BNI → analisa dari data saldo akun yang tersedia, BUKAN dari petty cash.\n'
+      + '5. Jawab SESUAI dengan apa yang ditanya. Jangan melenceng ke topik lain.\n\n'
+      + 'FORMAT AKSI (hanya jika user eksplisit minta aksi):\n'
       + '###ACTION:{"type":"jurnal","tanggal":"YYYY-MM-DD","keterangan":"...","lines":[{"akun":"kode","ket":"...","debit":0,"kredit":0}]}###\n'
       + '###ACTION:{"type":"topup_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"..."}###\n'
       + '###ACTION:{"type":"pengeluaran_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"...","akunBeban":"kode"}###\n'
       + '###ACTION:{"type":"reklasifikasi","jurnal_id":"...","akun_asal":"kode","akun_tujuan":"kode"}###\n'
       + '###ACTION:{"type":"hapus_jurnal","id":"jurnal_id","alasan":"..."}###\n'
-      + '###ACTION:{"type":"fix_coa_jurnal","akun_lama":"kode","akun_baru":"kode"}###\n\n'
+      + '###ACTION:{"type":"fix_coa_jurnal","akun_lama":"kode","akun_baru":"kode"}###\n'
       + '###ACTION:{"type":"sinkron_pc"}###\n\n'
-      + 'PENTING:\n'
-      + '- Selalu jelaskan dulu, baru tambahkan ACTION di akhir\n'
-      + '- Kamu punya akses PENUH ke data petty cash, jurnal, COA\n'
-      + '- Jika user minta sinkronisasi/perbaikan data, lakukan langsung\n'
-      + '- Jika hanya tanya, jawab tanpa ACTION\n\n'
-      + 'Konteks:\n' + konteks;
+      + 'Konteks data:\n' + konteks;
 
     var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.href, 'X-Title': 'IJEF Keuangan' },
-      body: JSON.stringify({ model: 'google/gemma-4-31b-it:free', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
+      body: JSON.stringify({ model: 'moonshotai/kimi-k2.6:free', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
     });
     if (!response.ok) {
       var errData = await response.json().catch(function(){ return {}; });
