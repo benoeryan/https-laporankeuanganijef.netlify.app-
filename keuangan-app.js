@@ -1641,6 +1641,7 @@ async function renderJurnalUmum() {
     + (hasRole('admin') ? '<button class="btn btn-sm btn-danger" onclick="hapusSemuaJurnal()">Hapus Semua</button>' : '')
     + '<button class="btn btn-sm btn-outline" onclick="lihatTrashJurnal()" style="color:#888">🗑️ Tempat Sampah</button>'
     + '<button class="btn btn-sm btn-outline" onclick="recoverDariLocalStorage()" style="color:#2e7d32">♻️ Recover</button>'
+    + '<button class="btn btn-sm btn-outline" onclick="integrasiPermohonanDanaMasukKeJurnal()" style="color:#1a237e">🔗 Integrasi PD & DM</button>'
     + '</div></div>'
     + '<div id="jurnal-batch-bar" style="display:none;padding:8px 12px;background:#fff3e0;border-radius:8px;margin-bottom:8px;display:none;align-items:center;gap:8px">'
     + '<span id="jurnal-selected-count" style="font-size:0.85rem;font-weight:600">0 dipilih</span>'
@@ -1855,6 +1856,84 @@ async function recoverDariLocalStorage() {
   }
   showLoading(false);
   showAlert('Berhasil recover ' + count + ' jurnal dari localStorage ke Firebase!');
+  navigate('jurnal-umum');
+}
+
+// ===== INTEGRASI BATCH: Permohonan Dana & Dana Masuk → Jurnal =====
+async function integrasiPermohonanDanaMasukKeJurnal() {
+  var allPD = await KDB.getAll('permohonan');
+  var allDM = await KDB.getAll('danamasuk');
+
+  // Filter: Approved Final & belum punya jurnal
+  var pdBelumJurnal = allPD.filter(function(p) { return p.status === 'Approved Final' && !p.jurnalId; });
+  var dmBelumJurnal = allDM.filter(function(d) { return d.status === 'Approved Final' && !d.jurnalId; });
+
+  var totalPD = pdBelumJurnal.reduce(function(s,p){ return s+(parseFloat(p.nominal)||0); },0);
+  var totalDM = dmBelumJurnal.reduce(function(s,d){ return s+(parseFloat(d.nominal)||0); },0);
+
+  if (pdBelumJurnal.length === 0 && dmBelumJurnal.length === 0) {
+    showAlert('Semua Permohonan Dana dan Dana Masuk yang Approved sudah terintegrasi jurnal!', 'info');
+    return;
+  }
+
+  if (!confirm('Integrasikan ke Jurnal:\n\n'
+    + '• Permohonan Dana (Approved, belum dijurnal): ' + pdBelumJurnal.length + ' transaksi — Total ' + fmtRp(totalPD) + '\n'
+    + '• Dana Masuk (Approved, belum dijurnal): ' + dmBelumJurnal.length + ' transaksi — Total ' + fmtRp(totalDM) + '\n\n'
+    + 'Buat jurnal otomatis untuk semua?')) return;
+
+  showLoading(true);
+  var count = 0;
+
+  // Proses Permohonan Dana → Jurnal (Debit Beban, Kredit Kas/Bank)
+  for (var i = 0; i < pdBelumJurnal.length; i++) {
+    var p = pdBelumJurnal[i];
+    var akunDebit = p.akunDebit || '5-2200';
+    var akunKredit = p.akunKredit || await getAkunKasBank();
+    var jurnalId = genId('JU');
+    await KDB.save('jurnal', jurnalId, {
+      id: jurnalId,
+      tanggal: p.tanggal || today(),
+      keterangan: p.keterangan || ('Pembayaran - ' + p.namaPemohon),
+      noRef: p.noPOInvoice || p.id,
+      tipe: 'umum', sumber: 'permohonan-dana',
+      meta: { permohonanId: p.id, pemohon: p.namaPemohon },
+      lines: [
+        { akun: akunDebit, ket: p.keterangan || ('Pembayaran ' + p.namaPemohon), debit: p.nominal, kredit: 0 },
+        { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank||'Bank'), debit: 0, kredit: p.nominal }
+      ],
+      totalDebit: p.nominal, totalKredit: p.nominal,
+      createdBy: 'system-integrasi', createdAt: new Date().toISOString()
+    });
+    await KDB.save('permohonan', p.id, Object.assign({}, p, { jurnalId: jurnalId, jurnalCreatedAt: new Date().toISOString() }));
+    count++;
+  }
+
+  // Proses Dana Masuk → Jurnal (Debit Kas/Bank, Kredit Pendapatan)
+  for (var i = 0; i < dmBelumJurnal.length; i++) {
+    var d = dmBelumJurnal[i];
+    var akunDebitDM = d.akunTerima || await getAkunKasBank();
+    var akunKreditDM = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-')) ? d.kategori : '4-1000';
+    var jurnalIdDM = genId('JU');
+    await KDB.save('jurnal', jurnalIdDM, {
+      id: jurnalIdDM,
+      tanggal: d.tanggal || today(),
+      keterangan: d.keterangan || ('Dana masuk dari ' + d.sumber),
+      noRef: d.noRef || d.id,
+      tipe: 'umum', sumber: 'dana-masuk',
+      meta: { danaMasukId: d.id, sumber: d.sumber },
+      lines: [
+        { akun: akunDebitDM, ket: 'Dana masuk dari ' + d.sumber, debit: d.nominal, kredit: 0 },
+        { akun: akunKreditDM, ket: d.keterangan || d.sumber, debit: 0, kredit: d.nominal }
+      ],
+      totalDebit: d.nominal, totalKredit: d.nominal,
+      createdBy: 'system-integrasi', createdAt: new Date().toISOString()
+    });
+    await KDB.save('danamasuk', d.id, Object.assign({}, d, { jurnalId: jurnalIdDM, jurnalCreatedAt: new Date().toISOString() }));
+    count++;
+  }
+
+  showLoading(false);
+  showAlert('Berhasil integrasikan ' + count + ' transaksi ke jurnal! (' + pdBelumJurnal.length + ' permohonan + ' + dmBelumJurnal.length + ' dana masuk)');
   navigate('jurnal-umum');
 }
 
