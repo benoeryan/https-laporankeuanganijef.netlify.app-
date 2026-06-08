@@ -1639,6 +1639,7 @@ async function renderJurnalUmum() {
     + '<button class="btn btn-sm btn-primary" onclick="applyJurnalFilter()">🔍 Cari</button>'
     + '<button class="btn btn-sm btn-outline" onclick="resetJurnalFilter()">Reset</button>'
     + (hasRole('admin') ? '<button class="btn btn-sm btn-danger" onclick="hapusSemuaJurnal()">Hapus Semua</button>' : '')
+    + '<button class="btn btn-sm btn-outline" onclick="lihatTrashJurnal()" style="color:#888">🗑️ Tempat Sampah</button>'
     + '</div></div>'
     + '<div id="jurnal-batch-bar" style="display:none;padding:8px 12px;background:#fff3e0;border-radius:8px;margin-bottom:8px;display:none;align-items:center;gap:8px">'
     + '<span id="jurnal-selected-count" style="font-size:0.85rem;font-weight:600">0 dipilih</span>'
@@ -1696,12 +1697,25 @@ async function simpanJurnal() {
 }
 
 async function hapusJurnal(id) {
-  if (!confirm('Hapus jurnal ini? Tindakan ini tidak dapat dibatalkan.')) return;
-  // Check if this jurnal was auto-created from permohonan/danamasuk
+  // Step 1: Konfirmasi pertama
+  if (!confirm('Hapus jurnal ini?\n\nData akan dipindahkan ke Tempat Sampah dan bisa di-restore nanti.')) return;
+
   const jurnal = await KDB.getAll('jurnal');
   const j = jurnal.find(function(x){ return x.id === id; });
-  if (j && j.meta) {
-    // Unlink from permohonan
+  if (!j) { showAlert('Jurnal tidak ditemukan', 'warning'); return; }
+
+  // Step 2: Konfirmasi ganda untuk nominal besar (> 10jt)
+  if ((j.totalDebit||0) > 10000000) {
+    var konfirmasi = prompt('Jurnal ini bernominal besar (' + fmtRp(j.totalDebit) + ').\nKetik "HAPUS" untuk konfirmasi:');
+    if (konfirmasi !== 'HAPUS') { showAlert('Penghapusan dibatalkan', 'info'); return; }
+  }
+
+  // Step 3: Backup ke trash (soft delete)
+  var trashItem = Object.assign({}, j, { deletedAt: new Date().toISOString(), deletedBy: KU.username });
+  await KDB.save('jurnal_trash', id, trashItem);
+
+  // Step 4: Unlink dari permohonan/danamasuk
+  if (j.meta) {
     if (j.meta.permohonanId) {
       const pdList = await KDB.getAll('permohonan');
       const pd = pdList.find(function(x){ return x.id === j.meta.permohonanId; });
@@ -1709,7 +1723,6 @@ async function hapusJurnal(id) {
         await KDB.save('permohonan', pd.id, Object.assign({}, pd, { jurnalId: null, jurnalCreatedAt: null }));
       }
     }
-    // Unlink from danamasuk
     if (j.meta.danaMasukId) {
       const dmList = await KDB.getAll('danamasuk');
       const dm = dmList.find(function(x){ return x.id === j.meta.danaMasukId; });
@@ -1718,13 +1731,85 @@ async function hapusJurnal(id) {
       }
     }
   }
+
+  // Step 5: Hapus dari collection utama
   await KDB.delete('jurnal', id);
-  // Force refresh local cache from Firebase to ensure consistency
   await KDB.getAll('jurnal');
-  showAlert('Jurnal dihapus.', 'warning');
-  navigate('jurnal-umum');
-  setTimeout(reapplyJurnalFilter, 500);
-  setTimeout(reapplyJurnalFilter, 1000);
+  showAlert('Jurnal dipindahkan ke Tempat Sampah. Bisa di-restore dari menu Admin.', 'warning');
+  if (currentSection === 'jurnal-umum') { navigate('jurnal-umum'); setTimeout(reapplyJurnalFilter, 500); }
+  else if (currentSection === 'ai-assistant') { runAIAnalysis(); }
+  else { navigate(currentSection); }
+}
+
+// ===== TEMPAT SAMPAH & RESTORE =====
+async function lihatTrashJurnal() {
+  var trash = await KDB.getAll('jurnal_trash');
+  if (!trash.length) { showAlert('Tempat sampah kosong', 'info'); return; }
+  var rows = trash.sort(function(a,b){ return (b.deletedAt||'').localeCompare(a.deletedAt||''); }).slice(0,30).map(function(j) {
+    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td>' + fmtRp(j.totalDebit||0) + '</td><td>' + fmtDate(j.deletedAt) + '</td><td>' + (j.deletedBy||'-') + '</td>'
+      + '<td class="tbl-actions"><button class="btn btn-xs btn-success" onclick="restoreJurnal(\'' + j.id + '\')">♻️ Restore</button> <button class="btn btn-xs btn-danger" onclick="hapusPermanen(\'' + j.id + '\')">🗑️ Hapus Permanen</button></td></tr>';
+  }).join('');
+  openModal('<div class="alert alert-info">Jurnal yang dihapus bisa di-restore kembali ke sistem.</div>'
+    + '<div class="table-wrap" style="max-height:400px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Nominal</th><th>Dihapus</th><th>Oleh</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:center">'
+    + '<button class="btn btn-success" onclick="restoreSemuaTrash()">♻️ Restore Semua (' + trash.length + ')</button>'
+    + '<button class="btn btn-danger" onclick="kosongkanTrash()">🗑️ Kosongkan Tempat Sampah</button>'
+    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button></div>',
+    '🗑️ Tempat Sampah Jurnal (' + trash.length + ')');
+}
+
+async function restoreJurnal(id) {
+  var trash = await KDB.getAll('jurnal_trash');
+  var j = trash.find(function(x){ return x.id === id; });
+  if (!j) { showAlert('Data tidak ditemukan di tempat sampah', 'warning'); return; }
+  // Hapus field trash
+  delete j.deletedAt;
+  delete j.deletedBy;
+  // Restore ke jurnal utama
+  await KDB.save('jurnal', id, j);
+  // Hapus dari trash
+  await KDB.delete('jurnal_trash', id);
+  showAlert('Jurnal berhasil di-restore!');
+  lihatTrashJurnal(); // Refresh modal
+}
+
+async function restoreSemuaTrash() {
+  var trash = await KDB.getAll('jurnal_trash');
+  if (!trash.length) return;
+  if (!confirm('Restore semua ' + trash.length + ' jurnal dari tempat sampah?')) return;
+  showLoading(true);
+  for (var i = 0; i < trash.length; i++) {
+    var j = Object.assign({}, trash[i]);
+    delete j.deletedAt;
+    delete j.deletedBy;
+    await KDB.save('jurnal', j.id, j);
+    await KDB.delete('jurnal_trash', j.id);
+  }
+  showLoading(false);
+  showAlert(trash.length + ' jurnal berhasil di-restore!');
+  closeModalDirect();
+}
+
+async function hapusPermanen(id) {
+  if (!confirm('HAPUS PERMANEN? Data tidak bisa dikembalikan lagi!')) return;
+  var konfirmasi = prompt('Ketik "HAPUS PERMANEN" untuk konfirmasi:');
+  if (konfirmasi !== 'HAPUS PERMANEN') { showAlert('Dibatalkan', 'info'); return; }
+  await KDB.delete('jurnal_trash', id);
+  showAlert('Jurnal dihapus permanen.');
+  lihatTrashJurnal();
+}
+
+async function kosongkanTrash() {
+  var trash = await KDB.getAll('jurnal_trash');
+  if (!trash.length) return;
+  if (!confirm('KOSONGKAN TEMPAT SAMPAH?\n\n' + trash.length + ' jurnal akan dihapus PERMANEN.\nTidak bisa dikembalikan!')) return;
+  var konfirmasi = prompt('Ketik "KOSONGKAN" untuk konfirmasi:');
+  if (konfirmasi !== 'KOSONGKAN') { showAlert('Dibatalkan', 'info'); return; }
+  showLoading(true);
+  for (var i = 0; i < trash.length; i++) { await KDB.delete('jurnal_trash', trash[i].id); }
+  showLoading(false);
+  showAlert('Tempat sampah dikosongkan.');
+  closeModalDirect();
 }
 
 async function hapusDuplikatJurnal(dupId, origId) {
@@ -2126,14 +2211,24 @@ async function hapusJurnalTerpilih() {
   var ids = [];
   checked.forEach(function(chk) { ids.push(chk.value); });
   if (ids.length === 0) { showAlert('Tidak ada jurnal yang dipilih', 'warning'); return; }
-  if (!confirm('Hapus ' + ids.length + ' jurnal yang dipilih?\n\nTindakan ini TIDAK BISA DIBATALKAN!')) return;
+  if (!confirm('Pindahkan ' + ids.length + ' jurnal ke Tempat Sampah?\n\nData bisa di-restore nanti.')) return;
+  // Konfirmasi ganda jika banyak
+  if (ids.length > 10) {
+    var konfirmasi = prompt('Anda akan menghapus ' + ids.length + ' jurnal.\nKetik "HAPUS" untuk konfirmasi:');
+    if (konfirmasi !== 'HAPUS') { showAlert('Dibatalkan', 'info'); return; }
+  }
   showLoading(true);
+  var allJ = await KDB.getAll('jurnal');
   for (var i = 0; i < ids.length; i++) {
+    var j = allJ.find(function(x){ return x.id === ids[i]; });
+    if (j) {
+      await KDB.save('jurnal_trash', j.id, Object.assign({}, j, { deletedAt: new Date().toISOString(), deletedBy: KU.username }));
+    }
     await KDB.delete('jurnal', ids[i]);
   }
   await KDB.getAll('jurnal');
   showLoading(false);
-  showAlert(ids.length + ' jurnal berhasil dihapus!', 'warning');
+  showAlert(ids.length + ' jurnal dipindahkan ke Tempat Sampah!', 'warning');
   navigate('jurnal-umum');
   setTimeout(reapplyJurnalFilter, 500);
 }
