@@ -4360,16 +4360,35 @@ async function prosesCSVBank() {
   var totalCSV = csvData.reduce(function(s,c){ return s + (c.debit||0) - (c.kredit||0); }, 0);
   var totalJurnal = jurnalAkun.reduce(function(s,j){ return s + (j.debit||0) - (j.kredit||0); }, 0);
 
+  // Hitung total nominal per kategori
+  var totalCSVOnlyDebit = csvOnly.reduce(function(s,c){ return s + (c.debit||0); }, 0);
+  var totalCSVOnlyKredit = csvOnly.reduce(function(s,c){ return s + (c.kredit||0); }, 0);
+  var totalCSVOnlyNet = totalCSVOnlyKredit - totalCSVOnlyDebit; // kredit=masuk, debit=keluar dari bank
+  var totalJOnlyDebit = jurnalOnly.reduce(function(s,j){ return s + (j.debit||0); }, 0);
+  var totalJOnlyKredit = jurnalOnly.reduce(function(s,j){ return s + (j.kredit||0); }, 0);
+  var totalJOnlyNet = totalJOnlyDebit - totalJOnlyKredit; // debit=masuk di jurnal bank, kredit=keluar
+  var selisihTotal = totalJOnlyNet - totalCSVOnlyNet;
+
   var html = '<div class="stats-row">'
     + '<div class="stat-box"><div class="val">' + csvData.length + '</div><div class="lbl">Transaksi CSV</div></div>'
     + '<div class="stat-box"><div class="val">' + jurnalAkun.length + '</div><div class="lbl">Transaksi Jurnal</div></div>'
     + '<div class="stat-box green"><div class="val">' + matched.length + '</div><div class="lbl">Cocok</div></div>'
     + '<div class="stat-box ' + (csvOnly.length?'red':'green') + '"><div class="val">' + csvOnly.length + '</div><div class="lbl">Hanya di Bank</div></div>'
     + '<div class="stat-box ' + (jurnalOnly.length?'orange':'green') + '"><div class="val">' + jurnalOnly.length + '</div><div class="lbl">Hanya di Jurnal</div></div>'
+    + '</div>'
+    // Ringkasan nominal
+    + '<div style="margin-top:12px;padding:12px;background:#f8f9ff;border-radius:8px;border-left:4px solid #1a237e">'
+    + '<div style="font-weight:700;margin-bottom:8px;color:#1a237e">💰 Ringkasan Nominal Selisih</div>'
+    + '<table style="width:100%;font-size:0.85rem"><tbody>'
+    + '<tr><td>Total hanya di Bank (belum dijurnal)</td><td class="text-right">Debit: <b class="text-red">' + fmtRp(totalCSVOnlyDebit) + '</b></td><td class="text-right">Kredit: <b class="text-green">' + fmtRp(totalCSVOnlyKredit) + '</b></td><td class="text-right fw-bold">Net: ' + fmtRp(totalCSVOnlyNet) + '</td></tr>'
+    + '<tr><td>Total hanya di Jurnal (tidak di bank)</td><td class="text-right">Debit: <b class="text-green">' + fmtRp(totalJOnlyDebit) + '</b></td><td class="text-right">Kredit: <b class="text-red">' + fmtRp(totalJOnlyKredit) + '</b></td><td class="text-right fw-bold">Net: ' + fmtRp(totalJOnlyNet) + '</td></tr>'
+    + '<tr style="border-top:2px solid #333"><td><b>Selisih Bersih</b></td><td colspan="2"></td><td class="text-right fw-bold ' + (Math.abs(selisihTotal)<1?'text-green':'text-red') + '" style="font-size:1.05rem">' + fmtRp(selisihTotal) + '</td></tr>'
+    + '</tbody></table>'
+    + '<div style="font-size:0.78rem;color:#666;margin-top:6px">Selisih ini menjelaskan perbedaan antara saldo di sistem vs saldo aktual bank.</div>'
     + '</div>';
 
   if (csvOnly.length > 0) {
-    html += '<div style="margin-top:12px"><div class="fw-bold" style="color:#c62828;margin-bottom:6px">🔴 Ada di Bank tapi TIDAK ada di Jurnal (' + csvOnly.length + '):</div>'
+    html += '<div style="margin-top:12px"><div class="fw-bold" style="color:#c62828;margin-bottom:6px">🔴 Ada di Bank tapi TIDAK ada di Jurnal (' + csvOnly.length + ' — total ' + fmtRp(totalCSVOnlyDebit + totalCSVOnlyKredit) + '):</div>'
       + '<div style="margin-bottom:8px"><button class="btn btn-sm btn-success" onclick="buatJurnalDariCSVAll()">📓 Buatkan Jurnal Semua (' + csvOnly.length + ')</button> <span style="font-size:0.8rem;color:#888">Buat jurnal otomatis untuk semua transaksi bank yang belum tercatat</span></div>'
       + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem" id="tbl-csv-only"><thead><tr><th style="width:28px"><input type="checkbox" onchange="toggleCSVOnlyAll(this.checked)"></th><th>Tanggal</th><th>Keterangan</th><th>Debit (Keluar)</th><th>Kredit (Masuk)</th><th>Aksi</th></tr></thead><tbody>'
       + csvOnly.map(function(c,idx){ return '<tr><td><input type="checkbox" class="csv-only-chk" value="' + idx + '"></td><td>' + c.tanggal + '</td><td>' + c.ket + '</td><td class="text-red">' + (c.debit?fmtRp(c.debit):'-') + '</td><td class="text-green">' + (c.kredit?fmtRp(c.kredit):'-') + '</td><td><button class="btn btn-xs btn-success" onclick="buatJurnalDariCSVItem(' + idx + ')">📓 Jurnal</button></td></tr>'; }).join('')
