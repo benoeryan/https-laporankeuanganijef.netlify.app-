@@ -6351,7 +6351,62 @@ async function localAIReply(msg) {
     return 'Sebutkan jumlah dan keterangan. Contoh:\n"Catat pengeluaran petty cash 50000 beli ATK"';
   }
 
-  if (lower.includes('saldo') || lower.includes('kas') || lower.includes('petty')) {
+  // Deteksi pertanyaan tentang selisih/analisa bank tertentu (bukan petty cash)
+  if ((lower.includes('selisih') || lower.includes('analisa') || lower.includes('analisis') || lower.includes('inkonsistensi') || lower.includes('buku besar')) && (lower.includes('bank') || lower.includes('mandiri') || lower.includes('bni'))) {
+    var akunList2 = await getAkun();
+    // Cari akun bank yang dimaksud
+    var targetAkun = null;
+    akunList2.forEach(function(a) {
+      var n = (a.nama||'').toLowerCase();
+      if (lower.includes('mandiri') && n.includes('mandiri')) targetAkun = a;
+      else if (lower.includes('bni') && n.includes('bni')) targetAkun = a;
+      else if (!targetAkun && n.includes('bank') && a.kategori === 'Aset Lancar') targetAkun = a;
+    });
+    if (targetAkun) {
+      var s = fd.saldo[targetAkun.kode] || { debit: 0, kredit: 0 };
+      var saldoSistem = (s.debit||0) - (s.kredit||0);
+      // Cari 10 jurnal terbesar yang menggunakan akun ini
+      var relatedJ = [];
+      jurnal.forEach(function(j) {
+        (j.lines||[]).forEach(function(l) {
+          if (l.akun === targetAkun.kode) {
+            relatedJ.push({ tanggal: j.tanggal, ket: j.keterangan||l.ket, debit: l.debit||0, kredit: l.kredit||0, ref: j.noRef||j.id });
+          }
+        });
+      });
+      relatedJ.sort(function(a,b){ return (b.debit+b.kredit)-(a.debit+a.kredit); });
+      var top5 = relatedJ.slice(0,5).map(function(r) {
+        return '  ' + (r.tanggal||'-') + ' | ' + (r.debit?'D:'+fmtRp(r.debit):'K:'+fmtRp(r.kredit)) + ' | ' + (r.ket||'-');
+      }).join('\n');
+      var totalDebit = relatedJ.reduce(function(s,r){ return s+r.debit; },0);
+      var totalKredit = relatedJ.reduce(function(s,r){ return s+r.kredit; },0);
+
+      return 'Analisis akun ' + targetAkun.kode + ' (' + targetAkun.nama + '):\n\n'
+        + '• Saldo di sistem: ' + fmtRp(saldoSistem) + '\n'
+        + '• Total debit (masuk): ' + fmtRp(totalDebit) + '\n'
+        + '• Total kredit (keluar): ' + fmtRp(totalKredit) + '\n'
+        + '• Jumlah transaksi: ' + relatedJ.length + '\n\n'
+        + '5 transaksi terbesar:\n' + top5 + '\n\n'
+        + 'Untuk mencari penyebab selisih:\n'
+        + '1. Buka menu Bank Reconcile → isi saldo aktual rekening\n'
+        + '2. Klik Detail untuk lihat semua jurnal\n'
+        + '3. Bandingkan dengan mutasi bank (upload CSV)\n\n'
+        + 'Atau isi saldo aktual di bawah agar saya hitung selisihnya.';
+    }
+  }
+
+  // Deteksi pertanyaan saldo — prioritaskan bank jika disebut, baru petty cash
+  if ((lower.includes('saldo') || lower.includes('kas')) && !lower.includes('petty') && (lower.includes('bank') || lower.includes('mandiri') || lower.includes('bni'))) {
+    var akunList3 = await getAkun();
+    var bankAkuns = akunList3.filter(function(a){ return a.kategori === 'Aset Lancar' && (a.nama||'').toLowerCase().match(/bank|mandiri|bni/); });
+    var saldoInfo = bankAkuns.map(function(a) {
+      var s = fd.saldo[a.kode] || { debit: 0, kredit: 0 };
+      return '• ' + a.kode + ' (' + a.nama + '): ' + fmtRp((s.debit||0)-(s.kredit||0));
+    }).join('\n');
+    return 'Posisi saldo Kas & Bank saat ini:\n\n' + saldoInfo + '\n\nUntuk rekonsiliasi dengan saldo aktual, buka menu Bank Reconcile.';
+  }
+
+  if (lower.includes('saldo') || lower.includes('petty') || (lower.includes('kas') && lower.includes('kecil'))) {
     var tahun = new Date().getFullYear();
     var pcTahunIni = pcList.filter(function(p) { return p.tanggal && p.tanggal.startsWith(String(tahun)); });
     var masuk = 0, keluar = 0;
