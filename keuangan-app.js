@@ -4227,6 +4227,17 @@ async function renderBankRec() {
     + '<button class="btn btn-sm btn-success" onclick="simpanSaldoAktualBank()">💾 Simpan Saldo Aktual</button></div>'
     + '<div class="alert alert-info" style="font-size:0.83rem">Isi saldo aktual rekening (dari mobile banking / statement) lalu klik Simpan. Sistem otomatis hitung selisih.</div>'
     + '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama Akun</th><th class="text-right">Saldo Sistem</th><th class="text-right">Saldo Aktual Rekening</th><th class="text-right">Selisih</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + bankSummaryHtml + '</tbody></table></div></div>'
+    // Upload CSV mutasi bank
+    + '<div class="card"><div class="card-header"><h2>📄 Import Mutasi Bank (CSV)</h2></div>'
+    + '<div class="alert alert-info" style="font-size:0.83rem">Upload file CSV mutasi dari internet/mobile banking. Sistem akan membandingkan otomatis dengan jurnal.</div>'
+    + '<div class="form-grid">'
+    + '<div class="fg"><label>Pilih Akun Bank</label><select id="csv-bank-akun" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%"><option value="">-- Pilih Akun --</option>' + bankOpts + '</select></div>'
+    + '<div class="fg"><label>Upload CSV Mutasi</label><input type="file" id="csv-bank-file" accept=".csv,.txt" style="padding:6px;border:1.5px solid #ddd;border-radius:7px;font-size:0.85rem;width:100%"></div>'
+    + '</div>'
+    + '<div style="margin-top:8px;font-size:0.78rem;color:#888">Format CSV: Tanggal, Keterangan, Debit/Kredit, Nominal (atau format bank Mandiri/BNI/BCA otomatis dideteksi)</div>'
+    + '<div class="mt-12"><button class="btn btn-primary" onclick="prosesCSVBank()">📊 Proses & Bandingkan</button></div>'
+    + '<div id="csv-bank-result" style="margin-top:12px"></div>'
+    + '</div>'
     // Form rekonsiliasi detail
     + '<div class="card"><div class="card-header"><h2>📋 Rekonsiliasi Detail (Standar)</h2></div>'
     + '<div style="margin-bottom:12px"><div class="fw-bold" style="margin-bottom:6px;font-size:0.85rem">Pilih Bulan:</div>' + monthBtns + '</div>'
@@ -4288,6 +4299,163 @@ async function viewBankRecDetail(kode, saldoSistem) {
     + '<div style="margin-top:12px;font-size:0.82rem;color:#666"><b>Tips:</b> Bandingkan daftar jurnal di atas dengan mutasi rekening kamu. Cari transaksi yang ada di salah satu saja.</div>';
 
   openModal(html, '🏦 Detail Rekonsiliasi: ' + (akun ? akun.nama : kode));
+}
+
+async function prosesCSVBank() {
+  var akunKode = (document.getElementById('csv-bank-akun')||{}).value;
+  var fileInput = document.getElementById('csv-bank-file');
+  var resultEl = document.getElementById('csv-bank-result');
+  if (!akunKode) { showAlert('Pilih akun bank dulu!', 'danger'); return; }
+  if (!fileInput || !fileInput.files.length) { showAlert('Pilih file CSV!', 'danger'); return; }
+
+  var file = fileInput.files[0];
+  var text = await file.text();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim().length > 0; });
+  if (lines.length < 2) { showAlert('File CSV kosong atau tidak valid', 'danger'); return; }
+
+  // Parse CSV — deteksi otomatis format
+  var csvData = parseCSVMutasi(lines);
+  if (!csvData.length) { showAlert('Gagal parse CSV. Pastikan format benar.', 'danger'); return; }
+
+  // Ambil jurnal untuk akun ini
+  var allJ = await KDB.getAll('jurnal');
+  var jurnalAkun = [];
+  allJ.forEach(function(j) {
+    (j.lines||[]).forEach(function(l) {
+      if (l.akun === akunKode) {
+        jurnalAkun.push({ tanggal: j.tanggal, ket: j.keterangan||l.ket||'', debit: l.debit||0, kredit: l.kredit||0, ref: j.noRef||j.id, id: j.id });
+      }
+    });
+  });
+
+  // Bandingkan: cari transaksi yang ada di CSV tapi tidak di jurnal, dan sebaliknya
+  var matched = [], csvOnly = [], jurnalOnly = [];
+  var jurnalUsed = {};
+
+  csvData.forEach(function(csv) {
+    var found = false;
+    for (var i = 0; i < jurnalAkun.length; i++) {
+      if (jurnalUsed[i]) continue;
+      var j = jurnalAkun[i];
+      // Match jika tanggal sama dan nominal mirip (toleransi 1 rupiah)
+      var csvAmt = csv.debit || csv.kredit;
+      var jAmt = j.debit || j.kredit;
+      if (j.tanggal === csv.tanggal && Math.abs(csvAmt - jAmt) < 2) {
+        matched.push({ csv: csv, jurnal: j });
+        jurnalUsed[i] = true;
+        found = true;
+        break;
+      }
+    }
+    if (!found) csvOnly.push(csv);
+  });
+
+  jurnalAkun.forEach(function(j, i) {
+    if (!jurnalUsed[i]) jurnalOnly.push(j);
+  });
+
+  // Render hasil
+  var totalCSV = csvData.reduce(function(s,c){ return s + (c.debit||0) - (c.kredit||0); }, 0);
+  var totalJurnal = jurnalAkun.reduce(function(s,j){ return s + (j.debit||0) - (j.kredit||0); }, 0);
+
+  var html = '<div class="stats-row">'
+    + '<div class="stat-box"><div class="val">' + csvData.length + '</div><div class="lbl">Transaksi CSV</div></div>'
+    + '<div class="stat-box"><div class="val">' + jurnalAkun.length + '</div><div class="lbl">Transaksi Jurnal</div></div>'
+    + '<div class="stat-box green"><div class="val">' + matched.length + '</div><div class="lbl">Cocok</div></div>'
+    + '<div class="stat-box ' + (csvOnly.length?'red':'green') + '"><div class="val">' + csvOnly.length + '</div><div class="lbl">Hanya di Bank</div></div>'
+    + '<div class="stat-box ' + (jurnalOnly.length?'orange':'green') + '"><div class="val">' + jurnalOnly.length + '</div><div class="lbl">Hanya di Jurnal</div></div>'
+    + '</div>';
+
+  if (csvOnly.length > 0) {
+    html += '<div style="margin-top:12px"><div class="fw-bold" style="color:#c62828;margin-bottom:6px">🔴 Ada di Bank tapi TIDAK ada di Jurnal (' + csvOnly.length + '):</div>'
+      + '<div class="table-wrap" style="max-height:200px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>'
+      + csvOnly.map(function(c){ return '<tr><td>' + c.tanggal + '</td><td>' + c.ket + '</td><td class="text-green">' + (c.debit?fmtRp(c.debit):'-') + '</td><td class="text-red">' + (c.kredit?fmtRp(c.kredit):'-') + '</td></tr>'; }).join('')
+      + '</tbody></table></div>'
+      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini perlu dibuatkan jurnal agar sistem cocok dengan bank.</div></div>';
+  }
+
+  if (jurnalOnly.length > 0) {
+    html += '<div style="margin-top:12px"><div class="fw-bold" style="color:#e65100;margin-bottom:6px">🟠 Ada di Jurnal tapi TIDAK ada di Bank (' + jurnalOnly.length + '):</div>'
+      + '<div class="table-wrap" style="max-height:200px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>'
+      + jurnalOnly.map(function(j){ return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.ref||'-') + '</td><td>' + j.ket + '</td><td class="text-green">' + (j.debit?fmtRp(j.debit):'-') + '</td><td class="text-red">' + (j.kredit?fmtRp(j.kredit):'-') + '</td></tr>'; }).join('')
+      + '</tbody></table></div>'
+      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini tercatat di sistem tapi belum masuk/keluar dari rekening. Mungkin pending transfer atau salah input.</div></div>';
+  }
+
+  if (csvOnly.length === 0 && jurnalOnly.length === 0) {
+    html += '<div class="alert alert-success" style="margin-top:12px">✅ Semua transaksi cocok antara bank dan jurnal!</div>';
+  }
+
+  resultEl.innerHTML = html;
+}
+
+function parseCSVMutasi(lines) {
+  var data = [];
+  // Deteksi header / separator
+  var separator = lines[0].includes(';') ? ';' : ',';
+  var headerLine = lines[0].toLowerCase();
+  var startIdx = 0;
+
+  // Skip header jika ada
+  if (headerLine.includes('tanggal') || headerLine.includes('date') || headerLine.includes('tgl')) {
+    startIdx = 1;
+  }
+
+  for (var i = startIdx; i < lines.length; i++) {
+    var cols = lines[i].split(separator).map(function(c){ return c.replace(/^"|"$/g,'').trim(); });
+    if (cols.length < 3) continue;
+
+    var tanggal = '', ket = '', debit = 0, kredit = 0;
+
+    // Coba deteksi format berdasarkan jumlah kolom
+    if (cols.length >= 4) {
+      // Format: Tanggal, Keterangan, Debit, Kredit (atau Mutasi, Saldo)
+      tanggal = parseTanggalCSV(cols[0]);
+      ket = cols[1] || '';
+      // Cek apakah kolom 2 dan 3 adalah angka
+      var val2 = parseNominalCSV(cols[2]);
+      var val3 = parseNominalCSV(cols[3]);
+      if (val2 > 0 && val3 === 0) { debit = val2; }
+      else if (val3 > 0 && val2 === 0) { kredit = val3; }
+      else if (val2 > 0) { debit = val2; kredit = val3; }
+    } else if (cols.length === 3) {
+      // Format: Tanggal, Keterangan, Nominal (positif=debit, negatif=kredit)
+      tanggal = parseTanggalCSV(cols[0]);
+      ket = cols[1] || '';
+      var nominal = parseNominalCSV(cols[2]);
+      if (nominal >= 0) debit = nominal;
+      else kredit = Math.abs(nominal);
+    }
+
+    if (tanggal && (debit > 0 || kredit > 0)) {
+      data.push({ tanggal: tanggal, ket: ket, debit: debit, kredit: kredit });
+    }
+  }
+  return data;
+}
+
+function parseTanggalCSV(str) {
+  if (!str) return '';
+  str = str.trim();
+  // Format YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  // Format DD/MM/YYYY atau DD-MM-YYYY
+  var match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) return match[3] + '-' + match[2].padStart(2,'0') + '-' + match[1].padStart(2,'0');
+  // Format DD/MM/YY
+  var match2 = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
+  if (match2) return '20' + match2[3] + '-' + match2[2].padStart(2,'0') + '-' + match2[1].padStart(2,'0');
+  // Coba parse langsung
+  var d = new Date(str);
+  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  return '';
+}
+
+function parseNominalCSV(str) {
+  if (!str) return 0;
+  // Hapus currency symbol, spasi, dan format ribuan
+  str = str.replace(/[Rp\s]/gi, '').replace(/\./g, '').replace(',', '.').trim();
+  return parseFloat(str) || 0;
 }
 
 function pilihPeriodeBankRec(namaBulan) {
