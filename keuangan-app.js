@@ -2469,7 +2469,7 @@ async function renderBukuBesar() {
   jurnal.forEach(function(j) {
     (j.lines || []).forEach(function(l) {
       if (ledger[l.akun]) {
-        ledger[l.akun].entries.push({ tanggal: j.tanggal, ket: j.keterangan, ref: j.noRef||j.id, debit: l.debit||0, kredit: l.kredit||0 });
+        ledger[l.akun].entries.push({ tanggal: j.tanggal, ket: j.keterangan, ref: j.noRef||j.id, debit: l.debit||0, kredit: l.kredit||0, jurnalId: j.id });
       }
     });
   });
@@ -2492,16 +2492,19 @@ async function renderBukuBesar() {
   const akunSelect = akun.map(function(a){ return '<option value="' + a.kode + '">' + a.kode + ' - ' + a.nama + '</option>'; }).join('');
   const cards = akunWithData.map(function(entry) {
     const rows = entry.entries.map(function(e) {
+      var aksiHtml = e.isSaldoAwal ? '<span class="badge badge-neutral">Saldo Awal</span>'
+        : '<button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + (e.jurnalId||'') + '\')">View</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + (e.jurnalId||'') + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + (e.jurnalId||'') + '\')">Hapus</button>';
       return '<tr><td>' + fmtDate(e.tanggal) + '</td><td>' + (e.ref||'-') + '</td><td>' + (e.ket||'-') + '</td>'
         + '<td class="text-green">' + (e.debit ? fmtRp(e.debit) : '-') + '</td>'
         + '<td class="text-red">' + (e.kredit ? fmtRp(e.kredit) : '-') + '</td>'
-        + '<td class="fw-bold">' + fmtRp(Math.abs(e.saldo)) + '</td></tr>';
+        + '<td class="fw-bold">' + fmtRp(Math.abs(e.saldo)) + '</td>'
+        + '<td class="tbl-actions">' + aksiHtml + '</td></tr>';
     }).join('');
     const saldoCls = entry.saldo >= 0 ? 'text-green' : 'text-red';
     return '<div class="card bb-akun-card" data-kode="' + entry.akun.kode + '">'
       + '<div class="card-header"><h2>' + entry.akun.kode + ' — ' + entry.akun.nama + ' <span class="chip">' + entry.akun.kategori + '</span></h2>'
       + '<div class="fw-bold ' + saldoCls + '">Saldo: ' + fmtRp(Math.abs(entry.saldo)) + '</div></div>'
-      + '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Saldo</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+      + '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Saldo</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }).join('');
   return '<div class="page-title">📚 Buku Besar</div>'
     + '<div class="card"><div class="card-header"><h2>Filter Akun</h2></div>'
