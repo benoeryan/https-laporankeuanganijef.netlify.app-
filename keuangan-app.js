@@ -2462,6 +2462,8 @@ async function buatJurnalPenutup() {
 async function renderBukuBesar() {
   const akun = await getAkun();
   const jurnal = await KDB.getAll('jurnal');
+  var tahunSekarang = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahunSekarang, {});
   const ledger = {};
   akun.forEach(function(a) { ledger[a.kode] = { akun: a, entries: [], saldo: 0 }; });
   jurnal.forEach(function(j) {
@@ -2473,8 +2475,14 @@ async function renderBukuBesar() {
   });
   Object.values(ledger).forEach(function(entry) {
     entry.entries.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
-    let saldo = 0;
+    // Mulai dari saldo awal jika ada
+    var saVal = parseFloat(saldoAwalData[entry.akun.kode]) || 0;
+    var saldo = saVal;
+    if (saVal > 0) {
+      entry.entries.unshift({ tanggal: tahunSekarang + '-01-01', ket: 'Saldo Awal ' + tahunSekarang, ref: '-', debit: entry.akun.tipe === 'Debit' ? saVal : 0, kredit: entry.akun.tipe !== 'Debit' ? saVal : 0, saldo: saVal, isSaldoAwal: true });
+    }
     entry.entries.forEach(function(e) {
+      if (e.isSaldoAwal) return; // sudah dihitung
       saldo += entry.akun.tipe === 'Debit' ? e.debit - e.kredit : e.kredit - e.debit;
       e.saldo = saldo;
     });
@@ -4204,7 +4212,7 @@ async function renderBankRec() {
       + '<td class="text-right"><input type="number" class="br-actual-input" data-kode="' + a.kode + '" value="' + (savedActual||'') + '" placeholder="Isi saldo aktual rekening" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.85rem"></td>'
       + '<td class="text-right fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '">' + (savedActual ? fmtRp(selisih) : '-') + '</td>'
       + '<td>' + statusBadge + '</td>'
-      + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewBankRecDetail(\'' + a.kode + '\',' + saldoSistem + ')">👁️ Detail</button></td></tr>';
+      + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewBankRecDetail(\'' + a.kode + '\',' + saldoSistem + ')">👁️ Detail</button>' + (savedActual && Math.abs(selisih) >= 1 ? ' <button class="btn btn-xs btn-warning" onclick="koreksiSaldoAwalBank(\'' + a.kode + '\',' + saldoSistem + ',' + savedActual + ')">🔧 Koreksi</button>' : '') + '</td></tr>';
   }).join('');
 
   const now = new Date();
@@ -4266,6 +4274,22 @@ function simpanSaldoAktualBank() {
     else localStorage.removeItem('k_bankrec_actual_' + kode);
   });
   showAlert('Saldo aktual bank tersimpan!');
+  navigate('kalk-bank-rec');
+}
+
+async function koreksiSaldoAwalBank(kode, saldoSistem, saldoAktual) {
+  // Hitung selisih dan update saldo awal agar saldo sistem = saldo aktual
+  // Selisih = Sistem - Aktual. Jika positif → saldo awal terlalu besar. Jika negatif → terlalu kecil.
+  var selisih = saldoSistem - saldoAktual;
+  if (Math.abs(selisih) < 1) { showAlert('Saldo sudah cocok!', 'info'); return; }
+  var tahun = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahun, {});
+  var saLama = parseFloat(saldoAwalData[kode]) || 0;
+  var saBaru = saLama - selisih;
+  if (!confirm('Koreksi saldo awal akun ' + kode + ' agar sistem = aktual?\n\nSaldo sistem: ' + fmtRp(saldoSistem) + '\nSaldo aktual: ' + fmtRp(saldoAktual) + '\nSelisih: ' + fmtRp(selisih) + '\n\nSaldo awal lama: ' + fmtRp(saLama) + '\nSaldo awal baru: ' + fmtRp(saBaru))) return;
+  saldoAwalData[kode] = saBaru;
+  await KDB.saveSetting('saldo_awal_' + tahun, saldoAwalData);
+  showAlert('Saldo awal akun ' + kode + ' diperbarui! Sistem sekarang match dengan aktual.');
   navigate('kalk-bank-rec');
 }
 
@@ -6438,10 +6462,20 @@ async function callOpenRouterChat(msg, apiKey) {
     var systemMsg = 'Kamu adalah AI asisten keuangan perusahaan IJEF Corp. Jawab dalam Bahasa Indonesia, singkat dan jelas.\n\n'
       + 'ATURAN PENTING:\n'
       + '1. Jika user bertanya/minta ANALISA → JAWAB dengan analisa dari data yang tersedia. JANGAN langsung menawarkan aksi.\n'
-      + '2. Jika user EKSPLISIT minta aksi (buatkan jurnal, sinkronkan, hapus, fix) → baru tambahkan ACTION.\n'
+      + '2. Jika user EKSPLISIT minta aksi (buatkan jurnal, sinkronkan, hapus, fix, koreksi) → baru tambahkan ACTION.\n'
       + '3. JANGAN PERNAH menyarankan sinkronisasi petty cash kecuali user SECARA SPESIFIK minta soal petty cash.\n'
-      + '4. Jika user tanya soal selisih bank/mandiri/BNI → analisa dari data saldo akun yang tersedia, BUKAN dari petty cash.\n'
+      + '4. Jika user tanya soal selisih bank/mandiri/BNI → analisa dari data saldo akun yang tersedia, jelaskan kemungkinan penyebab.\n'
       + '5. Jawab SESUAI dengan apa yang ditanya. Jangan melenceng ke topik lain.\n\n'
+      + 'KNOWLEDGE BASE - CARA ANALISA SELISIH BANK:\n'
+      + '- Saldo di Posisi Saldo Hari Ini = saldo_awal + semua jurnal (debit - kredit)\n'
+      + '- Saldo di Buku Besar = sama (saldo awal + jurnal)\n'
+      + '- Jika selisih antara sistem vs aktual bank: penyebab kemungkinan:\n'
+      + '  a) Saldo awal di-set terlalu besar/kecil → koreksi di Setup Saldo Awal\n'
+      + '  b) Ada jurnal yang tercatat tapi belum realisasi di bank (pending)\n'
+      + '  c) Ada transaksi di bank yang belum dijurnal\n'
+      + '  d) Ada jurnal yang salah akun (harusnya akun lain)\n'
+      + '- Untuk mengatasi: user bisa ke Bank Reconcile → upload CSV mutasi → lihat mana yang tidak match\n'
+      + '- Atau: koreksi saldo awal agar match dengan aktual bank\n\n'
       + 'FORMAT AKSI (hanya jika user eksplisit minta aksi):\n'
       + '###ACTION:{"type":"jurnal","tanggal":"YYYY-MM-DD","keterangan":"...","lines":[{"akun":"kode","ket":"...","debit":0,"kredit":0}]}###\n'
       + '###ACTION:{"type":"topup_pc","tanggal":"YYYY-MM-DD","jumlah":number,"keterangan":"..."}###\n'
