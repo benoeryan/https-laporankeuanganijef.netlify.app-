@@ -1854,6 +1854,37 @@ function abaikanSemuaOutlier() {
 }
 
 // === Akun Phantom: ada di jurnal tapi tidak di COA ===
+async function viewJurnalAkunPhantom(kode) {
+  var allJ = await KDB.getAll('jurnal');
+  var affected = allJ.filter(function(j) {
+    return (j.lines||[]).some(function(l){ return l.akun === kode; });
+  });
+  if (affected.length === 0) { showAlert('Tidak ada jurnal yang menggunakan akun ' + kode, 'info'); return; }
+
+  var rowsHtml = affected.slice(0, 20).map(function(j) {
+    var lineDetail = (j.lines||[]).filter(function(l){ return l.akun === kode; }).map(function(l){
+      return (l.debit ? 'D: ' + fmtRp(l.debit) : '') + (l.kredit ? 'K: ' + fmtRp(l.kredit) : '');
+    }).join(', ');
+    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td>' + lineDetail + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\');closeModalDirect()">Detail</button> <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\');closeModalDirect()">Edit</button></td></tr>';
+  }).join('');
+
+  var html = '<div style="margin-bottom:12px;font-size:0.88rem">'
+    + '<b>Akun:</b> ' + kode + '<br>'
+    + '<b>Total jurnal:</b> ' + affected.length + '<br>'
+    + '</div>'
+    + '<div class="table-wrap" style="max-height:350px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Nominal</th><th>Aksi</th></tr></thead><tbody>'
+    + rowsHtml
+    + (affected.length > 20 ? '<tr><td colspan="5" style="text-align:center;color:#888">... dan ' + (affected.length - 20) + ' jurnal lainnya</td></tr>' : '')
+    + '</tbody></table></div>'
+    + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'
+    + '<button class="btn btn-success" onclick="daftarkanAkunPhantom(\'' + kode + '\',\'' + kode + '\');closeModalDirect()">➕ Daftarkan ke COA</button>'
+    + '<button class="btn btn-danger" onclick="hapusJurnalAkunPhantom(\'' + kode + '\');closeModalDirect()">🗑️ Hapus Semua Jurnal</button>'
+    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
+    + '</div>';
+
+  openModal(html, '👁️ Jurnal dengan Akun Phantom: ' + kode);
+}
+
 async function daftarkanAkunPhantom(kode, nama) {
   // Auto-detect kategori dan tipe berdasarkan prefix
   var autoKat = autoKategoriCOA(kode, nama, '');
@@ -6487,7 +6518,7 @@ async function runAIAnalysis() {
           + '<div class="table-wrap" style="max-height:200px;overflow-y:auto;margin-top:6px"><table style="font-size:0.82rem"><thead><tr><th>Kode Akun</th><th>Ket/Nama</th><th>Total Debit</th><th>Total Kredit</th><th>Jml Jurnal</th><th>Aksi</th></tr></thead><tbody>'
           + phantomList.map(function(p) {
             return '<tr><td class="fw-bold">' + p.kode + '</td><td>' + (p.ket||'-') + '</td><td class="text-green">' + fmtRp(p.debit) + '</td><td class="text-red">' + fmtRp(p.kredit) + '</td><td>' + p.count + '</td>'
-              + '<td class="tbl-actions"><button class="btn btn-xs btn-success" onclick="daftarkanAkunPhantom(\'' + p.kode + '\',\'' + (p.ket||p.kode).replace(/'/g,'') + '\')">➕ Daftarkan ke COA</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnalAkunPhantom(\'' + p.kode + '\')">🗑️ Hapus Jurnal</button></td></tr>';
+              + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewJurnalAkunPhantom(\'' + p.kode + '\')">👁️ View</button> <button class="btn btn-xs btn-success" onclick="daftarkanAkunPhantom(\'' + p.kode + '\',\'' + (p.ket||p.kode).replace(/'/g,'') + '\')">➕ Daftarkan</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnalAkunPhantom(\'' + p.kode + '\')">🗑️ Hapus</button></td></tr>';
           }).join('')
           + '</tbody></table></div>';
       }
