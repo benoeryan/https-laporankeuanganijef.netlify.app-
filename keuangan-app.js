@@ -4183,11 +4183,30 @@ function hitungSelisihPC() {
 async function renderBankRec() {
   const list = await KDB.getAll('bankrec');
   const akunAll = await getAkun();
+  const fd = await getFinancialData();
   var bankAkun = akunAll.filter(function(a) {
     var n = (a.nama||'').toLowerCase();
     return (n.includes('bank') || n.includes('kas')) && a.kategori === 'Aset Lancar';
   });
-  var bankOpts = bankAkun.map(function(a){ return '<option value="' + a.nama + '">' + a.kode + ' - ' + a.nama + '</option>'; }).join('');
+  var bankOpts = bankAkun.map(function(a){ return '<option value="' + a.kode + '">' + a.kode + ' - ' + a.nama + '</option>'; }).join('');
+
+  // Tampilkan ringkasan saldo per bank dari sistem
+  var bankSummaryHtml = bankAkun.map(function(a) {
+    var s = fd.saldo[a.kode] || { debit: 0, kredit: 0 };
+    var saldoSistem = (s.debit||0) - (s.kredit||0);
+    var savedActual = parseFloat(localStorage.getItem('k_bankrec_actual_' + a.kode) || '0');
+    var selisih = savedActual ? (saldoSistem - savedActual) : 0;
+    var statusBadge = !savedActual ? '<span class="badge badge-neutral">Belum diisi</span>'
+      : Math.abs(selisih) < 1 ? '<span class="badge badge-success">✓ Cocok</span>'
+      : '<span class="badge badge-danger">Selisih ' + fmtRp(Math.abs(selisih)) + '</span>';
+    return '<tr><td class="fw-bold">' + a.kode + '</td><td>' + a.nama + '</td>'
+      + '<td class="text-right fw-bold">' + fmtRp(saldoSistem) + '</td>'
+      + '<td class="text-right"><input type="number" class="br-actual-input" data-kode="' + a.kode + '" value="' + (savedActual||'') + '" placeholder="Isi saldo aktual rekening" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.85rem"></td>'
+      + '<td class="text-right fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '">' + (savedActual ? fmtRp(selisih) : '-') + '</td>'
+      + '<td>' + statusBadge + '</td>'
+      + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewBankRecDetail(\'' + a.kode + '\',' + saldoSistem + ')">👁️ Detail</button></td></tr>';
+  }).join('');
+
   const now = new Date();
   const months = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const monthBtns = months.map(function(m, i) {
@@ -4203,12 +4222,18 @@ async function renderBankRec() {
   }).join('');
 
   return '<div class="page-title">🏦 Bank Reconcile</div>'
-    + '<div class="card"><div class="card-header"><h2>Rekonsiliasi Bank</h2></div>'
+    // Rekonsiliasi Cepat — bandingkan saldo sistem vs aktual
+    + '<div class="card"><div class="card-header"><h2>⚡ Rekonsiliasi Cepat — Saldo Sistem vs Aktual</h2>'
+    + '<button class="btn btn-sm btn-success" onclick="simpanSaldoAktualBank()">💾 Simpan Saldo Aktual</button></div>'
+    + '<div class="alert alert-info" style="font-size:0.83rem">Isi saldo aktual rekening (dari mobile banking / statement) lalu klik Simpan. Sistem otomatis hitung selisih.</div>'
+    + '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama Akun</th><th class="text-right">Saldo Sistem</th><th class="text-right">Saldo Aktual Rekening</th><th class="text-right">Selisih</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + bankSummaryHtml + '</tbody></table></div></div>'
+    // Form rekonsiliasi detail
+    + '<div class="card"><div class="card-header"><h2>📋 Rekonsiliasi Detail (Standar)</h2></div>'
     + '<div style="margin-bottom:12px"><div class="fw-bold" style="margin-bottom:6px;font-size:0.85rem">Pilih Bulan:</div>' + monthBtns + '</div>'
     + '<div style="margin-bottom:12px"><div class="fw-bold" style="margin-bottom:6px;font-size:0.85rem">Pilih Tahun:</div>' + yearBtns + '</div>'
     + '<div class="form-grid">'
-    + '<div class="fg"><label>Nama Bank</label><select id="br-bank" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%" onchange="document.getElementById(\'br-periode\').value=document.getElementById(\'br-periode\').value"><option value="">-- Pilih Bank --</option>' + bankOpts + '</select></div>'
-    + '<div class="fg"><label>Periode (otomatis terisi)</label><input id="br-periode" placeholder="Januari 2026"></div>'
+    + '<div class="fg"><label>Nama Bank</label><select id="br-bank" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%"><option value="">-- Pilih Bank --</option>' + bankOpts + '</select></div>'
+    + '<div class="fg"><label>Periode</label><input id="br-periode" placeholder="Januari 2026"></div>'
     + '<div class="fg"><label>Saldo Buku (Rp)</label><input type="number" id="br-buku" placeholder="0"></div>'
     + '<div class="fg"><label>Saldo Bank Statement (Rp)</label><input type="number" id="br-bank-saldo" placeholder="0"></div>'
     + '<div class="fg"><label>Deposit in Transit (Rp)</label><input type="number" id="br-dit" placeholder="0" oninput="hitungBankRec()"></div>'
@@ -4220,6 +4245,49 @@ async function renderBankRec() {
     + '<div class="card"><div class="card-header"><h2>Riwayat Rekonsiliasi (' + list.length + ')</h2></div>'
     + (list.length ? '<div class="table-wrap"><table><thead><tr><th>Bank</th><th>Periode</th><th>Saldo Buku</th><th>Saldo Bank</th><th>Selisih</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">🏦</span>Belum ada rekonsiliasi</div>')
     + '</div>';
+}
+
+function simpanSaldoAktualBank() {
+  document.querySelectorAll('.br-actual-input').forEach(function(el) {
+    var kode = el.dataset.kode;
+    var val = parseFloat(el.value) || 0;
+    if (val > 0) localStorage.setItem('k_bankrec_actual_' + kode, val);
+    else localStorage.removeItem('k_bankrec_actual_' + kode);
+  });
+  showAlert('Saldo aktual bank tersimpan!');
+  navigate('kalk-bank-rec');
+}
+
+async function viewBankRecDetail(kode, saldoSistem) {
+  var fd = await getFinancialData();
+  var akunList = await getAkun();
+  var akun = akunList.find(function(a){ return a.kode === kode; });
+  var allJ = await KDB.getAll('jurnal');
+  var savedActual = parseFloat(localStorage.getItem('k_bankrec_actual_' + kode) || '0');
+  var selisih = saldoSistem - savedActual;
+
+  // Ambil jurnal terkait akun ini, sort terbaru
+  var related = allJ.filter(function(j) {
+    return (j.lines||[]).some(function(l){ return l.akun === kode; });
+  }).sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); });
+
+  var rowsHtml = related.slice(0, 20).map(function(j) {
+    var lines = (j.lines||[]).filter(function(l){ return l.akun === kode; });
+    var d = lines.reduce(function(s,l){ return s+(l.debit||0); },0);
+    var k = lines.reduce(function(s,l){ return s+(l.kredit||0); },0);
+    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id).substring(0,20) + '</td><td>' + (j.keterangan||'-').substring(0,40) + '</td><td class="text-green">' + (d?fmtRp(d):'-') + '</td><td class="text-red">' + (k?fmtRp(k):'-') + '</td></tr>';
+  }).join('');
+
+  var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'
+    + '<div style="background:#e3f2fd;border-radius:8px;padding:14px;text-align:center"><div style="font-size:0.75rem;color:#888">Saldo Sistem</div><div class="fw-bold" style="font-size:1.2rem;color:#1a237e">' + fmtRp(saldoSistem) + '</div></div>'
+    + '<div style="background:#e8f5e9;border-radius:8px;padding:14px;text-align:center"><div style="font-size:0.75rem;color:#888">Saldo Aktual Rekening</div><div class="fw-bold" style="font-size:1.2rem;color:#2e7d32">' + (savedActual ? fmtRp(savedActual) : '<span style="color:#999">Belum diisi</span>') + '</div></div>'
+    + '</div>'
+    + (savedActual ? '<div style="text-align:center;padding:10px;background:' + (Math.abs(selisih)<1?'#e8f5e9':'#ffebee') + ';border-radius:8px;margin-bottom:14px"><b>Selisih: </b><span class="fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '" style="font-size:1.1rem">' + fmtRp(selisih) + '</span>' + (selisih > 0 ? ' (Sistem lebih besar — kemungkinan ada dana masuk di jurnal yg belum masuk rekening)' : selisih < 0 ? ' (Rekening lebih besar — kemungkinan ada pemasukan yg belum dijurnal)' : ' ✓ Cocok!') + '</div>' : '')
+    + '<div style="font-weight:600;margin-bottom:6px">20 Jurnal Terakhir yang menggunakan akun ini:</div>'
+    + '<div class="table-wrap" style="max-height:300px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit (Masuk)</th><th>Kredit (Keluar)</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
+    + '<div style="margin-top:12px;font-size:0.82rem;color:#666"><b>Tips:</b> Bandingkan daftar jurnal di atas dengan mutasi rekening kamu. Cari transaksi yang ada di salah satu saja.</div>';
+
+  openModal(html, '🏦 Detail Rekonsiliasi: ' + (akun ? akun.nama : kode));
 }
 
 function pilihPeriodeBankRec(namaBulan) {
