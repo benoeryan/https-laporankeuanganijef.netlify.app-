@@ -6274,14 +6274,23 @@ async function callOpenRouterChat(msg, apiKey) {
       + '###ACTION:{"type":"sinkron_pc"}###\n\n'
       + 'Konteks data:\n' + konteks;
 
-    var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.href, 'X-Title': 'IJEF Keuangan' },
-      body: JSON.stringify({ model: 'moonshotai/kimi-k2.6:free', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
-    });
-    if (!response.ok) {
-      var errData = await response.json().catch(function(){ return {}; });
-      return 'Error OpenRouter: ' + (errData.error ? (errData.error.message||JSON.stringify(errData.error)) : response.status);
+    var modelsToTry = ['moonshotai/kimi-k2.6:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'google/gemma-4-31b-it:free'];
+    var response = null, lastErr = '';
+    for (var mi = 0; mi < modelsToTry.length; mi++) {
+      try {
+        response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.href, 'X-Title': 'IJEF Keuangan' },
+          body: JSON.stringify({ model: modelsToTry[mi], messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
+        });
+        if (response.ok) break;
+        var errBody = await response.json().catch(function(){ return {}; });
+        lastErr = errBody.error ? (errBody.error.message||JSON.stringify(errBody.error)) : ('HTTP ' + response.status);
+        response = null;
+      } catch(fetchErr) { lastErr = fetchErr.message; }
+    }
+    if (!response || !response.ok) {
+      return 'Error OpenRouter: ' + lastErr + '. Semua model sedang tidak tersedia. Coba lagi nanti atau gunakan Mode Lokal.';
     }
     var data = await response.json();
     if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content || 'Tidak ada respon.';
