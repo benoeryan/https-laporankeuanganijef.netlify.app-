@@ -5772,8 +5772,17 @@ async function renderApprovalCenter() {
   }
 
   if (hasRole('admin')) {
+    // Hitung yang belum dijurnal
+    var pdBelumJurnal = allPD.filter(function(p){ return p.status === 'Approved Final' && !p.jurnalId; }).length;
+    var dmBelumJurnal = allDM.filter(function(d){ return d.status === 'Approved Final' && !d.jurnalId; }).length;
+    var totalBelumJurnal = pdBelumJurnal + dmBelumJurnal;
+    var integrasiBanner = totalBelumJurnal > 0
+      ? '<div class="alert alert-warning" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><span>⚠️ <b>' + totalBelumJurnal + '</b> transaksi Approved belum dibuatkan jurnal (' + pdBelumJurnal + ' PD + ' + dmBelumJurnal + ' DM)</span><button class="btn btn-sm btn-success" onclick="integrasiPermohonanDanaMasukKeJurnal()">🔗 Integrasikan Semua ke Jurnal</button></div>'
+      : '<div class="alert alert-success">✅ Semua transaksi Approved sudah terintegrasi ke jurnal.</div>';
+
     html += '<div class="card"><div class="card-header"><h2>Semua Transaksi (Admin View)</h2>'
       + '<select onchange="filterApprovalAll(this.value)" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:7px;font-size:0.83rem"><option value="">Semua Status</option><option value="Pending">Pending</option><option value="Approved Final">Approved Final</option><option value="Rejected">Rejected</option><option value="Draft">Draft</option></select></div>'
+      + integrasiBanner
       + '<div class="tabs"><button class="tab-btn active" onclick="switchTab(this,\'tab-all-pd\')">Permohonan Dana (' + allPD.length + ')</button><button class="tab-btn" onclick="switchTab(this,\'tab-all-dm\')">Dana Masuk (' + allDM.length + ')</button></div>'
       + '<div class="tab-content active" id="tab-all-pd">' + renderAllApprovalTable(allPD, 'permohonan') + '</div>'
       + '<div class="tab-content" id="tab-all-dm">' + renderAllApprovalTable(allDM, 'danamasuk') + '</div>'
