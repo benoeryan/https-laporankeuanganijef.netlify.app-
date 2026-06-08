@@ -4329,6 +4329,7 @@ async function prosesCSVBank() {
   });
 
   // Bandingkan: cari transaksi yang ada di CSV tapi tidak di jurnal, dan sebaliknya
+  // Matching: tanggal sama DAN nominal sama (toleransi Rp 100)
   var matched = [], csvOnly = [], jurnalOnly = [];
   var jurnalUsed = {};
 
@@ -4337,10 +4338,11 @@ async function prosesCSVBank() {
     for (var i = 0; i < jurnalAkun.length; i++) {
       if (jurnalUsed[i]) continue;
       var j = jurnalAkun[i];
-      // Match jika tanggal sama dan nominal mirip (toleransi 1 rupiah)
+      // Match jika tanggal sama dan nominal mirip
       var csvAmt = csv.debit || csv.kredit;
-      var jAmt = j.debit || j.kredit;
-      if (j.tanggal === csv.tanggal && Math.abs(csvAmt - jAmt) < 2) {
+      var jAmt = (csv.debit > 0) ? j.kredit : j.debit; // CSV debit = uang keluar dari bank = kredit di jurnal bank
+      if (!jAmt) jAmt = j.debit || j.kredit;
+      if (j.tanggal === csv.tanggal && Math.abs(csvAmt - jAmt) < 100) {
         matched.push({ csv: csv, jurnal: j });
         jurnalUsed[i] = true;
         found = true;
@@ -4368,37 +4370,107 @@ async function prosesCSVBank() {
 
   if (csvOnly.length > 0) {
     html += '<div style="margin-top:12px"><div class="fw-bold" style="color:#c62828;margin-bottom:6px">🔴 Ada di Bank tapi TIDAK ada di Jurnal (' + csvOnly.length + '):</div>'
-      + '<div class="table-wrap" style="max-height:200px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>'
-      + csvOnly.map(function(c){ return '<tr><td>' + c.tanggal + '</td><td>' + c.ket + '</td><td class="text-green">' + (c.debit?fmtRp(c.debit):'-') + '</td><td class="text-red">' + (c.kredit?fmtRp(c.kredit):'-') + '</td></tr>'; }).join('')
+      + '<div style="margin-bottom:8px"><button class="btn btn-sm btn-success" onclick="buatJurnalDariCSVAll()">📓 Buatkan Jurnal Semua (' + csvOnly.length + ')</button> <span style="font-size:0.8rem;color:#888">Buat jurnal otomatis untuk semua transaksi bank yang belum tercatat</span></div>'
+      + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem" id="tbl-csv-only"><thead><tr><th style="width:28px"><input type="checkbox" onchange="toggleCSVOnlyAll(this.checked)"></th><th>Tanggal</th><th>Keterangan</th><th>Debit (Keluar)</th><th>Kredit (Masuk)</th><th>Aksi</th></tr></thead><tbody>'
+      + csvOnly.map(function(c,idx){ return '<tr><td><input type="checkbox" class="csv-only-chk" value="' + idx + '"></td><td>' + c.tanggal + '</td><td>' + c.ket + '</td><td class="text-red">' + (c.debit?fmtRp(c.debit):'-') + '</td><td class="text-green">' + (c.kredit?fmtRp(c.kredit):'-') + '</td><td><button class="btn btn-xs btn-success" onclick="buatJurnalDariCSVItem(' + idx + ')">📓 Jurnal</button></td></tr>'; }).join('')
       + '</tbody></table></div>'
-      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini perlu dibuatkan jurnal agar sistem cocok dengan bank.</div></div>';
+      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini ada di rekening bank tapi belum dicatat di sistem. Centang lalu klik "Buatkan Jurnal" untuk mencatatnya.</div></div>';
   }
 
   if (jurnalOnly.length > 0) {
     html += '<div style="margin-top:12px"><div class="fw-bold" style="color:#e65100;margin-bottom:6px">🟠 Ada di Jurnal tapi TIDAK ada di Bank (' + jurnalOnly.length + '):</div>'
-      + '<div class="table-wrap" style="max-height:200px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>'
-      + jurnalOnly.map(function(j){ return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.ref||'-') + '</td><td>' + j.ket + '</td><td class="text-green">' + (j.debit?fmtRp(j.debit):'-') + '</td><td class="text-red">' + (j.kredit?fmtRp(j.kredit):'-') + '</td></tr>'; }).join('')
+      + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>'
+      + jurnalOnly.map(function(j){ return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.ref||'-') + '</td><td>' + j.ket + '</td><td class="text-green">' + (j.debit?fmtRp(j.debit):'-') + '</td><td class="text-red">' + (j.kredit?fmtRp(j.kredit):'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\')">Detail</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + j.id + '\')">Hapus</button></td></tr>'; }).join('')
       + '</tbody></table></div>'
-      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini tercatat di sistem tapi belum masuk/keluar dari rekening. Mungkin pending transfer atau salah input.</div></div>';
+      + '<div style="font-size:0.8rem;color:#666;margin-top:4px">→ Transaksi ini tercatat di sistem tapi tidak ada di mutasi bank. Kemungkinan: pending transfer, salah input, atau belum masuk periode statement.</div></div>';
   }
 
   if (csvOnly.length === 0 && jurnalOnly.length === 0) {
     html += '<div class="alert alert-success" style="margin-top:12px">✅ Semua transaksi cocok antara bank dan jurnal!</div>';
   }
 
+  // Simpan data CSV untuk aksi selanjutnya
+  window._csvOnlyData = csvOnly;
+  window._csvBankAkun = akunKode;
+
   resultEl.innerHTML = html;
+}
+
+function toggleCSVOnlyAll(checked) {
+  document.querySelectorAll('.csv-only-chk').forEach(function(chk){ chk.checked = checked; });
+}
+
+async function buatJurnalDariCSVItem(idx) {
+  var data = window._csvOnlyData;
+  var akun = window._csvBankAkun;
+  if (!data || !data[idx]) return;
+  var c = data[idx];
+  var nominal = c.debit || c.kredit;
+  var isKeluar = c.debit > 0;
+  var akunLawan = isKeluar ? '5-2200' : '4-1000'; // Beban operasional / Pendapatan
+  var lines = isKeluar
+    ? [{ akun: akunLawan, ket: c.ket, debit: nominal, kredit: 0 }, { akun: akun, ket: 'Bank keluar', debit: 0, kredit: nominal }]
+    : [{ akun: akun, ket: 'Bank masuk', debit: nominal, kredit: 0 }, { akun: akunLawan, ket: c.ket, debit: 0, kredit: nominal }];
+  if (!confirm('Buat jurnal dari transaksi bank?\n\nTanggal: ' + c.tanggal + '\nKeterangan: ' + c.ket + '\nNominal: ' + fmtRp(nominal) + '\nTipe: ' + (isKeluar?'Pengeluaran':'Penerimaan'))) return;
+  var jId = genId('JU');
+  await KDB.save('jurnal', jId, { id: jId, tanggal: c.tanggal, keterangan: c.ket || 'Transaksi dari CSV bank', noRef: jId, tipe: 'umum', sumber: 'csv-bank-rec', lines: lines, totalDebit: nominal, totalKredit: nominal, createdBy: KU.username, createdAt: new Date().toISOString() });
+  showAlert('Jurnal berhasil dibuat dari CSV bank!');
+}
+
+async function buatJurnalDariCSVAll() {
+  var data = window._csvOnlyData;
+  var akun = window._csvBankAkun;
+  if (!data || !data.length) return;
+  // Filter hanya yang dicentang, atau semua jika tidak ada centang
+  var checked = document.querySelectorAll('.csv-only-chk:checked');
+  var indices = [];
+  if (checked.length > 0) {
+    checked.forEach(function(chk){ indices.push(parseInt(chk.value)); });
+  } else {
+    for (var i = 0; i < data.length; i++) indices.push(i);
+  }
+  if (!confirm('Buat ' + indices.length + ' jurnal dari transaksi bank yang belum tercatat?\n\nAkun lawan default:\n- Pengeluaran → Beban Operasional (5-2200)\n- Penerimaan → Pendapatan (4-1000)\n\nAnda bisa edit jurnal nanti.')) return;
+  showLoading(true);
+  var count = 0;
+  for (var i = 0; i < indices.length; i++) {
+    var c = data[indices[i]];
+    if (!c) continue;
+    var nominal = c.debit || c.kredit;
+    if (nominal <= 0) continue;
+    var isKeluar = c.debit > 0;
+    var akunLawan = isKeluar ? '5-2200' : '4-1000';
+    var lines = isKeluar
+      ? [{ akun: akunLawan, ket: c.ket, debit: nominal, kredit: 0 }, { akun: akun, ket: 'Bank keluar', debit: 0, kredit: nominal }]
+      : [{ akun: akun, ket: 'Bank masuk', debit: nominal, kredit: 0 }, { akun: akunLawan, ket: c.ket, debit: 0, kredit: nominal }];
+    var jId = genId('JU');
+    await KDB.save('jurnal', jId, { id: jId, tanggal: c.tanggal, keterangan: c.ket || 'Transaksi CSV bank', noRef: jId, tipe: 'umum', sumber: 'csv-bank-rec', lines: lines, totalDebit: nominal, totalKredit: nominal, createdBy: KU.username, createdAt: new Date().toISOString() });
+    count++;
+  }
+  showLoading(false);
+  showAlert(count + ' jurnal berhasil dibuat dari CSV bank!');
+  prosesCSVBank(); // Refresh
 }
 
 function parseCSVMutasi(lines) {
   var data = [];
-  // Deteksi header / separator
   var separator = lines[0].includes(';') ? ';' : ',';
   var headerLine = lines[0].toLowerCase();
   var startIdx = 0;
+  var colMap = null;
 
-  // Skip header jika ada
-  if (headerLine.includes('tanggal') || headerLine.includes('date') || headerLine.includes('tgl')) {
+  // Detect header dan tentukan mapping kolom
+  if (headerLine.includes('posting date') || headerLine.includes('tanggal') || headerLine.includes('date')) {
     startIdx = 1;
+    var headers = lines[0].split(separator).map(function(h){ return h.replace(/^"|"$/g,'').trim().toLowerCase(); });
+    colMap = {};
+    headers.forEach(function(h, i) {
+      if (h.includes('posting') || h.includes('tanggal') || h.includes('date') || h === 'tgl') colMap.tanggal = i;
+      if (h.includes('remark') || h.includes('keterangan') || h.includes('description') || h.includes('uraian')) colMap.ket = i;
+      if (h.includes('debit') || h === 'debet') colMap.debit = i;
+      if (h.includes('credit') || h.includes('kredit')) colMap.kredit = i;
+      if (h.includes('reference') || h.includes('ref')) colMap.ref = i;
+      if (h.includes('balance') || h.includes('saldo')) colMap.balance = i;
+    });
   }
 
   for (var i = startIdx; i < lines.length; i++) {
@@ -4407,19 +4479,41 @@ function parseCSVMutasi(lines) {
 
     var tanggal = '', ket = '', debit = 0, kredit = 0;
 
-    // Coba deteksi format berdasarkan jumlah kolom
-    if (cols.length >= 4) {
-      // Format: Tanggal, Keterangan, Debit, Kredit (atau Mutasi, Saldo)
+    if (colMap && colMap.tanggal !== undefined) {
+      // Format terdeteksi dari header (Mandiri/BNI/BCA)
+      tanggal = parseTanggalCSV(cols[colMap.tanggal] || '');
+      ket = cols[colMap.ket !== undefined ? colMap.ket : 1] || '';
+      debit = parseNominalCSV(cols[colMap.debit !== undefined ? colMap.debit : 2] || '');
+      kredit = parseNominalCSV(cols[colMap.kredit !== undefined ? colMap.kredit : 3] || '');
+    } else if (cols.length >= 5) {
+      // Format Mandiri tanpa header terdeteksi: Tgl, Tgl2/Remark, Remark, Ref, Debit, Credit, Balance
+      // Coba detect: jika kolom pertama berisi tanggal
+      tanggal = parseTanggalCSV(cols[0]);
+      if (!tanggal && cols[1]) tanggal = parseTanggalCSV(cols[1]);
+      // Cari kolom keterangan (string panjang yang bukan angka)
+      var ketIdx = -1;
+      for (var ci = 1; ci < Math.min(cols.length, 4); ci++) {
+        if (cols[ci] && cols[ci].length > 5 && isNaN(parseNominalCSV(cols[ci]))) { ketIdx = ci; break; }
+      }
+      ket = ketIdx >= 0 ? cols[ketIdx] : (cols[1]||'');
+      // Cari kolom debit/kredit (angka besar, biasanya setelah keterangan)
+      var numCols = [];
+      for (var ni = 2; ni < cols.length; ni++) {
+        var num = parseNominalCSV(cols[ni]);
+        if (num > 0 || cols[ni] === '0' || cols[ni] === '0.00') numCols.push({ idx: ni, val: num });
+      }
+      if (numCols.length >= 2) {
+        debit = numCols[0].val;
+        kredit = numCols[1].val;
+      } else if (numCols.length === 1) {
+        debit = numCols[0].val;
+      }
+    } else if (cols.length >= 4) {
       tanggal = parseTanggalCSV(cols[0]);
       ket = cols[1] || '';
-      // Cek apakah kolom 2 dan 3 adalah angka
-      var val2 = parseNominalCSV(cols[2]);
-      var val3 = parseNominalCSV(cols[3]);
-      if (val2 > 0 && val3 === 0) { debit = val2; }
-      else if (val3 > 0 && val2 === 0) { kredit = val3; }
-      else if (val2 > 0) { debit = val2; kredit = val3; }
+      debit = parseNominalCSV(cols[2]);
+      kredit = parseNominalCSV(cols[3]);
     } else if (cols.length === 3) {
-      // Format: Tanggal, Keterangan, Nominal (positif=debit, negatif=kredit)
       tanggal = parseTanggalCSV(cols[0]);
       ket = cols[1] || '';
       var nominal = parseNominalCSV(cols[2]);
@@ -4428,7 +4522,7 @@ function parseCSVMutasi(lines) {
     }
 
     if (tanggal && (debit > 0 || kredit > 0)) {
-      data.push({ tanggal: tanggal, ket: ket, debit: debit, kredit: kredit });
+      data.push({ tanggal: tanggal, ket: ket.substring(0, 80), debit: debit, kredit: kredit });
     }
   }
   return data;
