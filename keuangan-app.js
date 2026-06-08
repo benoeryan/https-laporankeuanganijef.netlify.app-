@@ -1853,6 +1853,60 @@ function abaikanSemuaOutlier() {
   runAIAnalysis();
 }
 
+// === Akun Phantom: ada di jurnal tapi tidak di COA ===
+async function daftarkanAkunPhantom(kode, nama) {
+  // Auto-detect kategori dan tipe berdasarkan prefix
+  var autoKat = autoKategoriCOA(kode, nama, '');
+  var data = { kode: kode, nama: nama || kode, kategori: autoKat.kategori, tipe: autoKat.tipe };
+  await KDB.save('akun', kode, data);
+  showAlert('Akun ' + kode + ' (' + nama + ') berhasil didaftarkan ke COA!');
+  runAIAnalysis();
+}
+
+async function hapusJurnalAkunPhantom(kode) {
+  var allJ = await KDB.getAll('jurnal');
+  var affected = allJ.filter(function(j) {
+    return (j.lines||[]).some(function(l){ return l.akun === kode; });
+  });
+  if (affected.length === 0) { showAlert('Tidak ada jurnal yang menggunakan akun ' + kode, 'info'); return; }
+  if (!confirm('Hapus ' + affected.length + ' jurnal yang menggunakan akun "' + kode + '"?\n\nTindakan ini TIDAK BISA DIBATALKAN!')) return;
+  showLoading(true);
+  for (var i = 0; i < affected.length; i++) {
+    await KDB.delete('jurnal', affected[i].id);
+  }
+  await KDB.getAll('jurnal');
+  showLoading(false);
+  showAlert(affected.length + ' jurnal dengan akun ' + kode + ' berhasil dihapus!');
+  runAIAnalysis();
+}
+
+async function daftarkanSemuaPhantom() {
+  var akunList = await getAkun();
+  var coaKodes = akunList.map(function(a){ return a.kode; });
+  var allJ = await KDB.getAll('jurnal');
+  var phantomSet = {};
+  allJ.forEach(function(j) {
+    if (j.tipe === 'penutup') return;
+    (j.lines||[]).forEach(function(l) {
+      if (l.akun && coaKodes.indexOf(l.akun) === -1 && !phantomSet[l.akun]) {
+        phantomSet[l.akun] = l.ket || l.akun;
+      }
+    });
+  });
+  var phantomKeys = Object.keys(phantomSet);
+  if (phantomKeys.length === 0) { showAlert('Tidak ada akun phantom', 'info'); return; }
+  if (!confirm('Daftarkan ' + phantomKeys.length + ' akun phantom ke COA?\n\nKategori akan di-detect otomatis berdasarkan kode akun.')) return;
+  showLoading(true);
+  for (var i = 0; i < phantomKeys.length; i++) {
+    var k = phantomKeys[i];
+    var autoKat = autoKategoriCOA(k, phantomSet[k], '');
+    await KDB.save('akun', k, { kode: k, nama: phantomSet[k] || k, kategori: autoKat.kategori, tipe: autoKat.tipe });
+  }
+  showLoading(false);
+  showAlert(phantomKeys.length + ' akun phantom berhasil didaftarkan ke COA!');
+  runAIAnalysis();
+}
+
 function togglePilihSemuaDuplikat(checked) {
   document.querySelectorAll('.dup-chk').forEach(function(chk) {
     if (chk.closest('tr').style.display !== 'none') chk.checked = checked;
@@ -6411,7 +6465,37 @@ async function runAIAnalysis() {
 
     var crossDiff = Math.abs(labaCOA - labaAll);
     if (crossDiff > 0.01) {
-      warnings.push({ severity: 'warning', title: '⚠️ Inkonsistensi Lintas Laporan (Selisih: ' + fmtRp(crossDiff) + ')', detail: '<p>Laba Bersih (COA Resmi / Laba Rugi): ' + fmtRp(labaCOA) + '</p><p>Laba Bersih (Semua Akun / Neraca): ' + fmtRp(labaAll) + '</p><p>Ada akun pendapatan/beban di jurnal yang tidak terdaftar di COA resmi.</p><p><b>Rekomendasi:</b> Daftarkan akun-akun tersebut ke dalam Chart of Accounts atau hapus jurnal yang mereferensi akun tidak resmi.</p>' + '<div style="margin-top:8px"><button class="btn btn-xs btn-info" onclick="navigate(\'lap-labarugi\')">Lihat Laba Rugi</button> <button class="btn btn-xs btn-info" onclick="navigate(\'lap-neraca\')">Lihat Neraca</button> <button class="btn btn-xs btn-warning" onclick="navigate(\'setup-akun\')">Kelola COA</button></div>', isTable: false, group: 'standar' });
+      // Deteksi akun phantom: ada di jurnal tapi tidak di COA resmi
+      var coaKodes = akunList.map(function(a){ return a.kode; });
+      var phantomAkun = {};
+      allJurnal.forEach(function(j) {
+        if (j.tipe === 'penutup') return;
+        (j.lines||[]).forEach(function(l) {
+          if (l.akun && coaKodes.indexOf(l.akun) === -1) {
+            if (!phantomAkun[l.akun]) phantomAkun[l.akun] = { kode: l.akun, debit: 0, kredit: 0, count: 0, ket: l.ket||'' };
+            phantomAkun[l.akun].debit += l.debit||0;
+            phantomAkun[l.akun].kredit += l.kredit||0;
+            phantomAkun[l.akun].count++;
+          }
+        });
+      });
+      var phantomList = Object.values(phantomAkun).sort(function(a,b){ return (b.debit+b.kredit)-(a.debit+a.kredit); });
+
+      var phantomHtml = '';
+      if (phantomList.length > 0) {
+        phantomHtml = '<div style="margin-top:10px"><b>🔍 Akun Phantom (ada di jurnal tapi tidak di COA):</b></div>'
+          + '<div class="table-wrap" style="max-height:200px;overflow-y:auto;margin-top:6px"><table style="font-size:0.82rem"><thead><tr><th>Kode Akun</th><th>Ket/Nama</th><th>Total Debit</th><th>Total Kredit</th><th>Jml Jurnal</th><th>Aksi</th></tr></thead><tbody>'
+          + phantomList.map(function(p) {
+            return '<tr><td class="fw-bold">' + p.kode + '</td><td>' + (p.ket||'-') + '</td><td class="text-green">' + fmtRp(p.debit) + '</td><td class="text-red">' + fmtRp(p.kredit) + '</td><td>' + p.count + '</td>'
+              + '<td class="tbl-actions"><button class="btn btn-xs btn-success" onclick="daftarkanAkunPhantom(\'' + p.kode + '\',\'' + (p.ket||p.kode).replace(/'/g,'') + '\')">➕ Daftarkan ke COA</button> <button class="btn btn-xs btn-danger" onclick="hapusJurnalAkunPhantom(\'' + p.kode + '\')">🗑️ Hapus Jurnal</button></td></tr>';
+          }).join('')
+          + '</tbody></table></div>';
+      }
+
+      warnings.push({ severity: 'warning', title: '⚠️ Inkonsistensi Lintas Laporan (Selisih: ' + fmtRp(crossDiff) + ')', detail: '<p>Laba Bersih (COA Resmi / Laba Rugi): ' + fmtRp(labaCOA) + '</p><p>Laba Bersih (Semua Akun / Neraca): ' + fmtRp(labaAll) + '</p><p>Ada <b>' + phantomList.length + ' akun phantom</b> di jurnal yang tidak terdaftar di COA resmi.</p>'
+        + phantomHtml
+        + '<div style="margin-top:10px"><b>Rekomendasi:</b> Daftarkan akun-akun phantom ke COA (agar masuk Laba Rugi) atau hapus jurnal yang mereferensi akun tersebut.</div>'
+        + '<div style="margin-top:8px"><button class="btn btn-xs btn-info" onclick="navigate(\'lap-labarugi\')">Lihat Laba Rugi</button> <button class="btn btn-xs btn-info" onclick="navigate(\'lap-neraca\')">Lihat Neraca</button> <button class="btn btn-xs btn-warning" onclick="navigate(\'setup-akun\')">Kelola COA</button>' + (phantomList.length > 0 ? ' <button class="btn btn-xs btn-success" onclick="daftarkanSemuaPhantom()">➕ Daftarkan Semua ke COA</button>' : '') + '</div>', isTable: false, group: 'standar' });
     } else {
       info.push('✅ Laba bersih konsisten antara Laba Rugi dan Neraca');
     }
