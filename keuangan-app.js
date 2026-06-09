@@ -6948,6 +6948,65 @@ async function localAIReply(msg) {
     return 'Sebutkan jumlah dan keterangan. Contoh:\n"Catat pengeluaran petty cash 50000 beli ATK"';
   }
 
+  // Deteksi perintah koreksi / anomali / analisa saldo anomali
+  if ((lower.includes('koreksi') || lower.includes('perbaiki') || lower.includes('fix')) && (lower.includes('anomali') || lower.includes('saldo') || lower.includes('analisa'))) {
+    // Cari akun dengan saldo anomali
+    var anomalyList = [];
+    Object.keys(fd.saldo).forEach(function(kode) {
+      var s = fd.saldo[kode];
+      if (!s) return;
+      var kat = (s.akun && s.akun.kategori) || '';
+      var d = s.debit||0, k = s.kredit||0;
+      var isDebitNormal = kat.includes('Aset') || kat.includes('Beban');
+      var balance = isDebitNormal ? (d - k) : (k - d);
+      if (balance < 0) {
+        anomalyList.push({ kode: kode, nama: (s.akun&&s.akun.nama)||kode, saldo: balance, expected: isDebitNormal?'Debit positif':'Kredit positif' });
+      }
+    });
+    if (anomalyList.length > 0) {
+      var list = anomalyList.slice(0,5).map(function(a){ return '• ' + a.kode + ' (' + a.nama + '): ' + fmtRp(a.saldo) + ' — seharusnya ' + a.expected; }).join('\n');
+      return 'Ditemukan ' + anomalyList.length + ' akun dengan saldo anomali:\n\n' + list + '\n\n'
+        + 'Untuk koreksi:\n'
+        + '1. Klik tombol "🔧 Koreksi" di setiap baris hasil Analisis Lengkap\n'
+        + '2. Atau klik "✅ Benar" jika saldo memang sudah tepat\n'
+        + '3. Atau minta saya: "Koreksi saldo akun [kode akun]"\n\n'
+        + 'Mau saya koreksi akun tertentu? Sebutkan kode akunnya.';
+    }
+    return 'Tidak ditemukan saldo anomali saat ini. Semua akun sudah sesuai tipe normalnya.';
+  }
+
+  // Deteksi perintah koreksi akun spesifik
+  if ((lower.includes('koreksi') || lower.includes('perbaiki')) && lower.match(/\d+-\d+/)) {
+    var akunMatch = lower.match(/(\d+-\d+[\-\d]*)/);
+    if (akunMatch) {
+      var kodeTarget = akunMatch[1];
+      var sTarget = fd.saldo[kodeTarget];
+      if (sTarget) {
+        var saldoNet = (sTarget.debit||0) - (sTarget.kredit||0);
+        var nominal = Math.abs(saldoNet);
+        if (nominal > 0) {
+          var kat2 = (sTarget.akun&&sTarget.akun.kategori)||'';
+          var isDebit = kat2.includes('Aset') || kat2.includes('Beban');
+          var lines;
+          if (isDebit && saldoNet < 0) {
+            lines = [{ akun: kodeTarget, ket: 'Koreksi saldo', debit: nominal, kredit: 0 },{ akun: '3-1200', ket: 'Penyesuaian', debit: 0, kredit: nominal }];
+          } else if (!isDebit && saldoNet > 0) {
+            lines = [{ akun: '3-1200', ket: 'Penyesuaian', debit: nominal, kredit: 0 },{ akun: kodeTarget, ket: 'Koreksi saldo', debit: 0, kredit: nominal }];
+          } else {
+            return 'Saldo akun ' + kodeTarget + ' sudah sesuai tipe normal (' + fmtRp(saldoNet) + '). Tidak perlu koreksi.';
+          }
+          return 'Saya akan buat jurnal koreksi untuk akun ' + kodeTarget + ':\n'
+            + '• Saldo saat ini: ' + fmtRp(saldoNet) + ' (anomali)\n'
+            + '• Koreksi: ' + fmtRp(nominal) + '\n'
+            + '• Akun lawan: 3-1200 (Laba Ditahan)\n\n'
+            + 'Klik Konfirmasi untuk eksekusi.\n'
+            + '###ACTION:{"type":"jurnal","tanggal":"' + today() + '","keterangan":"Koreksi saldo anomali akun ' + kodeTarget + '","lines":' + JSON.stringify(lines) + '}###';
+        }
+      }
+      return 'Akun ' + kodeTarget + ' tidak ditemukan atau saldo sudah normal.';
+    }
+  }
+
   // Deteksi pertanyaan tentang selisih/analisa bank tertentu (bukan petty cash)
   if ((lower.includes('selisih') || lower.includes('analisa') || lower.includes('analisis') || lower.includes('inkonsistensi') || lower.includes('buku besar')) && (lower.includes('bank') || lower.includes('mandiri') || lower.includes('bni'))) {
     var akunList2 = await getAkun();
