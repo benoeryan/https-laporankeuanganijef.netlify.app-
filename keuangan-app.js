@@ -506,48 +506,50 @@ async function getAkunOptions(filter) {
 function upgradeToSearchableSelect(selectEl) {
   if (selectEl.dataset.upgraded) return;
   selectEl.dataset.upgraded = '1';
-  selectEl.style.display = 'none';
 
+  // Tetap tampilkan select asli + tambah input search di atasnya
   var wrap = document.createElement('div');
   wrap.className = 'search-select-wrap';
+  wrap.style.position = 'relative';
   selectEl.parentNode.insertBefore(wrap, selectEl);
   wrap.appendChild(selectEl);
 
+  // Input search di atas select
   var input = document.createElement('input');
   input.className = 'ss-input';
-  input.placeholder = 'Ketik untuk cari akun...';
-  input.value = selectEl.options[selectEl.selectedIndex] ? selectEl.options[selectEl.selectedIndex].text : '';
+  input.placeholder = '🔍 Ketik untuk cari akun...';
+  input.style.cssText = 'width:100%;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.78rem;margin-bottom:3px;box-sizing:border-box';
   wrap.insertBefore(input, selectEl);
 
-  var dropdown = document.createElement('div');
-  dropdown.className = 'ss-dropdown';
-  wrap.appendChild(dropdown);
-
-  function renderOptions(filter) {
-    var html = '';
-    for (var i = 0; i < selectEl.options.length; i++) {
-      var opt = selectEl.options[i];
-      if (!opt.value) continue;
-      var text = opt.text;
-      if (filter && !text.toLowerCase().includes(filter.toLowerCase())) continue;
-      html += '<div class="ss-item' + (opt.value === selectEl.value ? ' active' : '') + '" data-value="' + opt.value + '">' + text + '</div>';
-    }
-    dropdown.innerHTML = html || '<div class="ss-item" style="color:#888">Tidak ditemukan</div>';
+  // Simpan semua options asli
+  var allOptions = [];
+  for (var i = 0; i < selectEl.options.length; i++) {
+    allOptions.push({ value: selectEl.options[i].value, text: selectEl.options[i].text, selected: selectEl.options[i].selected });
   }
 
-  input.addEventListener('focus', function() { wrap.classList.add('open'); renderOptions(input.value); });
-  input.addEventListener('input', function() { wrap.classList.add('open'); renderOptions(input.value); });
-  input.addEventListener('blur', function() { setTimeout(function(){ wrap.classList.remove('open'); }, 200); });
-
-  dropdown.addEventListener('click', function(e) {
-    var item = e.target.closest('.ss-item');
-    if (item && item.dataset.value) {
-      selectEl.value = item.dataset.value;
-      input.value = item.textContent;
-      wrap.classList.remove('open');
-      selectEl.dispatchEvent(new Event('change'));
-    }
+  // Filter options saat user ketik
+  input.addEventListener('input', function() {
+    var q = input.value.toLowerCase();
+    selectEl.innerHTML = '';
+    allOptions.forEach(function(opt) {
+      if (!q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q)) {
+        var o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.text;
+        selectEl.appendChild(o);
+      }
+    });
   });
+
+  // Saat select berubah, update input
+  selectEl.addEventListener('change', function() {
+    var sel = selectEl.options[selectEl.selectedIndex];
+    if (sel && sel.value) input.value = '';
+  });
+
+  // Tampilkan select dengan style normal
+  selectEl.style.display = '';
+  selectEl.style.width = '100%';
 }
 
 // Auto-upgrade selects periodically (untuk dynamic content)
