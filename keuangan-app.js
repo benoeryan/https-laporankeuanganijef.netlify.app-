@@ -8882,11 +8882,12 @@ async function renderSaldoAwal() {
 
   var rows = akun.map(function(a) {
     var val = saldoAwal[a.kode] || 0;
+    var fmtVal = val ? Number(val).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
     return '<tr>'
       + '<td>' + a.kode + '</td>'
       + '<td>' + a.nama + '</td>'
       + '<td><span class="badge ' + (a.tipe==='Debit'?'badge-info':'badge-warning') + '">' + a.tipe + '</span></td>'
-      + '<td><input type="number" class="sa-input" data-kode="' + a.kode + '" value="' + val + '" style="width:140px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.88rem" placeholder="0"></td>'
+      + '<td><input type="text" class="sa-input" data-kode="' + a.kode + '" data-raw="' + val + '" value="' + fmtVal + '" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.88rem" placeholder="0" onfocus="this.value=this.dataset.raw||this.value" onblur="formatSaldoInput(this)"></td>'
       + '</tr>';
   }).join('');
 
@@ -8914,7 +8915,9 @@ async function loadSaldoAwal(tahun) {
   if (label) label.textContent = 'Tahun: ' + tahun;
   document.querySelectorAll('.sa-input').forEach(function(el) {
     var kode = el.dataset.kode;
-    el.value = saldoAwal[kode] || 0;
+    var val = saldoAwal[kode] || 0;
+    el.dataset.raw = val;
+    el.value = val ? Number(val).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
   });
   showAlert('Saldo awal tahun ' + tahun + ' dimuat');
 }
@@ -8923,16 +8926,29 @@ async function simpanSaldoAwal() {
   var data = {};
   document.querySelectorAll('.sa-input').forEach(function(el) {
     var kode = el.dataset.kode;
-    var val = parseFloat(el.value) || 0;
+    // Parse dari format 1,000,000.00 atau angka biasa
+    var rawVal = (el.dataset.raw || el.value || '0').toString().replace(/,/g, '');
+    var val = parseFloat(rawVal) || 0;
     if (val !== 0) data[kode] = val;
   });
   await KDB.saveSetting('saldo_awal_' + _saldoAwalTahun, data);
   showAlert('Saldo awal tahun ' + _saldoAwalTahun + ' berhasil disimpan!');
 }
 
+function formatSaldoInput(el) {
+  var raw = el.value.replace(/,/g, '').replace(/[^\d.\-]/g, '');
+  var num = parseFloat(raw) || 0;
+  el.dataset.raw = num;
+  if (num !== 0) {
+    el.value = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } else {
+    el.value = '';
+  }
+}
+
 function resetSaldoAwal() {
   if (!confirm('Reset semua saldo awal ke 0?')) return;
-  document.querySelectorAll('.sa-input').forEach(function(el) { el.value = 0; });
+  document.querySelectorAll('.sa-input').forEach(function(el) { el.value = ''; el.dataset.raw = '0'; });
 }
 
 // ===== PRINT BUNDLE LAPORAN KEUANGAN =====
