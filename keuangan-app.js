@@ -502,6 +502,61 @@ async function getAkunOptions(filter) {
   return filtered.map(function(a) { return '<option value="' + a.kode + '">' + a.kode + ' - ' + a.nama + '</option>'; }).join('');
 }
 
+// ===== SEARCHABLE SELECT — auto-upgrade semua select akun =====
+function upgradeToSearchableSelect(selectEl) {
+  if (selectEl.dataset.upgraded) return;
+  selectEl.dataset.upgraded = '1';
+  selectEl.style.display = 'none';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'search-select-wrap';
+  selectEl.parentNode.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl);
+
+  var input = document.createElement('input');
+  input.className = 'ss-input';
+  input.placeholder = 'Ketik untuk cari akun...';
+  input.value = selectEl.options[selectEl.selectedIndex] ? selectEl.options[selectEl.selectedIndex].text : '';
+  wrap.insertBefore(input, selectEl);
+
+  var dropdown = document.createElement('div');
+  dropdown.className = 'ss-dropdown';
+  wrap.appendChild(dropdown);
+
+  function renderOptions(filter) {
+    var html = '';
+    for (var i = 0; i < selectEl.options.length; i++) {
+      var opt = selectEl.options[i];
+      if (!opt.value) continue;
+      var text = opt.text;
+      if (filter && !text.toLowerCase().includes(filter.toLowerCase())) continue;
+      html += '<div class="ss-item' + (opt.value === selectEl.value ? ' active' : '') + '" data-value="' + opt.value + '">' + text + '</div>';
+    }
+    dropdown.innerHTML = html || '<div class="ss-item" style="color:#888">Tidak ditemukan</div>';
+  }
+
+  input.addEventListener('focus', function() { wrap.classList.add('open'); renderOptions(input.value); });
+  input.addEventListener('input', function() { wrap.classList.add('open'); renderOptions(input.value); });
+  input.addEventListener('blur', function() { setTimeout(function(){ wrap.classList.remove('open'); }, 200); });
+
+  dropdown.addEventListener('click', function(e) {
+    var item = e.target.closest('.ss-item');
+    if (item && item.dataset.value) {
+      selectEl.value = item.dataset.value;
+      input.value = item.textContent;
+      wrap.classList.remove('open');
+      selectEl.dispatchEvent(new Event('change'));
+    }
+  });
+}
+
+// Auto-upgrade selects periodically (untuk dynamic content)
+setInterval(function() {
+  document.querySelectorAll('select.j-akun, select.ej-akun, select.pc-akun, select[id="jurnal-filter-akun"], select[id="csv-bank-akun"], select[id="br-bank"]').forEach(function(sel) {
+    if (!sel.dataset.upgraded && sel.options.length > 5) upgradeToSearchableSelect(sel);
+  });
+}, 1000);
+
 function computeNeracaTotals(saldo, akunList, fdAkun) {
   var totalAset = 0, totalKewajiban = 0, totalEkuitas = 0;
   var totalPendapatan = 0, totalPendapatanLain = 0, totalBebanOps = 0, totalBebanLain = 0;
