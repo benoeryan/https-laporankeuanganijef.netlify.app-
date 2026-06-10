@@ -8475,7 +8475,7 @@ async function exportCSV(col) {
   if (!list.length) { showAlert('Tidak ada data untuk diexport!', 'warning'); return; }
 
   var csv = '';
-  var SEP = '\t'; // Tab separator — paling reliable untuk Excel
+  var SEP = ';'; // Semicolon — standard Excel separator untuk regional Indonesia
   var akunList = await getAkun();
   function namaAkun(kode) {
     if (!kode) return '';
@@ -8486,6 +8486,10 @@ async function exportCSV(col) {
     var s = String(val == null ? '' : val);
     // Bersihkan newline dan tab dari value
     s = s.replace(/[\r\n\t]/g, ' ').trim();
+    // Kalau ada semicolon atau quote di value, wrap dengan double quote
+    if (s.indexOf(';') >= 0 || s.indexOf('"') >= 0) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
     return s;
   }
 
@@ -8683,13 +8687,13 @@ async function exportCSV(col) {
     csv = headers.join(SEP) + '\n' + rows.join('\n');
   }
 
-  // Add BOM for proper UTF-8 encoding in Excel
+  // Download sebagai CSV dengan BOM UTF-8
   var bom = '\uFEFF';
-  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  var blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = col + '_' + today() + '.xls';
+  a.download = col + '_' + today() + '.csv';
   a.click();
   URL.revokeObjectURL(url);
   showAlert('Export ' + col + ' berhasil!');
