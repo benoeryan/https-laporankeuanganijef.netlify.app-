@@ -1714,14 +1714,18 @@ async function renderJurnalUmum() {
     + '<button class="btn btn-sm btn-outline" onclick="recoverDariLocalStorage()" style="color:#2e7d32">♻️ Recover</button>'
     + '<button class="btn btn-sm btn-outline" onclick="integrasiPermohonanDanaMasukKeJurnal()" style="color:#1a237e">🔗 Integrasi PD & DM</button>'
     + '</div></div>'
+    + '<div id="jurnal-summary-bar" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:10px 14px;background:#e8eaf6;border-radius:8px;margin-bottom:8px;font-size:0.85rem">'
+    + '<span id="jurnal-footer-info" style="font-weight:600;color:#1a237e">Total (' + jurnal.length + ' transaksi)</span>'
+    + '<span>Debit: <b id="jurnal-footer-debit" class="text-green">' + fmtRp(jurnal.reduce(function(s,j){return s+(parseFloat(j.totalDebit)||0);},0)) + '</b></span>'
+    + '<span>Kredit: <b id="jurnal-footer-kredit" class="text-red">' + fmtRp(jurnal.reduce(function(s,j){return s+(parseFloat(j.totalKredit)||0);},0)) + '</b></span>'
+    + '<span>Selisih: <b id="jurnal-footer-selisih" style="color:#2e7d32">✅ Balance</b></span>'
+    + '</div>'
     + '<div id="jurnal-batch-bar" style="display:none;padding:8px 12px;background:#fff3e0;border-radius:8px;margin-bottom:8px;display:none;align-items:center;gap:8px">'
     + '<span id="jurnal-selected-count" style="font-size:0.85rem;font-weight:600">0 dipilih</span>'
     + '<button class="btn btn-sm btn-danger" onclick="hapusJurnalTerpilih()">🗑️ Hapus Terpilih</button>'
     + '<button class="btn btn-sm btn-outline" onclick="togglePilihSemuaJurnal(false)">Batal Pilih</button>'
     + '</div>'
-    + '<div class="table-wrap"><table id="tbl-jurnal"><thead><tr><th style="width:30px"><input type="checkbox" id="jurnal-chk-all" onchange="togglePilihSemuaJurnal(this.checked)"></th><th>Tanggal</th><th>No. Ref</th><th>Keterangan</th><th>Total Debit</th><th>Total Kredit</th><th>Balance</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody>'
-    + '<tfoot><tr style="background:#e8eaf6;font-weight:bold"><td></td><td colspan="3" id="jurnal-footer-info">Total (' + jurnal.length + ' transaksi)</td><td id="jurnal-footer-debit" class="text-green">' + fmtRp(jurnal.reduce(function(s,j){return s+(parseFloat(j.totalDebit)||0);},0)) + '</td><td id="jurnal-footer-kredit" class="text-red">' + fmtRp(jurnal.reduce(function(s,j){return s+(parseFloat(j.totalKredit)||0);},0)) + '</td><td id="jurnal-footer-selisih"></td><td></td></tr></tfoot>'
-    + '</table></div></div>';
+    + '<div class="table-wrap"><table id="tbl-jurnal"><thead><tr><th style="width:30px"><input type="checkbox" id="jurnal-chk-all" onchange="togglePilihSemuaJurnal(this.checked)"></th><th>Tanggal</th><th>No. Ref</th><th>Keterangan</th><th>Total Debit</th><th>Total Kredit</th><th>Balance</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
 async function addJurnalLine() {
