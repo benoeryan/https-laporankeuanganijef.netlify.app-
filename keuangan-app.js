@@ -1719,7 +1719,9 @@ async function renderJurnalUmum() {
     + '<button class="btn btn-sm btn-danger" onclick="hapusJurnalTerpilih()">🗑️ Hapus Terpilih</button>'
     + '<button class="btn btn-sm btn-outline" onclick="togglePilihSemuaJurnal(false)">Batal Pilih</button>'
     + '</div>'
-    + '<div class="table-wrap"><table id="tbl-jurnal"><thead><tr><th style="width:30px"><input type="checkbox" id="jurnal-chk-all" onchange="togglePilihSemuaJurnal(this.checked)"></th><th>Tanggal</th><th>No. Ref</th><th>Keterangan</th><th>Total Debit</th><th>Total Kredit</th><th>Balance</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    + '<div class="table-wrap"><table id="tbl-jurnal"><thead><tr><th style="width:30px"><input type="checkbox" id="jurnal-chk-all" onchange="togglePilihSemuaJurnal(this.checked)"></th><th>Tanggal</th><th>No. Ref</th><th>Keterangan</th><th>Total Debit</th><th>Total Kredit</th><th>Balance</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody>'
+    + '<tfoot><tr style="background:#e8eaf6;font-weight:bold"><td></td><td colspan="3" id="jurnal-footer-info">Total (' + jurnal.length + ' transaksi)</td><td id="jurnal-footer-debit" class="text-green">' + fmtRp(jurnal.reduce(function(s,j){return s+(parseFloat(j.totalDebit)||0);},0)) + '</td><td id="jurnal-footer-kredit" class="text-red">' + fmtRp(jurnal.reduce(function(s,j){return s+(parseFloat(j.totalKredit)||0);},0)) + '</td><td id="jurnal-footer-selisih"></td><td></td></tr></tfoot>'
+    + '</table></div></div>';
 }
 
 async function addJurnalLine() {
@@ -9932,6 +9934,7 @@ function applyJurnalFilter() {
     var showSampai = !tglSampai || (dateStr && dateStr <= tglSampai);
     r.style.display = (showQ && showAkun && showMonth && showSumber && showDari && showSampai) ? '' : 'none';
   });
+  updateJurnalFooterTotal();
 }
 
 function reapplyJurnalFilter() {
@@ -9956,6 +9959,36 @@ function resetJurnalFilter() {
   ids.forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
   localStorage.removeItem('k_jurnal_filter');
   document.querySelectorAll('#tbl-jurnal tbody tr').forEach(function(r){ r.style.display = ''; });
+  updateJurnalFooterTotal();
+}
+
+function updateJurnalFooterTotal() {
+  var rows = document.querySelectorAll('#tbl-jurnal tbody tr');
+  var totalD = 0, totalK = 0, count = 0;
+  rows.forEach(function(r) {
+    if (r.style.display === 'none') return;
+    count++;
+    // Kolom Total Debit = index 4, Total Kredit = index 5
+    var cells = r.querySelectorAll('td');
+    if (cells.length >= 6) {
+      var dText = (cells[4].textContent||'').replace(/[^\d.,]/g,'').replace(/,/g,'');
+      var kText = (cells[5].textContent||'').replace(/[^\d.,]/g,'').replace(/,/g,'');
+      totalD += parseFloat(dText) || 0;
+      totalK += parseFloat(kText) || 0;
+    }
+  });
+  var selisih = totalD - totalK;
+  var elInfo = document.getElementById('jurnal-footer-info');
+  var elD = document.getElementById('jurnal-footer-debit');
+  var elK = document.getElementById('jurnal-footer-kredit');
+  var elS = document.getElementById('jurnal-footer-selisih');
+  if (elInfo) elInfo.textContent = 'Total (' + count + ' transaksi)';
+  if (elD) elD.textContent = fmtRp(totalD);
+  if (elK) elK.textContent = fmtRp(totalK);
+  if (elS) {
+    elS.textContent = (selisih === 0 ? '✅ Balance' : (selisih > 0 ? '+' : '') + fmtRp(selisih));
+    elS.style.color = selisih === 0 ? '#2e7d32' : '#c62828';
+  }
 }
 
 // ===== GRAFIK PER COA =====
