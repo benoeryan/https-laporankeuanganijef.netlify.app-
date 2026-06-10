@@ -8457,9 +8457,11 @@ function batalImportCSV() {
 // ===== EXPORT =====
 async function renderExport() {
   return '<div class="page-title">📥 Export Data</div>'
-    + '<div class="card"><div class="card-header"><h2>Export ke CSV</h2></div>'
-    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">'
-    + '<button class="btn btn-success" onclick="exportCSV(\'jurnal\')">Export Jurnal</button>'
+    + '<div class="card"><div class="card-header"><h2>Export ke Excel</h2></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:12px">'
+    + '<button class="btn btn-success" onclick="exportCSV(\'jurnal\')">📋 Export Semua Jurnal</button>'
+    + '<button class="btn btn-primary" onclick="exportJurnalDebit()">📈 Export Jurnal Debit (Uang Masuk)</button>'
+    + '<button class="btn btn-danger" onclick="exportJurnalKredit()">📉 Export Jurnal Kredit (Uang Keluar)</button>'
     + '<button class="btn btn-success" onclick="exportCSV(\'invoice\')">Export Invoice</button>'
     + '<button class="btn btn-success" onclick="exportCSV(\'po\')">Export PO</button>'
     + '<button class="btn btn-success" onclick="exportCSV(\'utangpiutang\')">Export Utang Piutang</button>'
@@ -8475,7 +8477,7 @@ async function exportCSV(col) {
   if (!list.length) { showAlert('Tidak ada data untuk diexport!', 'warning'); return; }
 
   var csv = '';
-  var SEP = ';'; // Semicolon — standard Excel separator untuk regional Indonesia
+  var SEP = '\t'; // Tab separator untuk Excel
   var akunList = await getAkun();
   function namaAkun(kode) {
     if (!kode) return '';
@@ -8486,10 +8488,6 @@ async function exportCSV(col) {
     var s = String(val == null ? '' : val);
     // Bersihkan newline dan tab dari value
     s = s.replace(/[\r\n\t]/g, ' ').trim();
-    // Kalau ada semicolon atau quote di value, wrap dengan double quote
-    if (s.indexOf(';') >= 0 || s.indexOf('"') >= 0) {
-      return '"' + s.replace(/"/g, '""') + '"';
-    }
     return s;
   }
 
@@ -8687,16 +8685,106 @@ async function exportCSV(col) {
     csv = headers.join(SEP) + '\n' + rows.join('\n');
   }
 
-  // Download sebagai CSV dengan BOM UTF-8
+  // Download sebagai .xls dengan BOM UTF-8
   var bom = '\uFEFF';
-  var blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = col + '_' + today() + '.csv';
+  a.download = col + '_' + today() + '.xls';
   a.click();
   URL.revokeObjectURL(url);
   showAlert('Export ' + col + ' berhasil!');
+}
+
+// Export Jurnal Debit (Uang Masuk) — transaksi yang mendebit kas/bank (uang masuk ke perusahaan)
+async function exportJurnalDebit() {
+  var list = await KDB.getAll('jurnal');
+  if (!list.length) { showAlert('Tidak ada data jurnal!', 'warning'); return; }
+  var akunList = await getAkun();
+  var SEP = '\t';
+  function namaAkun(kode) { if (!kode) return ''; var a = akunList.find(function(x){return x.kode===kode;}); return a ? a.nama : ''; }
+  function csvEscape(val) { var s = String(val==null?'':val); return s.replace(/[\r\n\t]/g,' ').trim(); }
+  function parseLines(j) { var l=j.lines; if(!l)return[]; if(typeof l==='string'){try{l=JSON.parse(l);}catch(e){return[];}} if(!Array.isArray(l))return[]; return l; }
+
+  var kasAkuns = ['1-1101-2','1-1101-3']; // Kas bank mandiri & petty cash
+  var headers = ['Tanggal','No Ref','Keterangan','Sumber','Nominal Masuk','Akun Sumber Dana','Nama Akun Sumber','Created By','Created At'];
+  var rows = [];
+  list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
+
+  list.forEach(function(j) {
+    var lines = parseLines(j);
+    // Cari line yang mendebit akun kas/bank (artinya uang MASUK ke kas)
+    var debitKas = 0, akunLawan = '';
+    lines.forEach(function(l) {
+      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.debit)||0) > 0) {
+        debitKas += parseFloat(l.debit) || 0;
+      }
+      if (kasAkuns.indexOf(l.akun) < 0 && (parseFloat(l.kredit)||0) > 0 && !akunLawan) {
+        akunLawan = l.akun || '';
+      }
+    });
+    if (debitKas > 0) {
+      rows.push([j.tanggal||'', j.noRef||'', j.keterangan||'', j.sumber||'', debitKas, akunLawan, namaAkun(akunLawan), j.createdBy||'', j.createdAt||''].map(csvEscape).join(SEP));
+    }
+  });
+
+  if (!rows.length) { showAlert('Tidak ada transaksi debit (uang masuk)!', 'warning'); return; }
+  var csv = headers.join(SEP) + '\n' + rows.join('\n');
+  var bom = '\uFEFF';
+  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'jurnal_debit_uang_masuk_' + today() + '.xls';
+  a.click();
+  URL.revokeObjectURL(url);
+  showAlert('Export Jurnal Debit (Uang Masuk) berhasil!');
+}
+
+// Export Jurnal Kredit (Uang Keluar) — transaksi yang mengkredit kas/bank (uang keluar dari perusahaan)
+async function exportJurnalKredit() {
+  var list = await KDB.getAll('jurnal');
+  if (!list.length) { showAlert('Tidak ada data jurnal!', 'warning'); return; }
+  var akunList = await getAkun();
+  var SEP = '\t';
+  function namaAkun(kode) { if (!kode) return ''; var a = akunList.find(function(x){return x.kode===kode;}); return a ? a.nama : ''; }
+  function csvEscape(val) { var s = String(val==null?'':val); return s.replace(/[\r\n\t]/g,' ').trim(); }
+  function parseLines(j) { var l=j.lines; if(!l)return[]; if(typeof l==='string'){try{l=JSON.parse(l);}catch(e){return[];}} if(!Array.isArray(l))return[]; return l; }
+
+  var kasAkuns = ['1-1101-2','1-1101-3'];
+  var headers = ['Tanggal','No Ref','Keterangan','Sumber','Nominal Keluar','Akun Tujuan','Nama Akun Tujuan','Created By','Created At'];
+  var rows = [];
+  list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
+
+  list.forEach(function(j) {
+    var lines = parseLines(j);
+    // Cari line yang mengkredit akun kas/bank (artinya uang KELUAR dari kas)
+    var kreditKas = 0, akunLawan = '';
+    lines.forEach(function(l) {
+      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.kredit)||0) > 0) {
+        kreditKas += parseFloat(l.kredit) || 0;
+      }
+      if (kasAkuns.indexOf(l.akun) < 0 && (parseFloat(l.debit)||0) > 0 && !akunLawan) {
+        akunLawan = l.akun || '';
+      }
+    });
+    if (kreditKas > 0) {
+      rows.push([j.tanggal||'', j.noRef||'', j.keterangan||'', j.sumber||'', kreditKas, akunLawan, namaAkun(akunLawan), j.createdBy||'', j.createdAt||''].map(csvEscape).join(SEP));
+    }
+  });
+
+  if (!rows.length) { showAlert('Tidak ada transaksi kredit (uang keluar)!', 'warning'); return; }
+  var csv = headers.join(SEP) + '\n' + rows.join('\n');
+  var bom = '\uFEFF';
+  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'jurnal_kredit_uang_keluar_' + today() + '.xls';
+  a.click();
+  URL.revokeObjectURL(url);
+  showAlert('Export Jurnal Kredit (Uang Keluar) berhasil!');
 }
 
 // ===== ANALISIS NARATIF LENGKAP =====
