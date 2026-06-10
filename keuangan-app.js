@@ -10605,15 +10605,16 @@ async function viewBuktiATK(id) {
   if (!lg) { showAlert('Data tidak ditemukan!', 'warning'); return; }
   var atkList = await KDB.getAll('inventori_atk');
   var item = atkList.find(function(x){ return x.id === lg.atkId; });
-  var buktiUrl = lg.buktiLink || lg.buktiPhoto || '';
+  var buktiUrl = lg.buktiLink || '';
+  // Jika buktiLink kosong tapi buktiPhoto ada, itu hanya marker dari form publik
+  var isFotoOnly = (!buktiUrl && lg.buktiPhoto);
 
   var buktiContent = '';
-  if (buktiUrl) {
+  if (buktiUrl && buktiUrl.startsWith('http')) {
     // Cek apakah Google Drive link — convert ke preview
-    var previewUrl = buktiUrl;
     var driveMatch = buktiUrl.match(/\/d\/([^\/]+)/);
     if (driveMatch) {
-      previewUrl = 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview';
+      var previewUrl = 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview';
       buktiContent = '<iframe src="' + previewUrl + '" style="width:100%;height:400px;border:1px solid #ddd;border-radius:8px" allowfullscreen></iframe>'
         + '<div style="margin-top:8px"><a href="' + buktiUrl + '" target="_blank" class="btn btn-sm btn-info">🔗 Buka di Tab Baru</a></div>';
     } else if (buktiUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
@@ -10622,6 +10623,8 @@ async function viewBuktiATK(id) {
     } else {
       buktiContent = '<div class="alert alert-info">Link bukti: <a href="' + buktiUrl + '" target="_blank" style="color:#1a237e;font-weight:600">' + buktiUrl + '</a></div>';
     }
+  } else if (isFotoOnly) {
+    buktiContent = '<div class="alert alert-warning">📷 Foto bukti diambil dari form pengambilan ATK (via HP). Foto tersimpan saat pengisian form namun tidak memiliki link yang bisa ditampilkan di sini.<br><br><b>Solusi:</b> Minta pengambil upload foto ke Google Drive lalu update link buktinya.</div>';
   } else {
     buktiContent = '<div class="alert alert-warning">Tidak ada bukti yang dilampirkan untuk transaksi ini.</div>';
   }
@@ -10635,9 +10638,25 @@ async function viewBuktiATK(id) {
     + '<tr><td style="padding:4px 8px;color:#888">Pengambil</td><td>' + (lg.pengambil||'-') + '</td></tr>'
     + '<tr><td style="padding:4px 8px;color:#888">Keterangan</td><td>' + (lg.keterangan||'-') + '</td></tr>'
     + '</tbody></table></div>'
-    + '<div style="border-top:1px solid #eee;padding-top:12px"><h4 style="margin:0 0 8px">📷 Bukti / Evidence</h4>' + buktiContent + '</div>';
+    + '<div style="border-top:1px solid #eee;padding-top:12px"><h4 style="margin:0 0 8px">📷 Bukti / Evidence</h4>' + buktiContent + '</div>'
+    + '<div style="margin-top:12px;border-top:1px solid #eee;padding-top:12px">'
+    + '<label style="font-size:0.8rem;color:#666">Update Link Bukti:</label>'
+    + '<div style="display:flex;gap:8px;margin-top:4px"><input id="atk-update-bukti" placeholder="Paste link foto/drive di sini" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" value="' + (buktiUrl||'') + '">'
+    + '<button class="btn btn-sm btn-primary" onclick="updateBuktiATK(\'' + id + '\')">💾 Simpan</button></div></div>';
 
   openModal(html, '📋 Detail Transaksi ATK');
+}
+
+async function updateBuktiATK(id) {
+  var newLink = (document.getElementById('atk-update-bukti')||{}).value || '';
+  if (!newLink.trim()) { showAlert('Link bukti kosong!', 'warning'); return; }
+  var logList = await KDB.getAll('atk_log');
+  var lg = logList.find(function(x){ return x.id === id; });
+  if (!lg) return;
+  await KDB.save('atk_log', id, Object.assign({}, lg, { buktiLink: newLink.trim() }));
+  showAlert('Link bukti berhasil diupdate!');
+  closeModalDirect();
+  navigate('kalk-inventori-atk');
 }
 
 function copyATKLink() {
