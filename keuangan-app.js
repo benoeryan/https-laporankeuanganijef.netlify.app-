@@ -10610,7 +10610,10 @@ async function viewBuktiATK(id) {
   var isFotoOnly = (!buktiUrl && lg.buktiPhoto);
 
   var buktiContent = '';
-  if (buktiUrl && buktiUrl.startsWith('http')) {
+  if (buktiUrl && buktiUrl.startsWith('data:image')) {
+    // Base64 foto langsung dari kamera
+    buktiContent = '<img src="' + buktiUrl + '" style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid #ddd">';
+  } else if (buktiUrl && buktiUrl.startsWith('http')) {
     // Cek apakah Google Drive link — convert ke preview
     var driveMatch = buktiUrl.match(/\/d\/([^\/]+)/);
     if (driveMatch) {
@@ -10624,7 +10627,7 @@ async function viewBuktiATK(id) {
       buktiContent = '<div class="alert alert-info">Link bukti: <a href="' + buktiUrl + '" target="_blank" style="color:#1a237e;font-weight:600">' + buktiUrl + '</a></div>';
     }
   } else if (isFotoOnly) {
-    buktiContent = '<div class="alert alert-warning">📷 Foto bukti diambil dari form pengambilan ATK (via HP). Foto tersimpan saat pengisian form namun tidak memiliki link yang bisa ditampilkan di sini.<br><br><b>Solusi:</b> Minta pengambil upload foto ke Google Drive lalu update link buktinya.</div>';
+    buktiContent = '<div class="alert alert-warning">📷 Foto bukti diambil dari form lama. Data foto tidak tersimpan sebagai link.<br><b>Solusi:</b> Upload ulang foto ke Google Drive lalu update link-nya di bawah.</div>';
   } else {
     buktiContent = '<div class="alert alert-warning">Tidak ada bukti yang dilampirkan untuk transaksi ini.</div>';
   }
@@ -10725,9 +10728,22 @@ function previewPubFoto(input) {
   if (!el || !input.files || !input.files[0]) return;
   var reader = new FileReader();
   reader.onload = function(e) {
-    window._pubFotoData = e.target.result;
-    el.innerHTML = '<img src="' + e.target.result + '" style="max-width:100%;max-height:200px;border-radius:8px;border:2px solid #4caf50;margin-top:4px">'
-      + '<div style="font-size:0.75rem;color:#2e7d32;margin-top:4px">Foto siap dikirim</div>';
+    // Compress foto ke max 800px width dan quality 0.5 agar muat di Firestore (<1MB)
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var maxW = 800;
+      var w = img.width, h = img.height;
+      if (w > maxW) { h = h * maxW / w; w = maxW; }
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var compressed = canvas.toDataURL('image/jpeg', 0.5);
+      window._pubFotoData = compressed;
+      el.innerHTML = '<img src="' + compressed + '" style="max-width:100%;max-height:200px;border-radius:8px;border:2px solid #4caf50;margin-top:4px">'
+        + '<div style="font-size:0.75rem;color:#2e7d32;margin-top:4px">✅ Foto siap dikirim (' + Math.round(compressed.length/1024) + ' KB)</div>';
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(input.files[0]);
 }
@@ -10762,7 +10778,7 @@ async function submitPubATKForm() {
     var item = items[i];
     var atkItem = (window._atkList||[]).find(function(x){ return x.id === item.atkId; });
     var logId = genId('ATKL');
-    await KDB.save('atk_log', logId, { id: logId, atkId: item.atkId, tipe: 'keluar', qty: item.qty, harga: atkItem ? (parseFloat(atkItem.harga)||0) : 0, tanggal: tgl, pengambil: pic, keterangan: ket, buktiLink: linkBukti, buktiPhoto: fotoBukti ? '[foto]' : '', createdBy: 'public-form', createdAt: new Date().toISOString() });
+    await KDB.save('atk_log', logId, { id: logId, atkId: item.atkId, tipe: 'keluar', qty: item.qty, harga: atkItem ? (parseFloat(atkItem.harga)||0) : 0, tanggal: tgl, pengambil: pic, keterangan: ket, buktiLink: linkBukti || fotoBukti || '', buktiPhoto: fotoBukti ? 'base64' : '', createdBy: 'public-form', createdAt: new Date().toISOString() });
   }
   if (resultEl) resultEl.innerHTML = '<div style="background:#e8f5e9;color:#2e7d32;padding:14px;border-radius:8px;margin-bottom:12px;font-weight:600">Form berhasil dikirim! Terima kasih, ' + pic + '.' + (bukti ? ' Bukti tersimpan.' : '') + '</div>';
   document.getElementById('pub-pic').value = '';
