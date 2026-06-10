@@ -3613,10 +3613,127 @@ async function renderSaldoHariIni() {
   }).join('');
   return '<div class="page-title">💵 Posisi Saldo Hari Ini</div>'
     + '<div class="alert alert-info">📅 ' + today_str + '</div>'
-    + '<div class="card"><div class="card-header"><h2>Saldo Akun</h2><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
+    + '<div class="card"><div class="card-header"><h2>Saldo Akun</h2><div style="display:flex;gap:8px"><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button><button class="btn btn-sm btn-warning no-print" onclick="analisaSelisihSaldo()">🔍 Analisa Selisih</button></div></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama Akun</th><th class="text-right">Saldo</th><th>Status</th></tr></thead><tbody>' + rows
     + '<tr style="background:#1a237e;color:white"><td colspan="2"><b>TOTAL</b></td><td class="text-right fw-bold">' + fmtRp(totalFiltered) + '</td><td></td></tr>'
     + '</tbody></table></div></div>';
+}
+
+// ===== ANALISA SELISIH SALDO =====
+async function analisaSelisihSaldo() {
+  var saldoReal = prompt('Masukkan saldo real Bank Mandiri saat ini (tanpa Rp, contoh: 155083806.92):');
+  if (!saldoReal) return;
+  saldoReal = parseFloat(saldoReal.replace(/[^\d.,]/g,'').replace(/,/g,'')) || 0;
+  if (saldoReal <= 0) { showAlert('Saldo tidak valid!', 'danger'); return; }
+
+  showLoading(true);
+  var jurnal = await KDB.getAll('jurnal');
+  var akun = await getAkun();
+  var fd = await getFinancialData();
+  var kasAkun = '1-1101-2'; // Kas dan Bank Mandiri
+  var saldoSistem = (fd.saldo[kasAkun] || {}).net || 0;
+  var selisih = saldoSistem - saldoReal;
+
+  // Analisa penyebab selisih
+  var issues = [];
+
+  // 1. Cek jurnal yang debit DAN kredit ke akun yang sama (double entry salah)
+  jurnal.forEach(function(j) {
+    var lines = j.lines || [];
+    var kasDebit = 0, kasKredit = 0;
+    lines.forEach(function(l) {
+      if (l.akun === kasAkun) {
+        kasDebit += (parseFloat(l.debit) || 0);
+        kasKredit += (parseFloat(l.kredit) || 0);
+      }
+    });
+    if (kasDebit > 0 && kasKredit > 0) {
+      issues.push({ tipe: '⚠️ Debit & Kredit ke akun sama', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: Math.min(kasDebit, kasKredit), detail: 'Debit: ' + fmtRp(kasDebit) + ' | Kredit: ' + fmtRp(kasKredit) });
+    }
+  });
+
+  // 2. Cek jurnal yang pakai akun kas tapi sumber dari bank lain (BCA, Seabank, BRI, dll)
+  jurnal.forEach(function(j) {
+    var meta = j.meta || {};
+    var lines = j.lines || [];
+    var ketLower = (j.keterangan || '').toLowerCase();
+    var namaBank = (meta.namaBank || '').toLowerCase();
+    var touchKas = lines.some(function(l) { return l.akun === kasAkun; });
+    if (touchKas && (namaBank.includes('bca') || namaBank.includes('bri') || namaBank.includes('bni') || namaBank.includes('seabank') || namaBank.includes('uob') || namaBank.includes('shopee'))) {
+      var nominal = parseFloat(j.totalDebit) || 0;
+      issues.push({ tipe: '🏦 Bank lain masuk ke Mandiri', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: nominal, detail: 'Bank: ' + (meta.namaBank||namaBank) + ' — seharusnya bukan akun Mandiri?' });
+    }
+  });
+
+  // 3. Cek duplikat (keterangan + nominal + tanggal sama)
+  var seen = {};
+  jurnal.forEach(function(j) {
+    var lines = j.lines || [];
+    var touchKas = lines.some(function(l) { return l.akun === kasAkun; });
+    if (!touchKas) return;
+    var key = (j.tanggal||'') + '|' + (parseFloat(j.totalDebit)||0) + '|' + (j.keterangan||'').substring(0,30).toLowerCase();
+    if (seen[key]) {
+      issues.push({ tipe: '🔄 Kemungkinan duplikat', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Sama dengan jurnal ' + seen[key] });
+    } else {
+      seen[key] = j.id;
+    }
+  });
+
+  // 4. Cek saldo awal
+  var tahun = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahun, {});
+  var saldoAwalMandiri = parseFloat(saldoAwalData[kasAkun]) || 0;
+  if (saldoAwalMandiri > 0) {
+    issues.push({ tipe: 'ℹ️ Saldo Awal', id: '-', tanggal: tahun + '-01-01', ket: 'Saldo Awal yang di-set', nominal: saldoAwalMandiri, detail: 'Pastikan sesuai dengan saldo real per 1 Januari ' + tahun });
+  }
+
+  // 5. Hitung total debit & kredit ke kas mandiri
+  var totalDebitKas = 0, totalKreditKas = 0, countTrx = 0;
+  jurnal.forEach(function(j) {
+    (j.lines || []).forEach(function(l) {
+      if (l.akun === kasAkun) {
+        totalDebitKas += (parseFloat(l.debit) || 0);
+        totalKreditKas += (parseFloat(l.kredit) || 0);
+        if ((parseFloat(l.debit)||0) > 0 || (parseFloat(l.kredit)||0) > 0) countTrx++;
+      }
+    });
+  });
+
+  showLoading(false);
+
+  // Build result
+  var html = '<div style="margin-bottom:16px">'
+    + '<table style="width:100%;font-size:0.85rem;border-collapse:collapse"><tbody>'
+    + '<tr style="background:#e3f2fd"><td style="padding:8px">Saldo Sistem (1-1101-2)</td><td class="text-right fw-bold">' + fmtRp(saldoSistem) + '</td></tr>'
+    + '<tr style="background:#e8f5e9"><td style="padding:8px">Saldo Real Bank Mandiri</td><td class="text-right fw-bold">' + fmtRp(saldoReal) + '</td></tr>'
+    + '<tr style="background:' + (selisih===0?'#e8f5e9':'#ffebee') + '"><td style="padding:8px"><b>SELISIH</b></td><td class="text-right fw-bold ' + (selisih===0?'text-green':'text-red') + '">' + fmtRp(Math.abs(selisih)) + (selisih > 0 ? ' (Sistem lebih besar)' : selisih < 0 ? ' (Bank lebih besar)' : ' ✅ Match') + '</td></tr>'
+    + '<tr><td style="padding:8px;color:#888">Saldo Awal ' + tahun + '</td><td class="text-right">' + fmtRp(saldoAwalMandiri) + '</td></tr>'
+    + '<tr><td style="padding:8px;color:#888">Total Debit (masuk)</td><td class="text-right text-green">' + fmtRp(totalDebitKas) + '</td></tr>'
+    + '<tr><td style="padding:8px;color:#888">Total Kredit (keluar)</td><td class="text-right text-red">' + fmtRp(totalKreditKas) + '</td></tr>'
+    + '<tr><td style="padding:8px;color:#888">Jumlah Transaksi</td><td class="text-right">' + countTrx + '</td></tr>'
+    + '<tr style="background:#fff3e0"><td style="padding:8px"><b>Kalkulasi: Awal + Debit - Kredit</b></td><td class="text-right fw-bold">' + fmtRp(saldoAwalMandiri + totalDebitKas - totalKreditKas) + '</td></tr>'
+    + '</tbody></table></div>';
+
+  if (issues.length) {
+    html += '<div style="margin-bottom:8px;font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' potensi masalah:</div>';
+    html += '<div style="max-height:350px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th></tr></thead><tbody>';
+    issues.forEach(function(issue) {
+      html += '<tr style="border-bottom:1px solid #eee"><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666">' + (issue.detail||'') + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div class="alert alert-success">Tidak ditemukan masalah yang jelas. Selisih mungkin dari transaksi yang belum dicatat di sistem.</div>';
+  }
+
+  html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;font-size:0.8rem;color:#666">'
+    + '<b>Tips mengatasi selisih:</b><ul style="margin:4px 0;padding-left:20px">'
+    + '<li>Cek transaksi bank yang belum tercatat di jurnal (belum diinput/import)</li>'
+    + '<li>Cek transaksi yang seharusnya dari bank lain (BCA/BRI/Seabank) tapi masuk ke akun Mandiri</li>'
+    + '<li>Import CSV mutasi bank Mandiri di menu Bank Reconcile untuk matching otomatis</li>'
+    + '<li>Gunakan jurnal koreksi jika sudah yakin sumber selisihnya</li>'
+    + '</ul></div>';
+
+  openModal(html, '🔍 Analisa Selisih Saldo Bank Mandiri');
 }
 
 // ===== KALKULATOR =====
