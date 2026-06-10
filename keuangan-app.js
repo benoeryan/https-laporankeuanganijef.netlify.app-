@@ -8476,218 +8476,118 @@ async function exportCSV(col) {
   var list = await KDB.getAll(col);
   if (!list.length) { showAlert('Tidak ada data untuk diexport!', 'warning'); return; }
 
-  var csv = '';
-  var SEP = '\t'; // Tab separator untuk Excel
   var akunList = await getAkun();
   function namaAkun(kode) {
     if (!kode) return '';
     var a = akunList.find(function(x){ return x.kode === kode; });
     return a ? a.nama : '';
   }
-  function csvEscape(val) {
+  function esc(val) {
     var s = String(val == null ? '' : val);
-    // Bersihkan newline dan tab dari value
-    s = s.replace(/[\r\n\t]/g, ' ').trim();
-    return s;
+    return s.replace(/[\r\n\t]/g, ' ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trim();
   }
-
-  // Helper: parse lines field (bisa string JSON atau array)
+  function fmtNum(n) { return parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function parseLines(j) {
     var lines = j.lines;
     if (!lines) return [];
-    if (typeof lines === 'string') {
-      try { lines = JSON.parse(lines); } catch(e) { return []; }
-    }
+    if (typeof lines === 'string') { try { lines = JSON.parse(lines); } catch(e) { return []; } }
     if (!Array.isArray(lines)) return [];
     return lines;
   }
 
+  // Generate HTML table yang Excel bisa buka langsung
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#4472C4;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><table>';
+
   if (col === 'jurnal') {
-    // Format bersih: 1 baris per jurnal, tanpa meta/lines mentah
-    var headers = ['Tanggal','No Ref','Keterangan','Tipe','Sumber','Total Debit','Total Kredit','Akun Debit','Nama Akun Debit','Akun Kredit','Nama Akun Kredit','Created By','Created At'];
-    var rows = [];
+    // Format rekening koran: Tanggal | Ref | Keterangan | Debit | Kredit | Saldo
+    var kasAkuns = ['1-1101-2','1-1101-3'];
     list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
+
+    // Ambil saldo awal dari setting
+    var saldoAwal = 0;
+    try {
+      var yr = new Date().getFullYear();
+      saldoAwal = parseFloat(await KDB.getSetting('saldo_awal_' + yr, 0)) || 0;
+    } catch(e) {}
+    var saldo = saldoAwal;
+
+    html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Saldo</th></tr>';
+    // Baris saldo awal
+    html += '<tr><td class="date">' + yr + '-01-01</td><td>-</td><td><b>Saldo Awal ' + yr + '</b></td><td class="num"></td><td class="num"></td><td class="num">' + fmtNum(saldo) + '</td></tr>';
 
     list.forEach(function(j) {
       var lines = parseLines(j);
-      var akunDebit = '', akunKredit = '';
-      if (lines.length > 0) {
-        for (var i = 0; i < lines.length; i++) {
-          if ((parseFloat(lines[i].debit) || 0) > 0 && !akunDebit) akunDebit = lines[i].akun || '';
-          if ((parseFloat(lines[i].kredit) || 0) > 0 && !akunKredit) akunKredit = lines[i].akun || '';
+      var debit = 0, kredit = 0;
+      // Hitung debit/kredit relatif ke akun kas/bank
+      lines.forEach(function(l) {
+        if (kasAkuns.indexOf(l.akun) >= 0) {
+          debit += (parseFloat(l.debit) || 0);
+          kredit += (parseFloat(l.kredit) || 0);
         }
-      }
-      rows.push([
-        j.tanggal || '',
-        j.noRef || '',
-        j.keterangan || '',
-        j.tipe || '',
-        j.sumber || '',
-        j.totalDebit || 0,
-        j.totalKredit || 0,
-        akunDebit,
-        namaAkun(akunDebit),
-        akunKredit,
-        namaAkun(akunKredit),
-        j.createdBy || '',
-        j.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      });
+      // Kalau tidak ada line kas, skip (bukan transaksi kas)
+      if (debit === 0 && kredit === 0) return;
+      saldo = saldo + debit - kredit;
+      html += '<tr><td class="date">' + esc(j.tanggal) + '</td><td>' + esc(j.noRef) + '</td><td>' + esc(j.keterangan) + '</td><td class="num">' + (debit > 0 ? fmtNum(debit) : '') + '</td><td class="num">' + (kredit > 0 ? fmtNum(kredit) : '') + '</td><td class="num">' + fmtNum(saldo) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else if (col === 'pettycash') {
-    var headers = ['Tanggal','No Ref','Keterangan','Tipe','Kode Akun Debit','Nama Akun Debit','Kode Akun Kredit','Nama Akun Kredit','Nominal','Created By','Created At'];
-    var rows = [];
+    html += '<tr><th>Tanggal</th><th>No Ref</th><th>Keterangan</th><th>Tipe</th><th>Akun Debit</th><th>Akun Kredit</th><th>Nominal</th><th>Created By</th></tr>';
     list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
     list.forEach(function(pc) {
-      rows.push([
-        pc.tanggal || '',
-        pc.noRef || pc.id || '',
-        pc.keterangan || '',
-        pc.tipe || '',
-        pc.akunDebit || '',
-        namaAkun(pc.akunDebit),
-        pc.akunKredit || '',
-        namaAkun(pc.akunKredit),
-        pc.jumlah || pc.nominal || 0,
-        pc.createdBy || '',
-        pc.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      html += '<tr><td class="date">' + esc(pc.tanggal) + '</td><td>' + esc(pc.noRef||pc.id) + '</td><td>' + esc(pc.keterangan) + '</td><td>' + esc(pc.tipe) + '</td><td>' + esc(namaAkun(pc.akunDebit)) + '</td><td>' + esc(namaAkun(pc.akunKredit)) + '</td><td class="num">' + fmtNum(pc.jumlah||pc.nominal) + '</td><td>' + esc(pc.createdBy) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else if (col === 'invoice') {
-    var headers = ['No Invoice','Tanggal','Jatuh Tempo','Customer','Keterangan','Nominal','Status','Created By','Created At'];
-    var rows = [];
+    html += '<tr><th>No Invoice</th><th>Tanggal</th><th>Jatuh Tempo</th><th>Customer</th><th>Keterangan</th><th>Nominal</th><th>Status</th></tr>';
     list.forEach(function(inv) {
-      rows.push([
-        inv.noInvoice || inv.id || '',
-        inv.tanggal || '',
-        inv.jatuhTempo || '',
-        inv.customer || inv.nama || '',
-        inv.keterangan || '',
-        inv.nominal || inv.total || 0,
-        inv.status || '',
-        inv.createdBy || '',
-        inv.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      html += '<tr><td>' + esc(inv.noInvoice||inv.id) + '</td><td class="date">' + esc(inv.tanggal) + '</td><td class="date">' + esc(inv.jatuhTempo) + '</td><td>' + esc(inv.customer||inv.nama) + '</td><td>' + esc(inv.keterangan) + '</td><td class="num">' + fmtNum(inv.nominal||inv.total) + '</td><td>' + esc(inv.status) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else if (col === 'po') {
-    var headers = ['No PO','Tanggal','Supplier','Keterangan','Nominal','Status','Created By','Created At'];
-    var rows = [];
+    html += '<tr><th>No PO</th><th>Tanggal</th><th>Supplier</th><th>Keterangan</th><th>Nominal</th><th>Status</th></tr>';
     list.forEach(function(p) {
-      rows.push([
-        p.noPO || p.id || '',
-        p.tanggal || '',
-        p.supplier || p.vendor || '',
-        p.keterangan || '',
-        p.nominal || p.total || 0,
-        p.status || '',
-        p.createdBy || '',
-        p.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      html += '<tr><td>' + esc(p.noPO||p.id) + '</td><td class="date">' + esc(p.tanggal) + '</td><td>' + esc(p.supplier||p.vendor) + '</td><td>' + esc(p.keterangan) + '</td><td class="num">' + fmtNum(p.nominal||p.total) + '</td><td>' + esc(p.status) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else if (col === 'utangpiutang') {
-    var headers = ['Tanggal','Tipe','Nama','Keterangan','Nominal','Sisa','Jatuh Tempo','Status','Created By','Created At'];
-    var rows = [];
+    html += '<tr><th>Tanggal</th><th>Tipe</th><th>Nama</th><th>Keterangan</th><th>Nominal</th><th>Sisa</th><th>Jatuh Tempo</th><th>Status</th></tr>';
     list.forEach(function(u) {
-      rows.push([
-        u.tanggal || '',
-        u.tipe || '',
-        u.nama || '',
-        u.keterangan || '',
-        u.nominal || 0,
-        u.sisa != null ? u.sisa : u.nominal || 0,
-        u.jatuhTempo || '',
-        u.status || '',
-        u.createdBy || '',
-        u.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      html += '<tr><td class="date">' + esc(u.tanggal) + '</td><td>' + esc(u.tipe) + '</td><td>' + esc(u.nama) + '</td><td>' + esc(u.keterangan) + '</td><td class="num">' + fmtNum(u.nominal) + '</td><td class="num">' + fmtNum(u.sisa!=null?u.sisa:u.nominal) + '</td><td class="date">' + esc(u.jatuhTempo) + '</td><td>' + esc(u.status) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else if (col === 'gaji') {
-    var headers = ['Periode','Nama Karyawan','Jabatan','Gaji Pokok','Tunjangan','Potongan','Total','Status','Created By','Created At'];
-    var rows = [];
+    html += '<tr><th>Periode</th><th>Nama</th><th>Jabatan</th><th>Gaji Pokok</th><th>Tunjangan</th><th>Potongan</th><th>Total</th><th>Status</th></tr>';
     list.forEach(function(g) {
-      rows.push([
-        g.periode || '',
-        g.nama || '',
-        g.jabatan || '',
-        g.gajiPokok || 0,
-        g.tunjangan || 0,
-        g.potongan || 0,
-        g.total || g.gajiPokok || 0,
-        g.status || '',
-        g.createdBy || '',
-        g.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      html += '<tr><td>' + esc(g.periode) + '</td><td>' + esc(g.nama) + '</td><td>' + esc(g.jabatan) + '</td><td class="num">' + fmtNum(g.gajiPokok) + '</td><td class="num">' + fmtNum(g.tunjangan) + '</td><td class="num">' + fmtNum(g.potongan) + '</td><td class="num">' + fmtNum(g.total||g.gajiPokok) + '</td><td>' + esc(g.status) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else if (col === 'permohonan') {
-    var headers = ['Tanggal','No Ref','Keterangan','Pemohon','Nominal','Kategori','Status','Approved By','Created At'];
-    var rows = [];
+    html += '<tr><th>Tanggal</th><th>No Ref</th><th>Keterangan</th><th>Pemohon</th><th>Nominal</th><th>Kategori</th><th>Status</th><th>Approved By</th></tr>';
     list.forEach(function(p) {
-      rows.push([
-        p.tanggal || '',
-        p.noRef || p.id || '',
-        p.keterangan || '',
-        p.pemohon || p.namaPIC || '',
-        p.nominal || 0,
-        p.kategori || '',
-        p.status || '',
-        p.approvedBy || '',
-        p.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      html += '<tr><td class="date">' + esc(p.tanggal) + '</td><td>' + esc(p.noRef||p.id) + '</td><td>' + esc(p.keterangan) + '</td><td>' + esc(p.pemohon||p.namaPIC) + '</td><td class="num">' + fmtNum(p.nominal) + '</td><td>' + esc(p.kategori) + '</td><td>' + esc(p.status) + '</td><td>' + esc(p.approvedBy) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else if (col === 'danamasuk') {
-    var headers = ['Tanggal','No Ref','Keterangan','Sumber','Nominal','Kategori','Status','Approved By','Created At'];
-    var rows = [];
+    html += '<tr><th>Tanggal</th><th>No Ref</th><th>Keterangan</th><th>Sumber</th><th>Nominal</th><th>Kategori</th><th>Status</th><th>Approved By</th></tr>';
     list.forEach(function(d) {
-      rows.push([
-        d.tanggal || '',
-        d.noRef || d.id || '',
-        d.keterangan || '',
-        d.sumber || '',
-        d.nominal || 0,
-        d.kategori || '',
-        d.status || '',
-        d.approvedBy || '',
-        d.createdAt || ''
-      ].map(csvEscape).join(SEP));
+      html += '<tr><td class="date">' + esc(d.tanggal) + '</td><td>' + esc(d.noRef||d.id) + '</td><td>' + esc(d.keterangan) + '</td><td>' + esc(d.sumber) + '</td><td class="num">' + fmtNum(d.nominal) + '</td><td>' + esc(d.kategori) + '</td><td>' + esc(d.status) + '</td><td>' + esc(d.approvedBy) + '</td></tr>';
     });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
 
   } else {
-    // Generic fallback — flatten objects, skip arrays/objects
-    var headers = Object.keys(list[0]).filter(function(k){ return !k.startsWith('_'); });
-    // Remove complex fields (objects, arrays, meta, lines)
-    var skipFields = ['meta', 'lines', 'deletedAt', 'deletedBy'];
-    headers = headers.filter(function(h) {
-      if (skipFields.indexOf(h) >= 0) return false;
-      var val = list[0][h];
-      if (val === null || val === undefined) return true;
-      if (typeof val === 'object') return false;
-      return true;
+    // Generic fallback
+    var skipFields = ['meta','lines','deletedAt','deletedBy','_id'];
+    var headers = Object.keys(list[0]).filter(function(k){ return !k.startsWith('_') && skipFields.indexOf(k)<0 && typeof list[0][k]!=='object'; });
+    html += '<tr>' + headers.map(function(h){return '<th>'+esc(h)+'</th>';}).join('') + '</tr>';
+    list.forEach(function(item) {
+      html += '<tr>' + headers.map(function(h){return '<td>'+esc(item[h])+'</td>';}).join('') + '</tr>';
     });
-    var rows = list.map(function(item) {
-      return headers.map(function(h) {
-        return csvEscape(item[h]);
-      }).join(SEP);
-    });
-    csv = headers.join(SEP) + '\n' + rows.join('\n');
   }
 
-  // Download sebagai .xls dengan BOM UTF-8
-  var bom = '\uFEFF';
-  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  html += '</table></body></html>';
+
+  // Download sebagai .xls (HTML table yang Excel baca native)
+  var blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
@@ -8697,93 +8597,81 @@ async function exportCSV(col) {
   showAlert('Export ' + col + ' berhasil!');
 }
 
-// Export Jurnal Debit (Uang Masuk) — transaksi yang mendebit kas/bank (uang masuk ke perusahaan)
+// Export Jurnal Debit (Uang Masuk) — format rekening koran
 async function exportJurnalDebit() {
   var list = await KDB.getAll('jurnal');
   if (!list.length) { showAlert('Tidak ada data jurnal!', 'warning'); return; }
   var akunList = await getAkun();
-  var SEP = '\t';
-  function namaAkun(kode) { if (!kode) return ''; var a = akunList.find(function(x){return x.kode===kode;}); return a ? a.nama : ''; }
-  function csvEscape(val) { var s = String(val==null?'':val); return s.replace(/[\r\n\t]/g,' ').trim(); }
+  function esc(val) { var s=String(val==null?'':val); return s.replace(/[\r\n\t]/g,' ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trim(); }
+  function fmtNum(n) { return parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function parseLines(j) { var l=j.lines; if(!l)return[]; if(typeof l==='string'){try{l=JSON.parse(l);}catch(e){return[];}} if(!Array.isArray(l))return[]; return l; }
 
-  var kasAkuns = ['1-1101-2','1-1101-3']; // Kas bank mandiri & petty cash
-  var headers = ['Tanggal','No Ref','Keterangan','Sumber','Nominal Masuk','Akun Sumber Dana','Nama Akun Sumber','Created By','Created At'];
-  var rows = [];
+  var kasAkuns = ['1-1101-2','1-1101-3'];
   list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
+
+  var saldo = 0;
+  try { var yr=new Date().getFullYear(); saldo=parseFloat(await KDB.getSetting('saldo_awal_'+yr,0))||0; } catch(e){}
+
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#2E7D32;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Debit - Uang Masuk</h3><table>';
+  html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit (Masuk)</th><th>Saldo</th></tr>';
 
   list.forEach(function(j) {
     var lines = parseLines(j);
-    // Cari line yang mendebit akun kas/bank (artinya uang MASUK ke kas)
-    var debitKas = 0, akunLawan = '';
+    var debitKas = 0;
     lines.forEach(function(l) {
-      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.debit)||0) > 0) {
-        debitKas += parseFloat(l.debit) || 0;
-      }
-      if (kasAkuns.indexOf(l.akun) < 0 && (parseFloat(l.kredit)||0) > 0 && !akunLawan) {
-        akunLawan = l.akun || '';
-      }
+      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.debit)||0) > 0) debitKas += parseFloat(l.debit)||0;
     });
     if (debitKas > 0) {
-      rows.push([j.tanggal||'', j.noRef||'', j.keterangan||'', j.sumber||'', debitKas, akunLawan, namaAkun(akunLawan), j.createdBy||'', j.createdAt||''].map(csvEscape).join(SEP));
+      saldo += debitKas;
+      html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(debitKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
     }
   });
+  html += '</table></body></html>';
 
-  if (!rows.length) { showAlert('Tidak ada transaksi debit (uang masuk)!', 'warning'); return; }
-  var csv = headers.join(SEP) + '\n' + rows.join('\n');
-  var bom = '\uFEFF';
-  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  var blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
   var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
+  var a = document.createElement('a'); a.href = url;
   a.download = 'jurnal_debit_uang_masuk_' + today() + '.xls';
-  a.click();
-  URL.revokeObjectURL(url);
+  a.click(); URL.revokeObjectURL(url);
   showAlert('Export Jurnal Debit (Uang Masuk) berhasil!');
 }
 
-// Export Jurnal Kredit (Uang Keluar) — transaksi yang mengkredit kas/bank (uang keluar dari perusahaan)
+// Export Jurnal Kredit (Uang Keluar) — format rekening koran
 async function exportJurnalKredit() {
   var list = await KDB.getAll('jurnal');
   if (!list.length) { showAlert('Tidak ada data jurnal!', 'warning'); return; }
   var akunList = await getAkun();
-  var SEP = '\t';
-  function namaAkun(kode) { if (!kode) return ''; var a = akunList.find(function(x){return x.kode===kode;}); return a ? a.nama : ''; }
-  function csvEscape(val) { var s = String(val==null?'':val); return s.replace(/[\r\n\t]/g,' ').trim(); }
+  function esc(val) { var s=String(val==null?'':val); return s.replace(/[\r\n\t]/g,' ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trim(); }
+  function fmtNum(n) { return parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function parseLines(j) { var l=j.lines; if(!l)return[]; if(typeof l==='string'){try{l=JSON.parse(l);}catch(e){return[];}} if(!Array.isArray(l))return[]; return l; }
 
   var kasAkuns = ['1-1101-2','1-1101-3'];
-  var headers = ['Tanggal','No Ref','Keterangan','Sumber','Nominal Keluar','Akun Tujuan','Nama Akun Tujuan','Created By','Created At'];
-  var rows = [];
   list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
+
+  var saldo = 0;
+  try { var yr=new Date().getFullYear(); saldo=parseFloat(await KDB.getSetting('saldo_awal_'+yr,0))||0; } catch(e){}
+
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#C62828;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Kredit - Uang Keluar</h3><table>';
+  html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Kredit (Keluar)</th><th>Saldo</th></tr>';
 
   list.forEach(function(j) {
     var lines = parseLines(j);
-    // Cari line yang mengkredit akun kas/bank (artinya uang KELUAR dari kas)
-    var kreditKas = 0, akunLawan = '';
+    var kreditKas = 0;
     lines.forEach(function(l) {
-      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.kredit)||0) > 0) {
-        kreditKas += parseFloat(l.kredit) || 0;
-      }
-      if (kasAkuns.indexOf(l.akun) < 0 && (parseFloat(l.debit)||0) > 0 && !akunLawan) {
-        akunLawan = l.akun || '';
-      }
+      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.kredit)||0) > 0) kreditKas += parseFloat(l.kredit)||0;
     });
     if (kreditKas > 0) {
-      rows.push([j.tanggal||'', j.noRef||'', j.keterangan||'', j.sumber||'', kreditKas, akunLawan, namaAkun(akunLawan), j.createdBy||'', j.createdAt||''].map(csvEscape).join(SEP));
+      saldo -= kreditKas;
+      html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(kreditKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
     }
   });
+  html += '</table></body></html>';
 
-  if (!rows.length) { showAlert('Tidak ada transaksi kredit (uang keluar)!', 'warning'); return; }
-  var csv = headers.join(SEP) + '\n' + rows.join('\n');
-  var bom = '\uFEFF';
-  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  var blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
   var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
+  var a = document.createElement('a'); a.href = url;
   a.download = 'jurnal_kredit_uang_keluar_' + today() + '.xls';
-  a.click();
-  URL.revokeObjectURL(url);
+  a.click(); URL.revokeObjectURL(url);
   showAlert('Export Jurnal Kredit (Uang Keluar) berhasil!');
 }
 
