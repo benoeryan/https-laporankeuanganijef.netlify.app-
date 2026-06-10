@@ -10508,7 +10508,7 @@ async function renderInventoriATK() {
       + '<td><span class="chip" style="background:' + (lg.tipe==='masuk'?'#e8f5e9':'#ffebee') + ';color:' + (lg.tipe==='masuk'?'#2e7d32':'#c62828') + '">' + (lg.tipe==='masuk'?'Masuk':'Keluar') + '</span></td>'
       + '<td class="text-center fw-bold ' + cls + '">' + sign + (lg.qty||0) + '</td>'
       + '<td>' + (lg.pengambil||'-') + '</td><td>' + (lg.keterangan||'-') + '</td>'
-      + '<td>' + (lg.buktiLink ? '<a href="' + lg.buktiLink + '" target="_blank" style="color:#1a237e;font-size:0.75rem">🔗 Link</a>' : lg.buktiPhoto ? '<span style="color:#4caf50;font-size:0.75rem">📷 Foto</span>' : '-') + '</td>'
+      + '<td>' + (lg.buktiLink ? '<button class="btn btn-xs btn-info" onclick="viewBuktiATK(\'' + lg.id + '\')">📷 Foto</button>' : '-') + '</td>'
       + '<td class="tbl-actions"><button class="btn btn-xs btn-danger" onclick="hapusATKLog(\'' + lg.id + '\')">Hapus</button></td></tr>';
   }).join('');
 
@@ -10544,6 +10544,7 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Tanggal</label><input type="date" id="atklog-tgl" value="' + today() + '"></div>'
     + '<div class="fg"><label>Pengambil / PIC</label><input id="atklog-pic" placeholder="Nama pengambil"></div>'
     + '<div class="fg"><label>Keterangan</label><input id="atklog-ket" placeholder="Keperluan"></div>'
+    + '<div class="fg"><label>Bukti (Link foto/drive)</label><input id="atklog-bukti" placeholder="https://drive.google.com/... atau URL foto"></div>'
     + '</div><div class="mt-12"><button class="btn btn-success" onclick="simpanATKLog()">Simpan Transaksi</button></div></div>'
     // Barcode / QR untuk form pengambilan
     + '<div class="card"><div class="card-header"><h2>📱 Form Pengambilan ATK (Scan Barcode)</h2></div>'
@@ -10584,6 +10585,7 @@ async function simpanATKLog() {
     tanggal: (document.getElementById('atklog-tgl')||{}).value || today(),
     pengambil: (document.getElementById('atklog-pic')||{}).value || '',
     keterangan: (document.getElementById('atklog-ket')||{}).value || '',
+    buktiLink: (document.getElementById('atklog-bukti')||{}).value || '',
     createdBy: KU ? KU.username : 'form',
     createdAt: new Date().toISOString()
   });
@@ -10595,6 +10597,47 @@ async function hapusATKLog(id) {
   if (!confirm('Hapus log transaksi ini?')) return;
   await KDB.delete('atk_log', id);
   navigate('kalk-inventori-atk');
+}
+
+async function viewBuktiATK(id) {
+  var logList = await KDB.getAll('atk_log');
+  var lg = logList.find(function(x){ return x.id === id; });
+  if (!lg) { showAlert('Data tidak ditemukan!', 'warning'); return; }
+  var atkList = await KDB.getAll('inventori_atk');
+  var item = atkList.find(function(x){ return x.id === lg.atkId; });
+  var buktiUrl = lg.buktiLink || lg.buktiPhoto || '';
+
+  var buktiContent = '';
+  if (buktiUrl) {
+    // Cek apakah Google Drive link — convert ke preview
+    var previewUrl = buktiUrl;
+    var driveMatch = buktiUrl.match(/\/d\/([^\/]+)/);
+    if (driveMatch) {
+      previewUrl = 'https://drive.google.com/file/d/' + driveMatch[1] + '/preview';
+      buktiContent = '<iframe src="' + previewUrl + '" style="width:100%;height:400px;border:1px solid #ddd;border-radius:8px" allowfullscreen></iframe>'
+        + '<div style="margin-top:8px"><a href="' + buktiUrl + '" target="_blank" class="btn btn-sm btn-info">🔗 Buka di Tab Baru</a></div>';
+    } else if (buktiUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+      buktiContent = '<img src="' + buktiUrl + '" style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid #ddd">'
+        + '<div style="margin-top:8px"><a href="' + buktiUrl + '" target="_blank" class="btn btn-sm btn-info">🔗 Buka di Tab Baru</a></div>';
+    } else {
+      buktiContent = '<div class="alert alert-info">Link bukti: <a href="' + buktiUrl + '" target="_blank" style="color:#1a237e;font-weight:600">' + buktiUrl + '</a></div>';
+    }
+  } else {
+    buktiContent = '<div class="alert alert-warning">Tidak ada bukti yang dilampirkan untuk transaksi ini.</div>';
+  }
+
+  var html = '<div style="margin-bottom:12px">'
+    + '<table style="width:100%;font-size:0.85rem"><tbody>'
+    + '<tr><td style="padding:4px 8px;color:#888;width:120px">Item</td><td class="fw-bold">' + (item ? item.nama : lg.atkId) + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Tanggal</td><td>' + fmtDate(lg.tanggal) + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Tipe</td><td><span class="chip" style="background:' + (lg.tipe==='masuk'?'#e8f5e9':'#ffebee') + ';color:' + (lg.tipe==='masuk'?'#2e7d32':'#c62828') + '">' + (lg.tipe==='masuk'?'Masuk':'Keluar') + '</span></td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Qty</td><td class="fw-bold">' + (lg.qty||0) + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Pengambil</td><td>' + (lg.pengambil||'-') + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Keterangan</td><td>' + (lg.keterangan||'-') + '</td></tr>'
+    + '</tbody></table></div>'
+    + '<div style="border-top:1px solid #eee;padding-top:12px"><h4 style="margin:0 0 8px">📷 Bukti / Evidence</h4>' + buktiContent + '</div>';
+
+  openModal(html, '📋 Detail Transaksi ATK');
 }
 
 function copyATKLink() {
