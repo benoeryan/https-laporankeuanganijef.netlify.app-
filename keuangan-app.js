@@ -10544,7 +10544,7 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Tanggal</label><input type="date" id="atklog-tgl" value="' + today() + '"></div>'
     + '<div class="fg"><label>Pengambil / PIC</label><input id="atklog-pic" placeholder="Nama pengambil"></div>'
     + '<div class="fg"><label>Keterangan</label><input id="atklog-ket" placeholder="Keperluan"></div>'
-    + '<div class="fg"><label>Bukti (Link foto/drive)</label><input id="atklog-bukti" placeholder="https://drive.google.com/... atau URL foto"></div>'
+    + '<div class="fg"><label>Bukti (Link atau Foto)</label><input id="atklog-bukti" placeholder="https://drive.google.com/... atau URL foto"><div style="margin-top:6px"><input type="file" id="atklog-foto" accept="image/*" capture="environment" onchange="previewAdminATKFoto(this)" style="font-size:0.8rem"></div><div id="atklog-foto-preview" style="margin-top:4px"></div></div>'
     + '</div><div class="mt-12"><button class="btn btn-success" onclick="simpanATKLog()">Simpan Transaksi</button></div></div>'
     // Barcode / QR untuk form pengambilan
     + '<div class="card"><div class="card-header"><h2>📱 Form Pengambilan ATK (Scan Barcode)</h2></div>'
@@ -10568,6 +10568,30 @@ async function renderInventoriATK() {
     + '</div>';
 }
 
+function previewAdminATKFoto(input) {
+  var el = document.getElementById('atklog-foto-preview');
+  if (!el || !input.files || !input.files[0]) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var maxW = 800;
+      var w = img.width, h = img.height;
+      if (w > maxW) { h = h * maxW / w; w = maxW; }
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var compressed = canvas.toDataURL('image/jpeg', 0.5);
+      window._adminATKFoto = compressed;
+      el.innerHTML = '<img src="' + compressed + '" style="max-width:120px;max-height:80px;border-radius:6px;border:2px solid #4caf50">'
+        + '<span style="font-size:0.72rem;color:#2e7d32;margin-left:8px">✅ ' + Math.round(compressed.length/1024) + ' KB</span>';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
 async function simpanATKLog() {
   var atkId = (document.getElementById('atklog-item')||{}).value;
   if (!atkId) { showAlert('Pilih ATK terlebih dahulu!', 'danger'); return; }
@@ -10585,11 +10609,12 @@ async function simpanATKLog() {
     tanggal: (document.getElementById('atklog-tgl')||{}).value || today(),
     pengambil: (document.getElementById('atklog-pic')||{}).value || '',
     keterangan: (document.getElementById('atklog-ket')||{}).value || '',
-    buktiLink: (document.getElementById('atklog-bukti')||{}).value || '',
+    buktiLink: (document.getElementById('atklog-bukti')||{}).value || window._adminATKFoto || '',
     createdBy: KU ? KU.username : 'form',
     createdAt: new Date().toISOString()
   });
   showAlert('Transaksi ATK dicatat!');
+  window._adminATKFoto = '';
   navigate('kalk-inventori-atk');
 }
 
