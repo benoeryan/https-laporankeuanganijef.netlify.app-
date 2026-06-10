@@ -9547,11 +9547,16 @@ function getPrintPeriodeLabel() {
 }
 
 function applyPrintFilter() {
-  _printFilterMode = document.querySelector('input[name="print-filter-mode"]:checked').value;
+  var modeEl = document.querySelector('input[name="print-filter-mode"]:checked');
+  _printFilterMode = modeEl ? modeEl.value : 'all';
   _printFilterDate = (document.getElementById('print-filter-date')||{}).value || '';
   _printFilterMonth = (document.getElementById('print-filter-month')||{}).value || '';
-  _printFilterYear = (document.getElementById('print-filter-year')||{}).value || '';
-  navigate('lap-print-bundle');
+  _printFilterYear = (document.getElementById('print-filter-year')||{}).value || new Date().getFullYear().toString();
+  
+  // Force re-render print bundle
+  var el = document.getElementById('sec-lap-print-bundle');
+  if (el) el.innerHTML = '<div class="empty-state"><span class="icon">⏳</span>Memuat laporan...</div>';
+  setTimeout(function() { renderSection('lap-print-bundle'); }, 50);
 }
 
 // ===== DASHBOARD EXTRAS: Ringkasan, Forecast, Actual vs Budget =====
