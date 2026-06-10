@@ -420,7 +420,7 @@ async function renderSection(id) {
   showLoading(true);
   try {
     switch(id) {
-      case 'lap-dashboard':       el.innerHTML = await renderDashboard(); break;
+      case 'lap-dashboard':       el.innerHTML = await renderDashboard(); startDashAutoRefresh(); break;
       case 'setup-perusahaan':    el.innerHTML = await renderSetupPerusahaan(); break;
       case 'setup-akun':          el.innerHTML = await renderSetupAkun(); break;
       case 'setup-mitra':         el.innerHTML = await renderSetupMitra(); break;
@@ -838,6 +838,20 @@ async function renderDashboard() {
     + '</div>' + (approvedPD ? '<div class="mt-8">' + approvedPD + '</div>' : '') + '</div>'
     + '</div>'
     + buildDashboardExtras(jurnal, fd, allPD, allDM);
+}
+
+// Auto-refresh dashboard setiap 30 detik
+var _dashRefreshTimer = null;
+function startDashAutoRefresh() {
+  if (_dashRefreshTimer) clearInterval(_dashRefreshTimer);
+  _dashRefreshTimer = setInterval(function() {
+    if (currentSection === 'lap-dashboard') {
+      renderSection('lap-dashboard');
+    } else {
+      clearInterval(_dashRefreshTimer);
+      _dashRefreshTimer = null;
+    }
+  }, 30000);
 }
 
 async function renderDashboardApprover() {
