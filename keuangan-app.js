@@ -10508,7 +10508,7 @@ async function renderInventoriATK() {
       + '<td><span class="chip" style="background:' + (lg.tipe==='masuk'?'#e8f5e9':'#ffebee') + ';color:' + (lg.tipe==='masuk'?'#2e7d32':'#c62828') + '">' + (lg.tipe==='masuk'?'Masuk':'Keluar') + '</span></td>'
       + '<td class="text-center fw-bold ' + cls + '">' + sign + (lg.qty||0) + '</td>'
       + '<td>' + (lg.pengambil||'-') + '</td><td>' + (lg.keterangan||'-') + '</td>'
-      + '<td>' + (lg.buktiLink ? '<button class="btn btn-xs btn-info" onclick="viewBuktiATK(\'' + lg.id + '\')">📷 Foto</button>' : '-') + '</td>'
+      + '<td>' + ((lg.buktiLink || lg.buktiPhoto) ? '<button class="btn btn-xs btn-info" onclick="viewBuktiATK(\'' + lg.id + '\')">📷 Foto</button>' : '-') + '</td>'
       + '<td class="tbl-actions"><button class="btn btn-xs btn-danger" onclick="hapusATKLog(\'' + lg.id + '\')">Hapus</button></td></tr>';
   }).join('');
 
