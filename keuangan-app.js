@@ -8473,20 +8473,223 @@ async function renderExport() {
 async function exportCSV(col) {
   var list = await KDB.getAll(col);
   if (!list.length) { showAlert('Tidak ada data untuk diexport!', 'warning'); return; }
-  var headers = Object.keys(list[0]).filter(function(k){ return !k.startsWith('_'); });
-  var rows = list.map(function(item) {
-    return headers.map(function(h) {
-      var val = item[h];
-      if (typeof val === 'object') return JSON.stringify(val);
-      return String(val || '').replace(/,/g, ';');
-    }).join(',');
-  });
-  var csv = [headers.join(',')].concat(rows).join('\n');
-  var blob = new Blob([csv], { type: 'text/csv' });
+
+  var csv = '';
+  var SEP = '\t'; // Tab separator — paling reliable untuk Excel
+  var akunList = await getAkun();
+  function namaAkun(kode) {
+    if (!kode) return '';
+    var a = akunList.find(function(x){ return x.kode === kode; });
+    return a ? a.nama : '';
+  }
+  function csvEscape(val) {
+    var s = String(val == null ? '' : val);
+    // Bersihkan newline dan tab dari value
+    s = s.replace(/[\r\n\t]/g, ' ').trim();
+    return s;
+  }
+
+  // Helper: parse lines field (bisa string JSON atau array)
+  function parseLines(j) {
+    var lines = j.lines;
+    if (!lines) return [];
+    if (typeof lines === 'string') {
+      try { lines = JSON.parse(lines); } catch(e) { return []; }
+    }
+    if (!Array.isArray(lines)) return [];
+    return lines;
+  }
+
+  if (col === 'jurnal') {
+    // Format bersih: 1 baris per jurnal, tanpa meta/lines mentah
+    var headers = ['Tanggal','No Ref','Keterangan','Tipe','Sumber','Total Debit','Total Kredit','Akun Debit','Nama Akun Debit','Akun Kredit','Nama Akun Kredit','Created By','Created At'];
+    var rows = [];
+    list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
+
+    list.forEach(function(j) {
+      var lines = parseLines(j);
+      var akunDebit = '', akunKredit = '';
+      if (lines.length > 0) {
+        for (var i = 0; i < lines.length; i++) {
+          if ((parseFloat(lines[i].debit) || 0) > 0 && !akunDebit) akunDebit = lines[i].akun || '';
+          if ((parseFloat(lines[i].kredit) || 0) > 0 && !akunKredit) akunKredit = lines[i].akun || '';
+        }
+      }
+      rows.push([
+        j.tanggal || '',
+        j.noRef || '',
+        j.keterangan || '',
+        j.tipe || '',
+        j.sumber || '',
+        j.totalDebit || 0,
+        j.totalKredit || 0,
+        akunDebit,
+        namaAkun(akunDebit),
+        akunKredit,
+        namaAkun(akunKredit),
+        j.createdBy || '',
+        j.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else if (col === 'pettycash') {
+    var headers = ['Tanggal','No Ref','Keterangan','Tipe','Kode Akun Debit','Nama Akun Debit','Kode Akun Kredit','Nama Akun Kredit','Nominal','Created By','Created At'];
+    var rows = [];
+    list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
+    list.forEach(function(pc) {
+      rows.push([
+        pc.tanggal || '',
+        pc.noRef || pc.id || '',
+        pc.keterangan || '',
+        pc.tipe || '',
+        pc.akunDebit || '',
+        namaAkun(pc.akunDebit),
+        pc.akunKredit || '',
+        namaAkun(pc.akunKredit),
+        pc.jumlah || pc.nominal || 0,
+        pc.createdBy || '',
+        pc.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else if (col === 'invoice') {
+    var headers = ['No Invoice','Tanggal','Jatuh Tempo','Customer','Keterangan','Nominal','Status','Created By','Created At'];
+    var rows = [];
+    list.forEach(function(inv) {
+      rows.push([
+        inv.noInvoice || inv.id || '',
+        inv.tanggal || '',
+        inv.jatuhTempo || '',
+        inv.customer || inv.nama || '',
+        inv.keterangan || '',
+        inv.nominal || inv.total || 0,
+        inv.status || '',
+        inv.createdBy || '',
+        inv.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else if (col === 'po') {
+    var headers = ['No PO','Tanggal','Supplier','Keterangan','Nominal','Status','Created By','Created At'];
+    var rows = [];
+    list.forEach(function(p) {
+      rows.push([
+        p.noPO || p.id || '',
+        p.tanggal || '',
+        p.supplier || p.vendor || '',
+        p.keterangan || '',
+        p.nominal || p.total || 0,
+        p.status || '',
+        p.createdBy || '',
+        p.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else if (col === 'utangpiutang') {
+    var headers = ['Tanggal','Tipe','Nama','Keterangan','Nominal','Sisa','Jatuh Tempo','Status','Created By','Created At'];
+    var rows = [];
+    list.forEach(function(u) {
+      rows.push([
+        u.tanggal || '',
+        u.tipe || '',
+        u.nama || '',
+        u.keterangan || '',
+        u.nominal || 0,
+        u.sisa != null ? u.sisa : u.nominal || 0,
+        u.jatuhTempo || '',
+        u.status || '',
+        u.createdBy || '',
+        u.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else if (col === 'gaji') {
+    var headers = ['Periode','Nama Karyawan','Jabatan','Gaji Pokok','Tunjangan','Potongan','Total','Status','Created By','Created At'];
+    var rows = [];
+    list.forEach(function(g) {
+      rows.push([
+        g.periode || '',
+        g.nama || '',
+        g.jabatan || '',
+        g.gajiPokok || 0,
+        g.tunjangan || 0,
+        g.potongan || 0,
+        g.total || g.gajiPokok || 0,
+        g.status || '',
+        g.createdBy || '',
+        g.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else if (col === 'permohonan') {
+    var headers = ['Tanggal','No Ref','Keterangan','Pemohon','Nominal','Kategori','Status','Approved By','Created At'];
+    var rows = [];
+    list.forEach(function(p) {
+      rows.push([
+        p.tanggal || '',
+        p.noRef || p.id || '',
+        p.keterangan || '',
+        p.pemohon || p.namaPIC || '',
+        p.nominal || 0,
+        p.kategori || '',
+        p.status || '',
+        p.approvedBy || '',
+        p.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else if (col === 'danamasuk') {
+    var headers = ['Tanggal','No Ref','Keterangan','Sumber','Nominal','Kategori','Status','Approved By','Created At'];
+    var rows = [];
+    list.forEach(function(d) {
+      rows.push([
+        d.tanggal || '',
+        d.noRef || d.id || '',
+        d.keterangan || '',
+        d.sumber || '',
+        d.nominal || 0,
+        d.kategori || '',
+        d.status || '',
+        d.approvedBy || '',
+        d.createdAt || ''
+      ].map(csvEscape).join(SEP));
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+
+  } else {
+    // Generic fallback — flatten objects, skip arrays/objects
+    var headers = Object.keys(list[0]).filter(function(k){ return !k.startsWith('_'); });
+    // Remove complex fields (objects, arrays, meta, lines)
+    var skipFields = ['meta', 'lines', 'deletedAt', 'deletedBy'];
+    headers = headers.filter(function(h) {
+      if (skipFields.indexOf(h) >= 0) return false;
+      var val = list[0][h];
+      if (val === null || val === undefined) return true;
+      if (typeof val === 'object') return false;
+      return true;
+    });
+    var rows = list.map(function(item) {
+      return headers.map(function(h) {
+        return csvEscape(item[h]);
+      }).join(SEP);
+    });
+    csv = headers.join(SEP) + '\n' + rows.join('\n');
+  }
+
+  // Add BOM for proper UTF-8 encoding in Excel
+  var bom = '\uFEFF';
+  var blob = new Blob([bom + csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = col + '_' + today() + '.csv';
+  a.download = col + '_' + today() + '.xls';
   a.click();
   URL.revokeObjectURL(url);
   showAlert('Export ' + col + ' berhasil!');
