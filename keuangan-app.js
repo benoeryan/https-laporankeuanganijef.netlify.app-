@@ -8514,6 +8514,7 @@ async function exportCSV(col) {
     html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Saldo</th></tr>';
     // Baris saldo awal
     html += '<tr><td class="date">' + yr + '-01-01</td><td>-</td><td><b>Saldo Awal ' + yr + '</b></td><td class="num"></td><td class="num"></td><td class="num">' + fmtNum(saldo) + '</td></tr>';
+    var totalMasuk = 0, totalKeluar = 0;
 
     list.forEach(function(j) {
       var lines = parseLines(j);
@@ -8528,8 +8529,10 @@ async function exportCSV(col) {
       // Kalau tidak ada line kas, skip (bukan transaksi kas)
       if (debit === 0 && kredit === 0) return;
       saldo = saldo + debit - kredit;
+      totalMasuk += debit; totalKeluar += kredit;
       html += '<tr><td class="date">' + esc(j.tanggal) + '</td><td>' + esc(j.noRef) + '</td><td>' + esc(j.keterangan) + '</td><td class="num">' + (debit > 0 ? fmtNum(debit) : '') + '</td><td class="num">' + (kredit > 0 ? fmtNum(kredit) : '') + '</td><td class="num">' + fmtNum(saldo) + '</td></tr>';
     });
+    html += '<tr style="font-weight:bold;background:#E3F2FD"><td colspan="3">TOTAL</td><td class="num">' + fmtNum(totalMasuk) + '</td><td class="num">' + fmtNum(totalKeluar) + '</td><td class="num">' + fmtNum(saldo) + '</td></tr>';
 
   } else if (col === 'pettycash') {
     html += '<tr><th>Tanggal</th><th>No Ref</th><th>Keterangan</th><th>Tipe</th><th>Akun Debit</th><th>Akun Kredit</th><th>Nominal</th><th>Created By</th></tr>';
@@ -8614,6 +8617,7 @@ async function exportJurnalDebit() {
 
   var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#2E7D32;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Debit - Uang Masuk</h3><table>';
   html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit (Masuk)</th><th>Saldo</th></tr>';
+  var totalDebit = 0;
 
   list.forEach(function(j) {
     var lines = parseLines(j);
@@ -8624,8 +8628,10 @@ async function exportJurnalDebit() {
     if (debitKas > 0) {
       saldo += debitKas;
       html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(debitKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
+      totalDebit += debitKas;
     }
   });
+  html += '<tr style="font-weight:bold;background:#E8F5E9"><td colspan="3">TOTAL UANG MASUK</td><td class="num">'+fmtNum(totalDebit)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
   html += '</table></body></html>';
 
   var blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
@@ -8653,6 +8659,7 @@ async function exportJurnalKredit() {
 
   var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#C62828;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Kredit - Uang Keluar</h3><table>';
   html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Kredit (Keluar)</th><th>Saldo</th></tr>';
+  var totalKredit = 0;
 
   list.forEach(function(j) {
     var lines = parseLines(j);
@@ -8662,9 +8669,11 @@ async function exportJurnalKredit() {
     });
     if (kreditKas > 0) {
       saldo -= kreditKas;
+      totalKredit += kreditKas;
       html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(kreditKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
     }
   });
+  html += '<tr style="font-weight:bold;background:#FFEBEE"><td colspan="3">TOTAL UANG KELUAR</td><td class="num">'+fmtNum(totalKredit)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
   html += '</table></body></html>';
 
   var blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
