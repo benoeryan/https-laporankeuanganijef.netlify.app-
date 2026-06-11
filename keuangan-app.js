@@ -7611,12 +7611,102 @@ async function localAIReply(msg) {
   }
 
   if (lower.includes('transaksi') || lower.includes('perhatian') || lower.includes('anomali')) {
+    // Cek jika user minta cari transaksi tanpa COA / phantom account
+    if (lower.includes('coa') || lower.includes('akun') || lower.includes('kosong') || lower.includes('belum ada') || lower.includes('phantom') || lower.includes('tidak terdaftar') || lower.includes('cari')) {
+      var akunList4 = await getAkun();
+      var coaKodes = akunList4.map(function(a){ return a.kode; });
+      var phantomJurnal = [];
+      jurnal.forEach(function(j) {
+        (j.lines||[]).forEach(function(l) {
+          if (l.akun && coaKodes.indexOf(l.akun) < 0) {
+            phantomJurnal.push({ id: j.id, tanggal: j.tanggal, ket: j.keterangan, akun: l.akun, debit: l.debit||0, kredit: l.kredit||0, ref: j.noRef||'' });
+          }
+        });
+      });
+      // Juga cek jurnal yang line-nya ada akun kosong
+      jurnal.forEach(function(j) {
+        (j.lines||[]).forEach(function(l) {
+          if (!l.akun || l.akun === '' || l.akun === '-- Pilih --') {
+            phantomJurnal.push({ id: j.id, tanggal: j.tanggal, ket: j.keterangan, akun: '(KOSONG)', debit: l.debit||0, kredit: l.kredit||0, ref: j.noRef||'' });
+          }
+        });
+      });
+      if (phantomJurnal.length > 0) {
+        // Group by akun
+        var grouped = {};
+        phantomJurnal.forEach(function(p) {
+          if (!grouped[p.akun]) grouped[p.akun] = [];
+          grouped[p.akun].push(p);
+        });
+        var reply = '🔍 Ditemukan ' + phantomJurnal.length + ' baris jurnal dengan akun TIDAK TERDAFTAR di COA:\n\n';
+        Object.keys(grouped).forEach(function(akun) {
+          var items = grouped[akun];
+          reply += '❌ Akun: ' + akun + ' (' + items.length + ' transaksi)\n';
+          items.slice(0,3).forEach(function(it) {
+            reply += '   • ' + (it.tanggal||'-') + ' | ' + (it.ket||'-') + ' | D:' + fmtRp(it.debit) + ' K:' + fmtRp(it.kredit) + '\n';
+          });
+          if (items.length > 3) reply += '   ... dan ' + (items.length-3) + ' lainnya\n';
+          reply += '\n';
+        });
+        reply += 'Solusi:\n'
+          + '1. Daftarkan akun tersebut di Setup > Kode Akun (COA)\n'
+          + '2. Atau pindahkan ke akun yang tepat (gunakan "koreksi" atau "fix coa")\n'
+          + '3. Atau minta saya: "fix coa [akun_lama] ke [akun_baru]"';
+        return reply;
+      }
+      return '✅ Semua transaksi jurnal sudah menggunakan akun COA yang terdaftar. Tidak ada phantom account.';
+    }
+
     var unbal = jurnal.filter(function(j) { var d=0,k=0; (j.lines||[]).forEach(function(l){d+=l.debit||0;k+=l.kredit||0;}); return Math.abs(d-k)>0.01; });
     if (unbal.length > 0) {
       return '⚠️ Ditemukan ' + unbal.length + ' jurnal tidak balance!\n'
         + 'Ini perlu segera diperbaiki. Gunakan tombol "Cek Jurnal Balance" di atas untuk melihat detailnya.';
     }
     return '✅ Semua jurnal balance. Tidak ada transaksi yang perlu perhatian khusus saat ini.\n\nUntuk analisis anomali lebih dalam, klik "Jalankan Analisis Lengkap".';
+  }
+
+  // Cari transaksi berdasarkan keyword (fallback untuk "cari", "carikan", "temukan")
+  if (lower.includes('cari') || lower.includes('temukan') || lower.includes('mana') || lower.includes('tampilkan')) {
+    // Cek apakah tentang COA / phantom
+    if (lower.includes('coa') || lower.includes('akun') || lower.includes('kosong') || lower.includes('belum') || lower.includes('phantom')) {
+      var akunList5 = await getAkun();
+      var coaKodes5 = akunList5.map(function(a){ return a.kode; });
+      var phantoms = [];
+      jurnal.forEach(function(j) {
+        (j.lines||[]).forEach(function(l) {
+          if (l.akun && coaKodes5.indexOf(l.akun) < 0) {
+            phantoms.push({ id: j.id, tanggal: j.tanggal, ket: j.keterangan, akun: l.akun });
+          }
+          if (!l.akun || l.akun === '') {
+            phantoms.push({ id: j.id, tanggal: j.tanggal, ket: j.keterangan, akun: '(KOSONG)' });
+          }
+        });
+      });
+      if (phantoms.length > 0) {
+        var uniqueAkun = {};
+        phantoms.forEach(function(p){ uniqueAkun[p.akun] = (uniqueAkun[p.akun]||0)+1; });
+        var reply = '🔍 Ditemukan ' + phantoms.length + ' baris dengan akun belum terdaftar di COA:\n\n';
+        Object.keys(uniqueAkun).forEach(function(k) {
+          reply += '• ' + k + ' → ' + uniqueAkun[k] + ' transaksi\n';
+        });
+        reply += '\nGunakan perintah "fix coa [lama] ke [baru]" untuk memperbaiki.';
+        return reply;
+      }
+      return '✅ Tidak ada transaksi dengan akun kosong atau tidak terdaftar.';
+    }
+    // General search
+    var keyword = msg.replace(/cari(kan)?|temukan|mana|tampilkan/gi, '').trim().toLowerCase();
+    if (keyword.length >= 3) {
+      var found = jurnal.filter(function(j) {
+        return (j.keterangan||'').toLowerCase().includes(keyword) || (j.noRef||'').toLowerCase().includes(keyword);
+      }).slice(0,5);
+      if (found.length > 0) {
+        var list2 = found.map(function(j) { return '• ' + (j.tanggal||'-') + ' | ' + (j.noRef||'-') + ' | ' + (j.keterangan||'-') + ' | ' + fmtRp(j.totalDebit||0); }).join('\n');
+        return '🔍 Hasil pencarian "' + keyword + '":\n\n' + list2 + '\n\n(Menampilkan max 5 hasil)';
+      }
+      return 'Tidak ditemukan transaksi dengan keyword "' + keyword + '".';
+    }
+    return 'Ketik keyword pencarian lebih spesifik (min 3 karakter). Contoh:\n"Cari transaksi listrik"\n"Carikan jurnal yang belum ada COA nya"';
   }
 
   return 'Saya bisa bantu:\n'
