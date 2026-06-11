@@ -7304,7 +7304,20 @@ async function callOpenRouterChat(msg, apiKey) {
       + '2. Jika user EKSPLISIT minta aksi (buatkan jurnal, sinkronkan, hapus, fix, koreksi) → baru tambahkan ACTION.\n'
       + '3. JANGAN PERNAH menyarankan sinkronisasi petty cash kecuali user SECARA SPESIFIK minta soal petty cash.\n'
       + '4. Jika user tanya soal selisih bank/mandiri/BNI → analisa dari data saldo akun yang tersedia, jelaskan kemungkinan penyebab.\n'
-      + '5. Jawab SESUAI dengan apa yang ditanya. Jangan melenceng ke topik lain.\n\n'
+      + '5. Jawab SESUAI dengan apa yang ditanya. Jangan melenceng ke topik lain.\n'
+      + '6. PAHAMI KONTEKS dari history chat sebelumnya. Jika user merujuk ke pesan/pertanyaan sebelumnya, gunakan konteks itu.\n\n'
+      + 'KOSA KATA PERINTAH EKSEKUSI (jika user pakai kata-kata ini, artinya minta aksi):\n'
+      + '- "buatkan jurnal", "buat jurnal", "catat", "input jurnal" → buat jurnal baru\n'
+      + '- "hapus", "delete", "buang", "hilangkan" → hapus jurnal\n'
+      + '- "koreksi", "perbaiki", "fix", "betulkan", "revisi" → koreksi/edit jurnal\n'
+      + '- "sinkronkan", "sync", "pindahkan akun", "ganti akun" → reklasifikasi akun\n'
+      + '- "top up", "isi kas", "tambah saldo" → top-up petty cash\n'
+      + '- "bayar", "keluarkan", "pengeluaran" → pengeluaran petty cash\n'
+      + '- "cek saldo", "berapa saldo", "posisi saldo" → tampilkan informasi saldo\n'
+      + '- "analisa", "analisis", "cek", "periksa", "review" → analisa data tanpa aksi\n'
+      + '- "bandingkan", "compare", "selisih" → bandingkan 2 data\n'
+      + '- "rekap", "ringkasan", "summary" → buat ringkasan\n'
+      + '- "yang tadi", "lanjutkan", "seperti sebelumnya", "ulangi" → merujuk ke konteks chat sebelumnya\n\n'
       + 'KNOWLEDGE BASE - CARA ANALISA SELISIH BANK:\n'
       + '- Saldo di Posisi Saldo Hari Ini = saldo_awal + semua jurnal (debit - kredit)\n'
       + '- Saldo di Buku Besar = sama (saldo awal + jurnal)\n'
@@ -7325,6 +7338,17 @@ async function callOpenRouterChat(msg, apiKey) {
       + '###ACTION:{"type":"sinkron_pc"}###\n\n'
       + 'Konteks data:\n' + konteks;
 
+    // Bangun messages dengan history chat (max 10 pesan terakhir)
+    var messages = [{ role: 'system', content: systemMsg }];
+    var historySlice = _aiChatHistory.slice(-10);
+    historySlice.forEach(function(m) {
+      if (m.role === 'user' || m.role === 'assistant') {
+        messages.push({ role: m.role, content: m.content.substring(0, 1500) });
+      }
+    });
+    // Pesan terbaru user (yang baru saja dikirim)
+    messages.push({ role: 'user', content: msg });
+
     var modelsToTry = ['moonshotai/kimi-k2.6:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'google/gemma-4-31b-it:free'];
     var response = null, lastErr = '';
     for (var mi = 0; mi < modelsToTry.length; mi++) {
@@ -7332,7 +7356,7 @@ async function callOpenRouterChat(msg, apiKey) {
         response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.href, 'X-Title': 'IJEF Keuangan' },
-          body: JSON.stringify({ model: modelsToTry[mi], messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: msg }] })
+          body: JSON.stringify({ model: modelsToTry[mi], messages: messages })
         });
         if (response.ok) break;
         var errBody = await response.json().catch(function(){ return {}; });
