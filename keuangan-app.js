@@ -6014,20 +6014,36 @@ async function simpanEditPermohonan(id) {
   var list = await KDB.getAll('permohonan');
   var p = list.find(function(x){ return x.id === id; });
   if (!p) return;
+  var valTanggal = (document.getElementById('epd-tanggal')||{}).value;
+  var valNama = (document.getElementById('epd-nama')||{}).value;
+  var valPIC = (document.getElementById('epd-pic')||{}).value;
+  var valLeader = (document.getElementById('epd-leader')||{}).value;
+  var valNoPO = (document.getElementById('epd-nopo')||{}).value;
+  var valNominal = parseFloat((document.getElementById('epd-nominal')||{}).value);
+  var valJT = (document.getElementById('epd-jt')||{}).value;
+  var valTipe = (document.getElementById('epd-tipe')||{}).value;
+  var valBank = (document.getElementById('epd-bank')||{}).value;
+  var valNoRek = (document.getElementById('epd-norek')||{}).value;
+  var valNamaRek = (document.getElementById('epd-namarek')||{}).value;
+  var valKet = (document.getElementById('epd-ket')||{}).value;
+  var valBukti = (document.getElementById('epd-bukti')||{}).value;
+  // Reset status to Draft if item was rejected, so user can re-submit
+  var newStatus = (p.status === STATUS.REJECTED_L1 || p.status === STATUS.REJECTED_L2 || p.status === STATUS.REJECTED_L3) ? STATUS.DRAFT : p.status;
   await KDB.save('permohonan', id, Object.assign({}, p, {
-    tanggal: (document.getElementById('epd-tanggal')||{}).value || p.tanggal,
-    namaPemohon: (document.getElementById('epd-nama')||{}).value || p.namaPemohon,
-    namaPIC: (document.getElementById('epd-pic')||{}).value || p.namaPIC,
-    namaLeader: (document.getElementById('epd-leader')||{}).value || p.namaLeader,
-    noPOInvoice: (document.getElementById('epd-nopo')||{}).value || p.noPOInvoice,
-    nominal: parseFloat((document.getElementById('epd-nominal')||{}).value) || p.nominal,
-    jatuhTempo: (document.getElementById('epd-jt')||{}).value || p.jatuhTempo,
-    tipeTransaksi: (document.getElementById('epd-tipe')||{}).value || p.tipeTransaksi,
-    namaBank: (document.getElementById('epd-bank')||{}).value || p.namaBank,
-    noRekening: (document.getElementById('epd-norek')||{}).value || p.noRekening,
-    namaRekening: (document.getElementById('epd-namarek')||{}).value || p.namaRekening,
-    keterangan: (document.getElementById('epd-ket')||{}).value || p.keterangan,
-    buktiDokumen: (document.getElementById('epd-bukti')||{}).value || p.buktiDokumen,
+    tanggal: valTanggal !== undefined ? valTanggal : p.tanggal,
+    namaPemohon: valNama !== undefined ? valNama : p.namaPemohon,
+    namaPIC: valPIC !== undefined ? valPIC : p.namaPIC,
+    namaLeader: valLeader !== undefined ? valLeader : p.namaLeader,
+    noPOInvoice: valNoPO !== undefined ? valNoPO : p.noPOInvoice,
+    nominal: !isNaN(valNominal) ? valNominal : p.nominal,
+    jatuhTempo: valJT !== undefined ? valJT : p.jatuhTempo,
+    tipeTransaksi: valTipe !== undefined ? valTipe : p.tipeTransaksi,
+    namaBank: valBank !== undefined ? valBank : p.namaBank,
+    noRekening: valNoRek !== undefined ? valNoRek : p.noRekening,
+    namaRekening: valNamaRek !== undefined ? valNamaRek : p.namaRekening,
+    keterangan: valKet !== undefined ? valKet : p.keterangan,
+    buktiDokumen: valBukti !== undefined ? valBukti : p.buktiDokumen,
+    status: newStatus,
   }));
   closeModalDirect();
   showAlert('Permohonan dana berhasil diperbarui!');
@@ -6203,16 +6219,28 @@ async function simpanEditDanaMasuk(id) {
   var list = await KDB.getAll('danamasuk');
   var d = list.find(function(x){ return x.id === id; });
   if (!d) return;
+  var valTanggal = (document.getElementById('edm-tanggal')||{}).value;
+  var valSumber = (document.getElementById('edm-sumber')||{}).value;
+  var valPIC = (document.getElementById('edm-pic')||{}).value;
+  var valRef = (document.getElementById('edm-ref')||{}).value;
+  var valNominal = parseFloat((document.getElementById('edm-nominal')||{}).value);
+  var valTipe = (document.getElementById('edm-tipe')||{}).value;
+  var valNamaRek = (document.getElementById('edm-namarek')||{}).value;
+  var valKet = (document.getElementById('edm-ket')||{}).value;
+  var valBukti = (document.getElementById('edm-bukti')||{}).value;
+  // Reset status to Draft if item was rejected, so user can re-submit
+  var newStatus = (d.status === STATUS.REJECTED_L1 || d.status === STATUS.REJECTED_L2 || d.status === STATUS.REJECTED_L3) ? STATUS.DRAFT : d.status;
   await KDB.save('danamasuk', id, Object.assign({}, d, {
-    tanggal: (document.getElementById('edm-tanggal')||{}).value || d.tanggal,
-    sumber: (document.getElementById('edm-sumber')||{}).value || d.sumber,
-    namaPIC: (document.getElementById('edm-pic')||{}).value || d.namaPIC,
-    noRef: (document.getElementById('edm-ref')||{}).value || d.noRef,
-    nominal: parseFloat((document.getElementById('edm-nominal')||{}).value) || d.nominal,
-    tipeTransaksi: (document.getElementById('edm-tipe')||{}).value || d.tipeTransaksi,
-    namaRekening: (document.getElementById('edm-namarek')||{}).value || d.namaRekening,
-    keterangan: (document.getElementById('edm-ket')||{}).value || d.keterangan,
-    buktiDokumen: (document.getElementById('edm-bukti')||{}).value || d.buktiDokumen,
+    tanggal: valTanggal !== undefined ? valTanggal : d.tanggal,
+    sumber: valSumber !== undefined ? valSumber : d.sumber,
+    namaPIC: valPIC !== undefined ? valPIC : d.namaPIC,
+    noRef: valRef !== undefined ? valRef : d.noRef,
+    nominal: !isNaN(valNominal) ? valNominal : d.nominal,
+    tipeTransaksi: valTipe !== undefined ? valTipe : d.tipeTransaksi,
+    namaRekening: valNamaRek !== undefined ? valNamaRek : d.namaRekening,
+    keterangan: valKet !== undefined ? valKet : d.keterangan,
+    buktiDokumen: valBukti !== undefined ? valBukti : d.buktiDokumen,
+    status: newStatus,
   }));
   closeModalDirect();
   showAlert('Dana masuk berhasil diperbarui!');
