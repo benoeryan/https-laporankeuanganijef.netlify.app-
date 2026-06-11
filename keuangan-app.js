@@ -7383,6 +7383,46 @@ async function localAIReply(msg) {
   var pcList = await KDB.getAll('pettycash');
   var jurnal = await KDB.getAll('jurnal');
 
+  // === PRIORITAS 1: Cek apakah user merujuk ke konteks chat sebelumnya ===
+  var isReferBack = lower.includes('tampilkan') || lower.includes('lihat') || lower.includes('tadi') || lower.includes('yang di atas') || lower.includes('sebutkan') || lower.includes('lanjutkan') || lower.includes('ulangi');
+  var lastHistory = _aiChatHistory.slice(-6);
+  var prevAboutCOA = lastHistory.some(function(m) { 
+    return (m.content||'').includes('TIDAK TERDAFTAR') || (m.content||'').includes('phantom') || (m.content||'').includes('1-1100') || ((m.content||'').includes('COA') && (m.content||'').includes('akun'));
+  });
+  
+  // Jika user merujuk balik DAN konteks sebelumnya tentang COA → langsung tampilkan detail
+  if (isReferBack && prevAboutCOA) {
+    var akunListPrio = await getAkun();
+    var coaKodesPrio = akunListPrio.map(function(a){ return a.kode; });
+    var phantomAll = [];
+    jurnal.forEach(function(j) {
+      (j.lines||[]).forEach(function(l) {
+        if (l.akun && coaKodesPrio.indexOf(l.akun) < 0) {
+          phantomAll.push({ id: j.id, tanggal: j.tanggal, ket: j.keterangan, akun: l.akun, debit: l.debit||0, kredit: l.kredit||0, ref: j.noRef||j.id });
+        }
+        if (!l.akun || l.akun === '') {
+          phantomAll.push({ id: j.id, tanggal: j.tanggal, ket: j.keterangan, akun: '(KOSONG)', debit: l.debit||0, kredit: l.kredit||0, ref: j.noRef||j.id });
+        }
+      });
+    });
+    if (phantomAll.length > 0) {
+      var grouped2 = {};
+      phantomAll.forEach(function(p) { if (!grouped2[p.akun]) grouped2[p.akun] = []; grouped2[p.akun].push(p); });
+      var reply2 = '📋 Detail SEMUA ' + phantomAll.length + ' baris jurnal dengan akun tidak terdaftar di COA:\n\n';
+      Object.keys(grouped2).forEach(function(akun) {
+        var items = grouped2[akun];
+        reply2 += '━━━ Akun: ' + akun + ' (' + items.length + ' transaksi) ━━━\n';
+        items.forEach(function(it, idx) {
+          reply2 += (idx+1) + '. ' + (it.tanggal||'-') + ' | ' + (it.ket||'-').substring(0,60) + '\n   D:' + fmtRp(it.debit) + ' K:' + fmtRp(it.kredit) + ' | Ref: ' + it.ref + '\n';
+        });
+        reply2 += '\n';
+      });
+      reply2 += 'Untuk memperbaiki, gunakan perintah:\n• "fix coa 1-1100 ke 1-1101-2" (ganti semua ke akun Mandiri)\n• Atau edit manual per jurnal di Jurnal Umum';
+      return reply2;
+    }
+    return '✅ Tidak ada transaksi dengan akun yang belum terdaftar di COA.';
+  }
+
   // Deteksi perintah aksi: buat jurnal
   if ((lower.includes('buat') || lower.includes('catat') || lower.includes('input')) && lower.includes('jurnal')) {
     // Coba parse nominal dari pesan
@@ -7585,7 +7625,7 @@ async function localAIReply(msg) {
       + '• Status: Neraca Balance ✓';
   }
 
-  if (lower.includes('jurnal') || lower.includes('penyesuaian')) {
+  if ((lower.includes('jurnal') || lower.includes('penyesuaian')) && !lower.includes('coa') && !lower.includes('terdaftar') && !lower.includes('phantom') && !lower.includes('tampilkan') && !lower.includes('ditemukan') && !lower.includes('carikan')) {
     return 'Saya bisa bantu buatkan jurnal! Contoh perintah:\n'
       + '• "Buatkan jurnal beban listrik 500000"\n'
       + '• "Catat pengeluaran petty cash 50000 beli ATK"\n'
