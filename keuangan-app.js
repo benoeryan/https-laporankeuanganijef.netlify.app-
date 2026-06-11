@@ -5870,10 +5870,13 @@ async function renderPermohonanDana() {
     : '';
 
   const rows = sorted.map(function(p) {
+    const isDraftOrRejected = p.status === STATUS.DRAFT || p.status === STATUS.REJECTED_L1 || p.status === STATUS.REJECTED_L2 || p.status === STATUS.REJECTED_L3;
+    const isOwnerOrLeader = p.pemohon === KU.username || hasRole('leader');
     const ajukanBtn = p.status === STATUS.DRAFT && p.pemohon === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanPermohonan(\'' + p.id + '\')">Ajukan</button>' : '';
-    const hapusBtn = p.status === STATUS.DRAFT && p.pemohon === KU.username ? '<button class="btn btn-xs btn-danger" onclick="hapusPermohonan(\'' + p.id + '\')">Hapus</button>' : '';
+    const editBtn = isDraftOrRejected && isOwnerOrLeader ? '<button class="btn btn-xs btn-warning" onclick="editPermohonan(\'' + p.id + '\')">Edit</button>' : '';
+    const hapusBtn = isDraftOrRejected && isOwnerOrLeader ? '<button class="btn btn-xs btn-danger" onclick="hapusPermohonan(\'' + p.id + '\')">Hapus</button>' : '';
     const jurnalBadge = p.jurnalId ? '<span class="badge badge-success">✓ Jurnal Otomatis</span>' : '';
-    return '<tr data-status="' + p.status + '"><td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||p.pemohon) + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + statusBadge(p.status) + '</td><td>' + approvalFlow(p.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button>' + ajukanBtn + hapusBtn + jurnalBadge + '</td></tr>';
+    return '<tr data-status="' + p.status + '"><td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||p.pemohon) + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + statusBadge(p.status) + '</td><td>' + approvalFlow(p.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button>' + editBtn + ajukanBtn + hapusBtn + jurnalBadge + '</td></tr>';
   }).join('');
 
   return '<div class="page-title">📤 Permohonan Dana</div>' + pendingBanner
@@ -5984,6 +5987,53 @@ async function hapusPermohonan(id) {
   navigate('dana-permohonan');
 }
 
+// Edit Permohonan Dana dari List
+async function editPermohonan(id) {
+  var list = await KDB.getAll('permohonan');
+  var p = list.find(function(x){ return x.id === id; });
+  if (!p) { showAlert('Data tidak ditemukan', 'warning'); return; }
+  openModal('<div class="form-grid">'
+    + '<div class="fg"><label>Tanggal</label><input type="date" id="epd-tanggal" value="' + (p.tanggal||'') + '"></div>'
+    + '<div class="fg"><label>Nama Pemohon</label><input id="epd-nama" value="' + (p.namaPemohon||'') + '"></div>'
+    + '<div class="fg"><label>Nama PIC</label><input id="epd-pic" value="' + (p.namaPIC||'') + '"></div>'
+    + '<div class="fg"><label>Nama Leader</label><input id="epd-leader" value="' + (p.namaLeader||'') + '"></div>'
+    + '<div class="fg"><label>No PO/Invoice</label><input id="epd-nopo" value="' + (p.noPOInvoice||'') + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="number" id="epd-nominal" value="' + (p.nominal||0) + '"></div>'
+    + '<div class="fg"><label>Jatuh Tempo</label><input type="date" id="epd-jt" value="' + (p.jatuhTempo||'') + '"></div>'
+    + '<div class="fg"><label>Tipe Transaksi</label><select id="epd-tipe"><option' + (p.tipeTransaksi==='Transfer'?' selected':'') + '>Transfer</option><option' + (p.tipeTransaksi==='Tunai'?' selected':'') + '>Tunai</option><option' + (p.tipeTransaksi==='Cek/Giro'?' selected':'') + '>Cek/Giro</option><option' + (p.tipeTransaksi==='RTGS'?' selected':'') + '>RTGS</option><option' + (p.tipeTransaksi==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
+    + '<div class="fg"><label>Nama Bank</label><input id="epd-bank" value="' + (p.namaBank||'') + '"></div>'
+    + '<div class="fg"><label>Nomor Rekening</label><input id="epd-norek" value="' + (p.noRekening||'') + '"></div>'
+    + '<div class="fg"><label>Nama Rekening</label><input id="epd-namarek" value="' + (p.namaRekening||'') + '"></div>'
+    + '<div class="fg full"><label>Keterangan</label><textarea id="epd-ket">' + (p.keterangan||'') + '</textarea></div>'
+    + '<div class="fg full"><label>Bukti Dokumen</label><input id="epd-bukti" value="' + (p.buktiDokumen||'') + '"></div>'
+    + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditPermohonan(\'' + id + '\')">Simpan</button></div>',
+    'Edit Permohonan Dana');
+}
+
+async function simpanEditPermohonan(id) {
+  var list = await KDB.getAll('permohonan');
+  var p = list.find(function(x){ return x.id === id; });
+  if (!p) return;
+  await KDB.save('permohonan', id, Object.assign({}, p, {
+    tanggal: (document.getElementById('epd-tanggal')||{}).value || p.tanggal,
+    namaPemohon: (document.getElementById('epd-nama')||{}).value || p.namaPemohon,
+    namaPIC: (document.getElementById('epd-pic')||{}).value || p.namaPIC,
+    namaLeader: (document.getElementById('epd-leader')||{}).value || p.namaLeader,
+    noPOInvoice: (document.getElementById('epd-nopo')||{}).value || p.noPOInvoice,
+    nominal: parseFloat((document.getElementById('epd-nominal')||{}).value) || p.nominal,
+    jatuhTempo: (document.getElementById('epd-jt')||{}).value || p.jatuhTempo,
+    tipeTransaksi: (document.getElementById('epd-tipe')||{}).value || p.tipeTransaksi,
+    namaBank: (document.getElementById('epd-bank')||{}).value || p.namaBank,
+    noRekening: (document.getElementById('epd-norek')||{}).value || p.noRekening,
+    namaRekening: (document.getElementById('epd-namarek')||{}).value || p.namaRekening,
+    keterangan: (document.getElementById('epd-ket')||{}).value || p.keterangan,
+    buktiDokumen: (document.getElementById('epd-bukti')||{}).value || p.buktiDokumen,
+  }));
+  closeModalDirect();
+  showAlert('Permohonan dana berhasil diperbarui!');
+  navigate('dana-permohonan');
+}
+
 async function detailPermohonan(id) {
   const list = await KDB.getAll('permohonan');
   const p = list.find(function(x){ return x.id === id; });
@@ -6056,11 +6106,14 @@ async function renderDanaMasuk() {
     : '';
 
   const rows = sorted.map(function(d) {
+    const isDraftOrRejected = d.status === STATUS.DRAFT || d.status === STATUS.REJECTED_L1 || d.status === STATUS.REJECTED_L2 || d.status === STATUS.REJECTED_L3;
+    const isOwnerOrAdmin = d.createdBy === KU.username || hasRole('admin');
     const ajukanBtn = d.status === STATUS.DRAFT && d.createdBy === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanDanaMasuk(\'' + d.id + '\')">Ajukan</button>' : '';
-    const hapusBtn = d.status === STATUS.DRAFT && d.createdBy === KU.username ? '<button class="btn btn-xs btn-danger" onclick="hapusDanaMasuk(\'' + d.id + '\')">Hapus</button>' : '';
+    const editBtn = isDraftOrRejected && isOwnerOrAdmin ? '<button class="btn btn-xs btn-warning" onclick="editDanaMasuk(\'' + d.id + '\')">Edit</button>' : '';
+    const hapusBtn = isDraftOrRejected && isOwnerOrAdmin ? '<button class="btn btn-xs btn-danger" onclick="hapusDanaMasuk(\'' + d.id + '\')">Hapus</button>' : '';
     const jurnalBtn = d.status === STATUS.APPROVED && !d.jurnalId ? '' : '';
     const jurnalBadge = d.jurnalId ? '<span class="badge badge-success">✓ Jurnal Otomatis</span>' : '';
-    return '<tr data-status="' + d.status + '"><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td>' + statusBadge(d.status) + '</td><td>' + approvalFlow(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button>' + ajukanBtn + hapusBtn + jurnalBtn + jurnalBadge + '</td></tr>';
+    return '<tr data-status="' + d.status + '"><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td>' + statusBadge(d.status) + '</td><td>' + approvalFlow(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button>' + editBtn + ajukanBtn + hapusBtn + jurnalBtn + jurnalBadge + '</td></tr>';
   }).join('');
 
   return '<div class="page-title">📥 Dana Masuk</div>' + pendingBanner
@@ -6124,6 +6177,45 @@ async function ajukanDanaMasuk(id) {
 async function hapusDanaMasuk(id) {
   if (!confirm('Hapus data ini?')) return;
   await KDB.delete('danamasuk', id);
+  navigate('dana-masuk');
+}
+
+// Edit Dana Masuk dari List
+async function editDanaMasuk(id) {
+  var list = await KDB.getAll('danamasuk');
+  var d = list.find(function(x){ return x.id === id; });
+  if (!d) { showAlert('Data tidak ditemukan', 'warning'); return; }
+  openModal('<div class="form-grid">'
+    + '<div class="fg"><label>Tanggal</label><input type="date" id="edm-tanggal" value="' + (d.tanggal||'') + '"></div>'
+    + '<div class="fg"><label>Sumber Dana</label><input id="edm-sumber" value="' + (d.sumber||'') + '"></div>'
+    + '<div class="fg"><label>Nama PIC</label><input id="edm-pic" value="' + (d.namaPIC||'') + '"></div>'
+    + '<div class="fg"><label>No Referensi</label><input id="edm-ref" value="' + (d.noRef||'') + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="number" id="edm-nominal" value="' + (d.nominal||0) + '"></div>'
+    + '<div class="fg"><label>Tipe Transaksi</label><select id="edm-tipe"><option' + (d.tipeTransaksi==='Transfer Bank'?' selected':'') + '>Transfer Bank</option><option' + (d.tipeTransaksi==='Tunai'?' selected':'') + '>Tunai</option><option' + (d.tipeTransaksi==='Cek/Giro'?' selected':'') + '>Cek/Giro</option><option' + (d.tipeTransaksi==='RTGS'?' selected':'') + '>RTGS</option><option' + (d.tipeTransaksi==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
+    + '<div class="fg"><label>Nama Rekening</label><input id="edm-namarek" value="' + (d.namaRekening||'') + '"></div>'
+    + '<div class="fg full"><label>Keterangan</label><textarea id="edm-ket">' + (d.keterangan||'') + '</textarea></div>'
+    + '<div class="fg full"><label>Bukti Dokumen</label><input id="edm-bukti" value="' + (d.buktiDokumen||'') + '"></div>'
+    + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditDanaMasuk(\'' + id + '\')">Simpan</button></div>',
+    'Edit Dana Masuk');
+}
+
+async function simpanEditDanaMasuk(id) {
+  var list = await KDB.getAll('danamasuk');
+  var d = list.find(function(x){ return x.id === id; });
+  if (!d) return;
+  await KDB.save('danamasuk', id, Object.assign({}, d, {
+    tanggal: (document.getElementById('edm-tanggal')||{}).value || d.tanggal,
+    sumber: (document.getElementById('edm-sumber')||{}).value || d.sumber,
+    namaPIC: (document.getElementById('edm-pic')||{}).value || d.namaPIC,
+    noRef: (document.getElementById('edm-ref')||{}).value || d.noRef,
+    nominal: parseFloat((document.getElementById('edm-nominal')||{}).value) || d.nominal,
+    tipeTransaksi: (document.getElementById('edm-tipe')||{}).value || d.tipeTransaksi,
+    namaRekening: (document.getElementById('edm-namarek')||{}).value || d.namaRekening,
+    keterangan: (document.getElementById('edm-ket')||{}).value || d.keterangan,
+    buktiDokumen: (document.getElementById('edm-bukti')||{}).value || d.buktiDokumen,
+  }));
+  closeModalDirect();
+  showAlert('Dana masuk berhasil diperbarui!');
   navigate('dana-masuk');
 }
 
