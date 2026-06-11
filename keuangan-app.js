@@ -7611,8 +7611,17 @@ async function localAIReply(msg) {
   }
 
   if (lower.includes('transaksi') || lower.includes('perhatian') || lower.includes('anomali')) {
+    // Cek apakah user merujuk ke konteks sebelumnya (tampilkan, lihat, tadi, yang di atas, sebutkan)
+    var isReferBack = lower.includes('tampilkan') || lower.includes('lihat') || lower.includes('tadi') || lower.includes('yang di atas') || lower.includes('sebutkan') || lower.includes('lanjutkan') || lower.includes('detail') || lower.includes('semua') || lower.includes('perbaiki');
+    
+    // Cek history apakah pesan sebelumnya tentang phantom/COA
+    var lastHistory = _aiChatHistory.slice(-4);
+    var prevAboutCOA = lastHistory.some(function(m) { 
+      return (m.content||'').toLowerCase().includes('tidak terdaftar') || (m.content||'').includes('COA') || (m.content||'').includes('phantom') || (m.content||'').includes('1-1100') || (m.content||'').includes('akun') && (m.content||'').includes('belum');
+    });
+
     // Cek jika user minta cari transaksi tanpa COA / phantom account
-    if (lower.includes('coa') || lower.includes('akun') || lower.includes('kosong') || lower.includes('belum ada') || lower.includes('phantom') || lower.includes('tidak terdaftar') || lower.includes('cari')) {
+    if (lower.includes('coa') || lower.includes('akun') || lower.includes('kosong') || lower.includes('belum ada') || lower.includes('phantom') || lower.includes('tidak terdaftar') || lower.includes('cari') || (isReferBack && prevAboutCOA)) {
       var akunList4 = await getAkun();
       var coaKodes = akunList4.map(function(a){ return a.kode; });
       var phantomJurnal = [];
@@ -7638,14 +7647,16 @@ async function localAIReply(msg) {
           if (!grouped[p.akun]) grouped[p.akun] = [];
           grouped[p.akun].push(p);
         });
+        var showAll = isReferBack; // Tampilkan semua jika user minta detail/tampilkan
         var reply = '🔍 Ditemukan ' + phantomJurnal.length + ' baris jurnal dengan akun TIDAK TERDAFTAR di COA:\n\n';
         Object.keys(grouped).forEach(function(akun) {
           var items = grouped[akun];
           reply += '❌ Akun: ' + akun + ' (' + items.length + ' transaksi)\n';
-          items.slice(0,3).forEach(function(it) {
-            reply += '   • ' + (it.tanggal||'-') + ' | ' + (it.ket||'-') + ' | D:' + fmtRp(it.debit) + ' K:' + fmtRp(it.kredit) + '\n';
+          var showCount = showAll ? items.length : 3;
+          items.slice(0, showCount).forEach(function(it) {
+            reply += '   • ' + (it.tanggal||'-') + ' | ' + (it.ket||'-').substring(0,50) + ' | D:' + fmtRp(it.debit) + ' K:' + fmtRp(it.kredit) + ' | Ref:' + (it.ref||it.id) + '\n';
           });
-          if (items.length > 3) reply += '   ... dan ' + (items.length-3) + ' lainnya\n';
+          if (!showAll && items.length > 3) reply += '   ... dan ' + (items.length-3) + ' lainnya (ketik "tampilkan semua" untuk lihat detail)\n';
           reply += '\n';
         });
         reply += 'Solusi:\n'
