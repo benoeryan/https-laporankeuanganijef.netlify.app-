@@ -3782,11 +3782,26 @@ async function analisaSelisihSaldo() {
 
   if (issues.length) {
     html += '<div style="margin-bottom:8px;font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' potensi masalah:</div>';
-    html += '<div style="max-height:350px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th></tr></thead><tbody>';
+    html += '<div style="max-height:400px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>';
     issues.forEach(function(issue) {
-      html += '<tr style="border-bottom:1px solid #eee"><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666">' + (issue.detail||'') + '</td></tr>';
+      var aksiHtml = '';
+      if (issue.id && issue.id !== '-') {
+        aksiHtml = '<div style="display:flex;gap:3px;flex-wrap:wrap">'
+          + '<button class="btn btn-xs btn-info" onclick="closeModalDirect();editJurnal(\'' + issue.id + '\')">Edit</button>'
+          + '<button class="btn btn-xs btn-warning" onclick="koreksiSelisihJurnal(\'' + issue.id + '\')">Koreksi</button>'
+          + '<button class="btn btn-xs btn-primary" onclick="sinkronSelisihJurnal(\'' + issue.id + '\')">Sinkron</button>'
+          + '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + issue.id + '\')">Hapus</button>'
+          + '</div>';
+      }
+      html += '<tr style="border-bottom:1px solid #eee"><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666;max-width:140px">' + (issue.detail||'') + '</td><td>' + aksiHtml + '</td></tr>';
     });
     html += '</tbody></table></div>';
+
+    // Tombol koreksi saldo sekaligus
+    html += '<div style="margin-top:12px;padding:10px 14px;background:#e8f5e9;border-radius:8px;border-left:4px solid #4caf50">'
+      + '<b>Aksi Cepat:</b> '
+      + '<button class="btn btn-sm btn-warning" onclick="koreksiSaldoMandiri(' + selisih + ')" style="margin-left:8px">🔧 Buat Jurnal Koreksi Selisih ' + fmtRp(Math.abs(selisih)) + '</button>'
+      + '</div>';
   } else {
     html += '<div class="alert alert-success">Tidak ditemukan masalah yang jelas. Selisih mungkin dari transaksi yang belum dicatat di sistem.</div>';
   }
@@ -3800,6 +3815,110 @@ async function analisaSelisihSaldo() {
     + '</ul></div>';
 
   openModal(html, '🔍 Analisa Selisih Saldo Bank Mandiri');
+}
+
+// Aksi dari analisa selisih: Koreksi jurnal tertentu
+async function koreksiSelisihJurnal(id) {
+  var jurnal = await KDB.getAll('jurnal');
+  var j = jurnal.find(function(x){ return x.id === id; });
+  if (!j) { showAlert('Jurnal tidak ditemukan!', 'warning'); return; }
+  var lines = j.lines || [];
+  var kasAkun = '1-1101-2';
+  var kasDebit = 0, kasKredit = 0;
+  lines.forEach(function(l) {
+    if (l.akun === kasAkun) { kasDebit += (parseFloat(l.debit)||0); kasKredit += (parseFloat(l.kredit)||0); }
+  });
+  var msg = 'Jurnal: ' + j.keterangan + '\nTanggal: ' + j.tanggal + '\nDebit Mandiri: ' + fmtRp(kasDebit) + '\nKredit Mandiri: ' + fmtRp(kasKredit);
+  msg += '\n\nPilih aksi koreksi:\n1. Ubah akun Mandiri ke akun lain (misal BCA/Seabank)\n2. Reverse nominal (balik debit↔kredit)\n\nKetik kode akun pengganti (misal 1-1101-4) atau ketik "reverse":';
+  var input = prompt(msg);
+  if (!input) return;
+  if (input.toLowerCase() === 'reverse') {
+    // Reverse debit↔kredit untuk akun kas mandiri
+    var newLines = lines.map(function(l) {
+      if (l.akun === kasAkun) return { akun: l.akun, ket: l.ket, debit: l.kredit||0, kredit: l.debit||0 };
+      return l;
+    });
+    await KDB.save('jurnal', id, Object.assign({}, j, { lines: newLines }));
+    showAlert('Jurnal di-reverse berhasil!');
+  } else {
+    // Ganti akun kas mandiri ke akun lain
+    var newAkun = input.trim();
+    var newLines = lines.map(function(l) {
+      if (l.akun === kasAkun) return { akun: newAkun, ket: l.ket, debit: l.debit, kredit: l.kredit };
+      return l;
+    });
+    await KDB.save('jurnal', id, Object.assign({}, j, { lines: newLines }));
+    showAlert('Akun diubah dari ' + kasAkun + ' ke ' + newAkun + ' berhasil!');
+  }
+  closeModalDirect();
+  navigate('lap-saldo');
+}
+
+// Aksi: Sinkronkan (pindahkan ke akun yang benar berdasarkan metadata bank)
+async function sinkronSelisihJurnal(id) {
+  var jurnal = await KDB.getAll('jurnal');
+  var j = jurnal.find(function(x){ return x.id === id; });
+  if (!j) { showAlert('Jurnal tidak ditemukan!', 'warning'); return; }
+  var meta = j.meta || {};
+  var namaBank = (meta.namaBank || '').toLowerCase();
+  var akunList = await getAkun();
+
+  // Auto-detect akun yang tepat berdasarkan nama bank
+  var targetAkun = '1-1101-2'; // default tetap mandiri
+  if (namaBank.includes('bca')) targetAkun = akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('bca'); }) ? akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('bca'); }).kode : '1-1101-2';
+  else if (namaBank.includes('bni')) targetAkun = akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('bni'); }) ? akunList.find(function(a){ return (a.nama||'').toLowerCase().includes('bni'); }).kode : '1-1101-1';
+  else if (namaBank.includes('seabank') || namaBank.includes('shopee')) targetAkun = '1-1101-4';
+  else if (namaBank.includes('bri')) targetAkun = '1-1101-5';
+
+  if (targetAkun === '1-1101-2') {
+    targetAkun = prompt('Tidak bisa auto-detect bank. Masukkan kode akun tujuan (misal 1-1101-4 untuk Seabank):', '1-1101-2');
+    if (!targetAkun || targetAkun === '1-1101-2') { showAlert('Akun tidak diubah.', 'info'); return; }
+  }
+
+  if (!confirm('Pindahkan akun 1-1101-2 (Mandiri) → ' + targetAkun + ' di jurnal ini?\n\n' + j.keterangan)) return;
+  var lines = j.lines || [];
+  var newLines = lines.map(function(l) {
+    if (l.akun === '1-1101-2') return { akun: targetAkun, ket: l.ket, debit: l.debit, kredit: l.kredit };
+    return l;
+  });
+  await KDB.save('jurnal', id, Object.assign({}, j, { lines: newLines }));
+  showAlert('Jurnal disinkronkan! Akun dipindah ke ' + targetAkun);
+  closeModalDirect();
+  navigate('lap-saldo');
+}
+
+// Aksi: Hapus jurnal yang bermasalah
+async function hapusSelisihJurnal(id) {
+  var jurnal = await KDB.getAll('jurnal');
+  var j = jurnal.find(function(x){ return x.id === id; });
+  if (!j) return;
+  if (!confirm('HAPUS jurnal ini?\n\n' + j.keterangan + '\nNominal: ' + fmtRp(j.totalDebit) + '\n\nJurnal akan dipindah ke Tempat Sampah.')) return;
+  // Soft delete
+  await KDB.save('jurnal_trash', id, Object.assign({}, j, { deletedAt: new Date().toISOString(), deletedBy: KU.username }));
+  await KDB.delete('jurnal', id);
+  showAlert('Jurnal dihapus (dipindah ke Tempat Sampah)');
+  closeModalDirect();
+  navigate('lap-saldo');
+}
+
+// Aksi Cepat: Buat jurnal koreksi untuk selisih saldo
+async function koreksiSaldoMandiri(selisih) {
+  var abs = Math.abs(selisih);
+  if (!confirm('Buat jurnal koreksi untuk selisih ' + fmtRp(abs) + '?\n\n' + (selisih > 0 ? 'Saldo sistem LEBIH BESAR dari bank → Kredit Mandiri (kurangi saldo sistem)' : 'Saldo bank LEBIH BESAR dari sistem → Debit Mandiri (tambah saldo sistem)') + '\n\nAkun lawan: 9-9999 (Selisih Pembulatan/Koreksi)')) return;
+
+  var jId = genId('JU');
+  var lines = [];
+  if (selisih > 0) {
+    // Sistem lebih besar → kurangi: kredit mandiri, debit koreksi
+    lines = [{ akun: '9-9999', ket: 'Koreksi selisih saldo bank', debit: abs, kredit: 0 }, { akun: '1-1101-2', ket: 'Penyesuaian saldo Mandiri', debit: 0, kredit: abs }];
+  } else {
+    // Bank lebih besar → tambah: debit mandiri, kredit koreksi
+    lines = [{ akun: '1-1101-2', ket: 'Penyesuaian saldo Mandiri', debit: abs, kredit: 0 }, { akun: '9-9999', ket: 'Koreksi selisih saldo bank', debit: 0, kredit: abs }];
+  }
+  await KDB.save('jurnal', jId, { id: jId, tanggal: today(), keterangan: 'Koreksi selisih saldo Bank Mandiri', noRef: jId, tipe: 'penyesuaian', sumber: 'koreksi-selisih', lines: lines, totalDebit: abs, totalKredit: abs, createdBy: KU.username, createdAt: new Date().toISOString() });
+  showAlert('Jurnal koreksi selisih ' + fmtRp(abs) + ' berhasil dibuat!');
+  closeModalDirect();
+  navigate('lap-saldo');
 }
 
 // ===== KALKULATOR =====
