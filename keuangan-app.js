@@ -3665,6 +3665,39 @@ async function analisaSelisihSaldo() {
     }
   });
 
+  // 2b. Cek jurnal petty cash yang KREDIT ke Mandiri (top-up PC dari Mandiri = wajar)
+  // tapi cek yang DEBIT ke Mandiri dari sumber petty-cash (ini yang tidak wajar)
+  var pcDebitKeMandiri = 0;
+  jurnal.forEach(function(j) {
+    if (j.sumber !== 'petty-cash') return;
+    var lines = j.lines || [];
+    lines.forEach(function(l) {
+      if (l.akun === kasAkun && (parseFloat(l.debit)||0) > 0) {
+        pcDebitKeMandiri += parseFloat(l.debit) || 0;
+        issues.push({ tipe: '💵 Petty Cash debit ke Mandiri', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(l.debit)||0, detail: 'Pengeluaran PC seharusnya kredit dari 1-1101-3, bukan debit ke Mandiri' });
+      }
+    });
+  });
+
+  // 2c. Cek jurnal yang kredit dari Mandiri tapi seharusnya dari Petty Cash (1-1101-3)
+  // Ini terjadi kalau pengeluaran kecil langsung kredit Mandiri padahal seharusnya dari kas kecil
+  var akunPC = '1-1101-3';
+  var pcKreditDariMandiri = 0;
+  jurnal.forEach(function(j) {
+    if (j.sumber === 'petty-cash') return; // skip yg memang petty cash
+    var lines = j.lines || [];
+    var hasBebanKecil = false, kreditMandiri = 0;
+    lines.forEach(function(l) {
+      if ((l.akun||'').startsWith('5-') && (parseFloat(l.debit)||0) > 0 && (parseFloat(l.debit)||0) <= 500000) hasBebanKecil = true;
+      if (l.akun === kasAkun && (parseFloat(l.kredit)||0) > 0 && (parseFloat(l.kredit)||0) <= 500000) kreditMandiri += parseFloat(l.kredit)||0;
+    });
+    // Kalau ada beban kecil (<=500rb) yang kredit langsung dari Mandiri, mungkin seharusnya dari PC
+    // Hanya flag jika sumbernya bukan import-sheets (karena itu memang dari bank)
+    if (hasBebanKecil && kreditMandiri > 0 && j.sumber !== 'import-sheets') {
+      pcKreditDariMandiri += kreditMandiri;
+    }
+  });
+
   // 3. Cek duplikat (keterangan + nominal + tanggal sama)
   var seen = {};
   jurnal.forEach(function(j) {
@@ -3713,6 +3746,15 @@ async function analisaSelisihSaldo() {
     + '<tr><td style="padding:8px;color:#888">Jumlah Transaksi</td><td class="text-right">' + countTrx + '</td></tr>'
     + '<tr style="background:#fff3e0"><td style="padding:8px"><b>Kalkulasi: Awal + Debit - Kredit</b></td><td class="text-right fw-bold">' + fmtRp(saldoAwalMandiri + totalDebitKas - totalKreditKas) + '</td></tr>'
     + '</tbody></table></div>';
+
+  // Summary petty cash impact
+  if (pcDebitKeMandiri > 0 || pcKreditDariMandiri > 0) {
+    html += '<div style="margin:12px 0;padding:10px 14px;background:#fff3e0;border-radius:8px;border-left:4px solid #ff9800;font-size:0.82rem">'
+      + '<b>💵 Dampak Petty Cash ke saldo Mandiri:</b><br>'
+      + (pcDebitKeMandiri > 0 ? '• Jurnal PC yang debit ke Mandiri (tidak wajar): <b class="text-red">' + fmtRp(pcDebitKeMandiri) + '</b><br>' : '')
+      + (pcKreditDariMandiri > 0 ? '• Pengeluaran kecil (≤500rb) langsung kredit Mandiri (mungkin harusnya dari PC): <b>' + fmtRp(pcKreditDariMandiri) + '</b><br>' : '')
+      + '</div>';
+  }
 
   if (issues.length) {
     html += '<div style="margin-bottom:8px;font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' potensi masalah:</div>';
