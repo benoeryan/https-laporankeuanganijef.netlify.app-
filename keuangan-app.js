@@ -3644,11 +3644,16 @@ async function renderSaldoHariIni() {
 }
 
 // ===== ANALISA SELISIH SALDO =====
-async function analisaSelisihSaldo() {
-  var saldoReal = prompt('Masukkan saldo real Bank Mandiri saat ini (tanpa Rp, contoh: 155083806.92):');
-  if (!saldoReal) return;
-  saldoReal = parseFloat(saldoReal.replace(/[^\d.,]/g,'').replace(/,/g,'')) || 0;
+var _lastSaldoReal = 0;
+async function analisaSelisihSaldo(skipPrompt) {
+  var saldoReal = _lastSaldoReal;
+  if (!skipPrompt || !saldoReal) {
+    var input = prompt('Masukkan saldo real Bank Mandiri saat ini (tanpa Rp, contoh: 155083806.92):', _lastSaldoReal || '');
+    if (!input) return;
+    saldoReal = parseFloat(input.replace(/[^\d.,]/g,'').replace(/,/g,'')) || 0;
+  }
   if (saldoReal <= 0) { showAlert('Saldo tidak valid!', 'danger'); return; }
+  _lastSaldoReal = saldoReal;
 
   showLoading(true);
   var jurnal = await KDB.getAll('jurnal');
