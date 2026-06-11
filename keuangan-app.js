@@ -2614,10 +2614,10 @@ async function simpanEditJurnal(id) {
   var updated = Object.assign({}, j, { tanggal: newTgl, noRef: newRef, keterangan: newKet, lines: newLines, totalDebit: totalD, totalKredit: totalK });
   await KDB.save('jurnal', id, updated);
   closeModalDirect();
-  showAlert('Jurnal berhasil diperbarui!');
+  showAlert('Jurnal ' + id + ' berhasil diperbarui! Akun: ' + newLines.map(function(l){return l.akun;}).join(', '));
   if (window._returnToAnalisa) {
     window._returnToAnalisa = false;
-    setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
+    setTimeout(function(){ analisaSelisihSaldo(true); }, 800);
     return;
   }
   navigate('jurnal-umum');
