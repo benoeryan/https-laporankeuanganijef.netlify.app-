@@ -5870,7 +5870,6 @@ async function renderPermohonanDana() {
     : '';
 
   const rows = sorted.map(function(p) {
-    const isDraftOrRejected = p.status === STATUS.DRAFT || p.status === STATUS.REJECTED_L1 || p.status === STATUS.REJECTED_L2 || p.status === STATUS.REJECTED_L3;
     const isOwnerOrLeader = p.pemohon === KU.username || hasRole('leader');
     const ajukanBtn = p.status === STATUS.DRAFT && p.pemohon === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanPermohonan(\'' + p.id + '\')">Ajukan</button>' : '';
     const editBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-warning" onclick="editPermohonan(\'' + p.id + '\')">Edit</button>' : '';
@@ -6122,11 +6121,10 @@ async function renderDanaMasuk() {
     : '';
 
   const rows = sorted.map(function(d) {
-    const isDraftOrRejected = d.status === STATUS.DRAFT || d.status === STATUS.REJECTED_L1 || d.status === STATUS.REJECTED_L2 || d.status === STATUS.REJECTED_L3;
-    const isOwnerOrAdmin = d.createdBy === KU.username || hasRole('admin');
+    const isOwnerOrLeader = d.createdBy === KU.username || hasRole('leader');
     const ajukanBtn = d.status === STATUS.DRAFT && d.createdBy === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanDanaMasuk(\'' + d.id + '\')">Ajukan</button>' : '';
-    const editBtn = isOwnerOrAdmin ? '<button class="btn btn-xs btn-warning" onclick="editDanaMasuk(\'' + d.id + '\')">Edit</button>' : '';
-    const hapusBtn = isOwnerOrAdmin ? '<button class="btn btn-xs btn-danger" onclick="hapusDanaMasuk(\'' + d.id + '\')">Hapus</button>' : '';
+    const editBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-warning" onclick="editDanaMasuk(\'' + d.id + '\')">Edit</button>' : '';
+    const hapusBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-danger" onclick="hapusDanaMasuk(\'' + d.id + '\')">Hapus</button>' : '';
     const jurnalBtn = d.status === STATUS.APPROVED && !d.jurnalId ? '' : '';
     const jurnalBadge = d.jurnalId ? '<span class="badge badge-success">✓ Jurnal Otomatis</span>' : '';
     return '<tr data-status="' + d.status + '"><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td>' + statusBadge(d.status) + '</td><td>' + approvalFlow(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button>' + editBtn + ajukanBtn + hapusBtn + jurnalBtn + jurnalBadge + '</td></tr>';
