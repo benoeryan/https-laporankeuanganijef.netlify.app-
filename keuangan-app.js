@@ -792,8 +792,32 @@ async function renderDashboard() {
     return n.includes('bni') || n.includes('mandiri') || n.includes('petty');
   });
   if (!dashKasAkun.length) dashKasAkun = kasAkun.slice(0, 3);
+
+  // Hitung saldo petty cash dari collection (bukan dari jurnal) agar konsisten
+  var pcSaldoAwal = parseFloat(await KDB.getSetting('pettycash_saldo', 0)) || 0;
+  var pcTxList = await KDB.getAll('pettycash');
+  var pcSaldoReal = pcSaldoAwal;
+  var tahunSkrg = new Date().getFullYear();
+  pcTxList.forEach(function(p) {
+    var tglTahun = p.tanggal ? parseInt(p.tanggal.substring(0,4)) : 0;
+    if (tglTahun !== tahunSkrg) return;
+    var tipe = p.tipe || 'keluar';
+    if (!p.tipe) {
+      var ket2 = (p.keterangan||'').toLowerCase();
+      if (ket2.includes('top up') || ket2.includes('isi kas') || (p.kategori||'').toLowerCase().includes('masuk')) tipe = 'masuk';
+    }
+    if (tipe === 'masuk') pcSaldoReal += Math.abs(parseFloat(p.jumlah)||0);
+    else pcSaldoReal -= Math.abs(parseFloat(p.jumlah)||0);
+  });
+
   const saldoCards = dashKasAkun.map(function(a) {
-    const net = (saldo[a.kode] || {}).net || 0;
+    var net;
+    // Untuk petty cash, pakai saldo dari collection (bukan jurnal)
+    if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') {
+      net = pcSaldoReal;
+    } else {
+      net = (saldo[a.kode] || {}).net || 0;
+    }
     const bg = net > 0 ? '#f8fff8' : net < 0 ? '#fff8f8' : '#f8f9ff';
     const border = net > 0 ? '#4caf50' : net < 0 ? '#f44336' : '#1a237e';
     const cls = net > 0 ? 'text-green' : net < 0 ? 'text-red' : 'text-blue';
@@ -851,7 +875,7 @@ function startDashAutoRefresh() {
       clearInterval(_dashRefreshTimer);
       _dashRefreshTimer = null;
     }
-  }, 30000);
+  }, 300000); // 5 menit
 }
 
 async function renderDashboardApprover() {
