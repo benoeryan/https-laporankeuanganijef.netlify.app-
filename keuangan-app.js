@@ -3795,9 +3795,16 @@ async function analisaSelisihSaldo(skipPrompt) {
   issues = issues.filter(function(issue) { return markedBenar.indexOf(issue.id) < 0; });
 
   if (issues.length) {
-    html += '<div style="margin-bottom:8px;font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' potensi masalah:</div>';
-    html += '<div style="max-height:400px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
+      + '<div style="font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' potensi masalah:</div>'
+      + '<div style="display:flex;gap:6px;align-items:center">'
+      + '<label style="font-size:0.78rem;cursor:pointer"><input type="checkbox" id="selisih-chk-all" onchange="toggleSelisihCheckAll(this.checked)"> Pilih Semua</label>'
+      + '<button class="btn btn-xs btn-success" onclick="batchBenarSelisih()">✓ Benar Semua Terpilih</button>'
+      + '<button class="btn btn-xs btn-danger" onclick="batchHapusSelisih()">🗑️ Hapus Semua Terpilih</button>'
+      + '</div></div>';
+    html += '<div style="max-height:400px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th style="width:28px"><input type="checkbox" id="selisih-chk-all2" onchange="toggleSelisihCheckAll(this.checked)"></th><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>';
     issues.forEach(function(issue) {
+      var chkHtml = (issue.id && issue.id !== '-') ? '<input type="checkbox" class="selisih-chk" value="' + issue.id + '">' : '';
       var aksiHtml = '';
       if (issue.id && issue.id !== '-') {
         aksiHtml = '<div style="display:flex;gap:3px;flex-wrap:wrap">'
@@ -3808,7 +3815,7 @@ async function analisaSelisihSaldo(skipPrompt) {
           + '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + issue.id + '\')">Hapus</button>'
           + '</div>';
       }
-      html += '<tr style="border-bottom:1px solid #eee"><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666;max-width:140px">' + (issue.detail||'') + '</td><td>' + aksiHtml + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid #eee"><td>' + chkHtml + '</td><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666;max-width:140px">' + (issue.detail||'') + '</td><td>' + aksiHtml + '</td></tr>';
     });
     html += '</tbody></table></div>';
 
@@ -3846,6 +3853,51 @@ function tandaiBenarSelisih(id) {
   if (marked.indexOf(id) < 0) marked.push(id);
   localStorage.setItem('k_selisih_benar', JSON.stringify(marked));
   showAlert('Ditandai sebagai benar — tidak akan muncul lagi di analisa selisih.');
+  closeModalDirect();
+  setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
+}
+
+function toggleSelisihCheckAll(checked) {
+  document.querySelectorAll('.selisih-chk').forEach(function(cb) { cb.checked = checked; });
+  var all1 = document.getElementById('selisih-chk-all');
+  var all2 = document.getElementById('selisih-chk-all2');
+  if (all1) all1.checked = checked;
+  if (all2) all2.checked = checked;
+}
+
+function batchBenarSelisih() {
+  var checked = document.querySelectorAll('.selisih-chk:checked');
+  if (!checked.length) { showAlert('Pilih minimal 1 item!', 'warning'); return; }
+  if (!confirm('⚠️ KONFIRMASI\n\nAnda akan menandai ' + checked.length + ' transaksi sebagai BENAR.\n\nPastikan Anda sudah mengecek kembali seluruh transaksi yang dipilih dan yakin bahwa data tersebut sudah sesuai.\n\nLanjutkan?')) return;
+  var marked = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
+  checked.forEach(function(cb) {
+    if (marked.indexOf(cb.value) < 0) marked.push(cb.value);
+  });
+  localStorage.setItem('k_selisih_benar', JSON.stringify(marked));
+  showAlert(checked.length + ' transaksi ditandai sebagai benar.');
+  closeModalDirect();
+  setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
+}
+
+async function batchHapusSelisih() {
+  var checked = document.querySelectorAll('.selisih-chk:checked');
+  if (!checked.length) { showAlert('Pilih minimal 1 item!', 'warning'); return; }
+  if (!confirm('⚠️ PERINGATAN\n\nAnda akan MENGHAPUS ' + checked.length + ' jurnal ke Tempat Sampah.\n\nPastikan Anda sudah mengecek kembali seluruh transaksi yang dipilih dan yakin bahwa data tersebut memang harus dihapus.\n\nTindakan ini dapat di-undo dari Tempat Sampah.\n\nLanjutkan?')) return;
+  if (!confirm('🔴 KONFIRMASI GANDA\n\nApakah Anda benar-benar yakin menghapus ' + checked.length + ' jurnal?\n\nKlik OK untuk melanjutkan.')) return;
+  showLoading(true);
+  var jurnal = await KDB.getAll('jurnal');
+  var count = 0;
+  for (var i = 0; i < checked.length; i++) {
+    var id = checked[i].value;
+    var j = jurnal.find(function(x){ return x.id === id; });
+    if (j) {
+      await KDB.save('jurnal_trash', id, Object.assign({}, j, { deletedAt: new Date().toISOString(), deletedBy: KU.username }));
+      await KDB.delete('jurnal', id);
+      count++;
+    }
+  }
+  showLoading(false);
+  showAlert(count + ' jurnal dihapus (dipindah ke Tempat Sampah).');
   closeModalDirect();
   setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
 }
