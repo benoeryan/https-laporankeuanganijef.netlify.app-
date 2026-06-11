@@ -2615,6 +2615,11 @@ async function simpanEditJurnal(id) {
   await KDB.save('jurnal', id, updated);
   closeModalDirect();
   showAlert('Jurnal berhasil diperbarui!');
+  if (window._returnToAnalisa) {
+    window._returnToAnalisa = false;
+    setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
+    return;
+  }
   navigate('jurnal-umum');
   setTimeout(reapplyJurnalFilter, 500);
   setTimeout(reapplyJurnalFilter, 1000);
@@ -3785,6 +3790,10 @@ async function analisaSelisihSaldo(skipPrompt) {
       + '</div>';
   }
 
+  // Filter issues yang sudah ditandai "benar"
+  var markedBenar = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
+  issues = issues.filter(function(issue) { return markedBenar.indexOf(issue.id) < 0; });
+
   if (issues.length) {
     html += '<div style="margin-bottom:8px;font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' potensi masalah:</div>';
     html += '<div style="max-height:400px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>';
@@ -3792,9 +3801,10 @@ async function analisaSelisihSaldo(skipPrompt) {
       var aksiHtml = '';
       if (issue.id && issue.id !== '-') {
         aksiHtml = '<div style="display:flex;gap:3px;flex-wrap:wrap">'
-          + '<button class="btn btn-xs btn-info" onclick="closeModalDirect();editJurnal(\'' + issue.id + '\')">Edit</button>'
+          + '<button class="btn btn-xs btn-info" onclick="editSelisihJurnal(\'' + issue.id + '\')">Edit</button>'
           + '<button class="btn btn-xs btn-warning" onclick="koreksiSelisihJurnal(\'' + issue.id + '\')">Koreksi</button>'
           + '<button class="btn btn-xs btn-primary" onclick="sinkronSelisihJurnal(\'' + issue.id + '\')">Sinkron</button>'
+          + '<button class="btn btn-xs btn-success" onclick="tandaiBenarSelisih(\'' + issue.id + '\')">✓ Benar</button>'
           + '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + issue.id + '\')">Hapus</button>'
           + '</div>';
       }
@@ -3820,6 +3830,24 @@ async function analisaSelisihSaldo(skipPrompt) {
     + '</ul></div>';
 
   openModal(html, '🔍 Analisa Selisih Saldo Bank Mandiri');
+}
+
+// Edit jurnal dari modal analisa — setelah selesai edit, kembali ke modal analisa
+async function editSelisihJurnal(id) {
+  closeModalDirect();
+  // Set flag agar setelah edit jurnal selesai, kembali buka analisa
+  window._returnToAnalisa = true;
+  editJurnal(id);
+}
+
+// Tandai jurnal sebagai "benar" (bukan masalah) — simpan ke localStorage agar tidak muncul lagi
+function tandaiBenarSelisih(id) {
+  var marked = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
+  if (marked.indexOf(id) < 0) marked.push(id);
+  localStorage.setItem('k_selisih_benar', JSON.stringify(marked));
+  showAlert('Ditandai sebagai benar — tidak akan muncul lagi di analisa selisih.');
+  closeModalDirect();
+  setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
 }
 
 // Aksi dari analisa selisih: Koreksi jurnal tertentu
