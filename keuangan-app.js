@@ -458,7 +458,7 @@ async function renderSection(id) {
       case 'kalk-inventori-atk':  el.innerHTML = await renderInventoriATK(); break;
       case 'kalk-grafik-coa':     el.innerHTML = await renderGrafikCOA(); break;
       case 'bantuan':             el.innerHTML = renderBantuan(); break;
-      case 'ai-assistant':        el.innerHTML = await renderAIAssistant(); break;
+      case 'ai-assistant':        el.innerHTML = await renderAIAssistant(); setTimeout(function(){ var chatEl = document.getElementById('ai-chat-messages'); if(chatEl) chatEl.scrollTop = chatEl.scrollHeight; }, 100); break;
       case 'admin-users':         el.innerHTML = await renderAdminUsers(); break;
       case 'admin-import':        el.innerHTML = renderImport(); loadSavedApiKey(); break;
       case 'admin-export':        el.innerHTML = await renderExport(); break;
@@ -6768,7 +6768,7 @@ async function renderAIAssistant() {
     // Chat / Diskusi Langsung
     + '<div class="card" style="margin-top:16px">'
     + '<div class="card-header"><h2>💬 Chat & Diskusi Keuangan</h2><button class="btn btn-sm btn-outline" onclick="resetChatAI()" style="margin-left:auto">🗑️ Chat Baru</button></div>'
-    + '<div id="ai-chat-messages" style="max-height:400px;overflow-y:auto;padding:12px;background:#f8f9ff;border-radius:8px;margin-bottom:12px;min-height:120px">'
+    + '<div id="ai-chat-messages" style="max-height:700px;overflow-y:auto;padding:12px;background:#f8f9ff;border-radius:8px;margin-bottom:12px;min-height:200px">'
     + buildChatHistoryHtml()
     + '</div>'
     + '<div style="display:flex;gap:8px;align-items:center">'
