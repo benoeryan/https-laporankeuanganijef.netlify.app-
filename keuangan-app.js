@@ -7423,6 +7423,33 @@ async function localAIReply(msg) {
     return '✅ Tidak ada transaksi dengan akun yang belum terdaftar di COA.';
   }
 
+  // === PRIORITAS 2: Handler "fix coa [lama] ke [baru]" ===
+  if (lower.includes('fix') && lower.includes('coa') || (lower.includes('ganti') && lower.includes('akun') && lower.match(/\d+-\d+/))) {
+    // Parse akun lama dan baru dari pesan
+    var akunMatches = msg.match(/(\d+-\d+[\-\d]*)/g);
+    if (akunMatches && akunMatches.length >= 2) {
+      var akunLama = akunMatches[0];
+      var akunBaru = akunMatches[1];
+      // Hitung berapa jurnal yang terdampak
+      var affectedCount = 0;
+      jurnal.forEach(function(j) {
+        (j.lines||[]).forEach(function(l) { if (l.akun === akunLama) affectedCount++; });
+      });
+      if (affectedCount === 0) {
+        return 'Tidak ditemukan jurnal yang menggunakan akun ' + akunLama + '. Pastikan kode akun benar.';
+      }
+      return 'Saya akan mengganti akun ' + akunLama + ' → ' + akunBaru + ' di semua jurnal.\n\n'
+        + '• Jumlah jurnal terdampak: ' + affectedCount + ' baris\n'
+        + '• Akun lama: ' + akunLama + '\n'
+        + '• Akun baru: ' + akunBaru + '\n\n'
+        + 'Klik Konfirmasi untuk eksekusi.\n'
+        + '###ACTION:{"type":"fix_coa_jurnal","akun_lama":"' + akunLama + '","akun_baru":"' + akunBaru + '"}###';
+    } else if (akunMatches && akunMatches.length === 1) {
+      return 'Sebutkan akun tujuan juga. Contoh:\n"fix coa ' + akunMatches[0] + ' ke 1-1101-2"\n\nAtau: "ganti akun ' + akunMatches[0] + ' ke [akun_baru]"';
+    }
+    return 'Format: "fix coa [akun_lama] ke [akun_baru]"\nContoh: "fix coa 1-1100 ke 1-1101-2"';
+  }
+
   // Deteksi perintah aksi: buat jurnal
   if ((lower.includes('buat') || lower.includes('catat') || lower.includes('input')) && lower.includes('jurnal')) {
     // Coba parse nominal dari pesan
