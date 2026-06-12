@@ -3823,6 +3823,7 @@ async function analisaSelisihSaldo(skipPrompt) {
           + '<button class="btn btn-xs btn-primary" onclick="sinkronSelisihJurnal(\'' + issue.id + '\')">Sinkron</button>'
           + '<button class="btn btn-xs btn-success" onclick="tandaiBenarSelisih(\'' + issue.id + '\')">✓ Benar</button>'
           + '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + issue.id + '\')">Hapus</button>'
+          + '<button class="btn btn-xs" style="background:#9c27b0;color:#fff" onclick="cekDuplikatTransaksi(\'' + issue.id + '\')">Cek Duplikat</button>'
           + '</div>';
       }
       html += '<tr style="border-bottom:1px solid #eee"><td>' + chkHtml + '</td><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666;max-width:140px">' + (issue.detail||'') + '</td><td>' + aksiHtml + '</td></tr>';
@@ -3994,6 +3995,126 @@ async function hapusSelisihJurnal(id) {
   showAlert('Jurnal dihapus (dipindah ke Tempat Sampah)');
   closeModalDirect();
   navigate('lap-saldo');
+}
+
+// Aksi: Cek transaksi duplikat — tampilkan transaksi lain yang mirip untuk perbandingan
+async function cekDuplikatTransaksi(id) {
+  var jurnal = await KDB.getAll('jurnal');
+  var target = jurnal.find(function(x){ return x.id === id; });
+  if (!target) { showAlert('Jurnal tidak ditemukan!', 'warning'); return; }
+
+  var kasAkun = '1-1101-2';
+  var targetNominal = parseFloat(target.totalDebit) || 0;
+  var targetTgl = target.tanggal || '';
+  var targetKet = (target.keterangan || '').toLowerCase().trim();
+  var targetKetWords = targetKet.split(/\s+/).filter(function(w){ return w.length > 3; });
+
+  // Cari transaksi yang mirip: sama tanggal, atau sama nominal (yang menyentuh kas Mandiri), atau keterangan mirip
+  var duplikats = [];
+  jurnal.forEach(function(j) {
+    if (j.id === id) return; // skip diri sendiri
+    var lines = j.lines || [];
+    var touchKas = lines.some(function(l) { return l.akun === kasAkun; });
+    if (!touchKas) return; // hanya cek yang menyentuh akun Mandiri
+
+    var jNominal = parseFloat(j.totalDebit) || 0;
+    var jKet = (j.keterangan || '').toLowerCase().trim();
+    var jTgl = j.tanggal || '';
+
+    var skor = 0;
+    var alasan = [];
+
+    // Cek tanggal sama
+    if (jTgl && jTgl === targetTgl) {
+      skor += 3;
+      alasan.push('Tanggal sama');
+    }
+
+    // Cek nominal sama
+    if (targetNominal > 0 && jNominal === targetNominal) {
+      skor += 4;
+      alasan.push('Nominal sama');
+    }
+
+    // Cek keterangan mirip (minimal 50% kata yang cocok)
+    if (targetKetWords.length > 0) {
+      var matchCount = 0;
+      targetKetWords.forEach(function(w) {
+        if (jKet.indexOf(w) >= 0) matchCount++;
+      });
+      var ratio = matchCount / targetKetWords.length;
+      if (ratio >= 0.5) {
+        skor += Math.round(ratio * 3);
+        alasan.push('Keterangan mirip (' + Math.round(ratio*100) + '%)');
+      }
+    }
+
+    // Cek keterangan persis sama
+    if (jKet && jKet === targetKet) {
+      skor += 3;
+      alasan.push('Keterangan persis sama');
+    }
+
+    // Hanya tampilkan yang skor >= 4 (minimal nominal sama ATAU tanggal + keterangan mirip)
+    if (skor >= 4) {
+      duplikats.push({ jurnal: j, skor: skor, alasan: alasan });
+    }
+  });
+
+  // Sort by skor descending
+  duplikats.sort(function(a, b) { return b.skor - a.skor; });
+
+  // Build comparison view
+  var html = '<div style="margin-bottom:14px;padding:12px;background:#e3f2fd;border-radius:8px;border-left:4px solid #1976d2">';
+  html += '<div style="font-weight:700;margin-bottom:6px;color:#1565c0">Transaksi Asli:</div>';
+  html += '<table style="width:100%;font-size:0.82rem;border-collapse:collapse">';
+  html += '<tr><td style="padding:4px 8px;color:#666;width:100px">ID</td><td style="padding:4px 8px;font-family:monospace">' + target.id + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;color:#666">Tanggal</td><td style="padding:4px 8px">' + (target.tanggal||'-') + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;color:#666">Keterangan</td><td style="padding:4px 8px">' + (target.keterangan||'-') + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;color:#666">Nominal</td><td style="padding:4px 8px;font-weight:700">' + fmtRp(targetNominal) + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;color:#666">Sumber</td><td style="padding:4px 8px">' + (target.sumber||'-') + '</td></tr>';
+  var targetMeta = target.meta || {};
+  if (targetMeta.namaBank) html += '<tr><td style="padding:4px 8px;color:#666">Bank</td><td style="padding:4px 8px">' + targetMeta.namaBank + '</td></tr>';
+  html += '</table></div>';
+
+  if (duplikats.length === 0) {
+    html += '<div class="alert alert-success" style="margin-top:12px">Tidak ditemukan transaksi lain yang mirip/duplikat untuk jurnal ini.</div>';
+  } else {
+    html += '<div style="font-weight:700;margin:12px 0 8px;color:#c62828">🔄 Ditemukan ' + duplikats.length + ' transaksi mirip/kemungkinan duplikat:</div>';
+    html += '<div style="max-height:350px;overflow-y:auto">';
+    duplikats.forEach(function(d, idx) {
+      var j = d.jurnal;
+      var jMeta = j.meta || {};
+      var bgColor = d.skor >= 7 ? '#ffebee' : d.skor >= 5 ? '#fff8e1' : '#f5f5f5';
+      var borderColor = d.skor >= 7 ? '#e53935' : d.skor >= 5 ? '#ff9800' : '#bdbdbd';
+      var skorLabel = d.skor >= 7 ? '🔴 Sangat mirip' : d.skor >= 5 ? '🟡 Mirip' : '🟢 Mungkin mirip';
+      html += '<div style="margin-bottom:10px;padding:10px 12px;background:' + bgColor + ';border-radius:8px;border-left:4px solid ' + borderColor + '">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">';
+      html += '<span style="font-weight:600;font-size:0.82rem">' + skorLabel + ' (skor: ' + d.skor + ')</span>';
+      html += '<span style="font-size:0.72rem;color:#666;background:#fff;padding:2px 6px;border-radius:4px">' + d.alasan.join(' | ') + '</span>';
+      html += '</div>';
+      html += '<table style="width:100%;font-size:0.8rem;border-collapse:collapse">';
+      html += '<tr><td style="padding:3px 8px;color:#666;width:100px">ID</td><td style="padding:3px 8px;font-family:monospace">' + j.id + '</td></tr>';
+      html += '<tr><td style="padding:3px 8px;color:#666">Tanggal</td><td style="padding:3px 8px">' + (j.tanggal||'-') + '</td></tr>';
+      html += '<tr><td style="padding:3px 8px;color:#666">Keterangan</td><td style="padding:3px 8px">' + (j.keterangan||'-') + '</td></tr>';
+      html += '<tr><td style="padding:3px 8px;color:#666">Nominal</td><td style="padding:3px 8px;font-weight:700">' + fmtRp(parseFloat(j.totalDebit)||0) + '</td></tr>';
+      html += '<tr><td style="padding:3px 8px;color:#666">Sumber</td><td style="padding:3px 8px">' + (j.sumber||'-') + '</td></tr>';
+      if (jMeta.namaBank) html += '<tr><td style="padding:3px 8px;color:#666">Bank</td><td style="padding:3px 8px">' + jMeta.namaBank + '</td></tr>';
+      html += '</table>';
+      html += '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">';
+      html += '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + j.id + '\')">Hapus Duplikat Ini</button>';
+      html += '<button class="btn btn-xs btn-info" onclick="editSelisihJurnal(\'' + j.id + '\')">Edit</button>';
+      html += '<button class="btn btn-xs btn-success" onclick="tandaiBenarSelisih(\'' + j.id + '\')">Tandai Benar</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div style="margin-top:14px;text-align:right">';
+  html += '<button class="btn btn-sm btn-secondary" onclick="closeModalDirect();setTimeout(function(){analisaSelisihSaldo(true);},300)">← Kembali ke Analisa</button>';
+  html += '</div>';
+
+  openModal(html, '🔍 Cek Duplikat Transaksi');
 }
 
 // Aksi Cepat: Buat jurnal koreksi untuk selisih saldo
