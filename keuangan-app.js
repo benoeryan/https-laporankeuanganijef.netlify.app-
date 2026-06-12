@@ -2617,6 +2617,13 @@ async function simpanEditJurnal(id) {
   showAlert('Jurnal ' + id + ' berhasil diperbarui! Akun: ' + newLines.map(function(l){return l.akun;}).join(', '));
   if (window._returnToAnalisa) {
     window._returnToAnalisa = false;
+    // Tandai transaksi yang sudah diedit sebagai "benar" agar tidak muncul lagi di analisa selisih
+    if (window._editedSelisihId) {
+      var marked = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
+      if (marked.indexOf(window._editedSelisihId) < 0) marked.push(window._editedSelisihId);
+      localStorage.setItem('k_selisih_benar', JSON.stringify(marked));
+      window._editedSelisihId = null;
+    }
     setTimeout(function(){ analisaSelisihSaldo(true); }, 800);
     return;
   }
@@ -3855,6 +3862,7 @@ async function editSelisihJurnal(id) {
   closeModalDirect();
   // Set flag agar setelah edit jurnal selesai, kembali buka analisa
   window._returnToAnalisa = true;
+  window._editedSelisihId = id;
   editJurnal(id);
 }
 
