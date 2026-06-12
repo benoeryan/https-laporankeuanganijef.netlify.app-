@@ -3734,15 +3734,25 @@ async function analisaSelisihSaldo(skipPrompt) {
 
   // 3. Cek duplikat (keterangan + nominal + tanggal sama)
   var seen = {};
+  var seenData = {};
+  var addedFirst = {};
   jurnal.forEach(function(j) {
     var lines = j.lines || [];
     var touchKas = lines.some(function(l) { return l.akun === kasAkun; });
     if (!touchKas) return;
     var key = (j.tanggal||'') + '|' + (parseFloat(j.totalDebit)||0) + '|' + (j.keterangan||'').substring(0,30).toLowerCase();
     if (seen[key]) {
+      // Tambahkan transaksi pertama jika belum ditambahkan
+      if (!addedFirst[key]) {
+        var first = seenData[key];
+        issues.push({ tipe: '🔄 Kemungkinan duplikat', id: first.id, tanggal: first.tanggal, ket: first.keterangan, nominal: parseFloat(first.totalDebit)||0, detail: 'Sama dengan jurnal ' + j.id });
+        addedFirst[key] = true;
+      }
+      // Tambahkan transaksi kedua/selanjutnya
       issues.push({ tipe: '🔄 Kemungkinan duplikat', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Sama dengan jurnal ' + seen[key] });
     } else {
       seen[key] = j.id;
+      seenData[key] = j;
     }
   });
 
