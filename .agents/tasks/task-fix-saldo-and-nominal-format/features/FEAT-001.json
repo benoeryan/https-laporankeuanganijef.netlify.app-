@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix saldo discrepancy: When a permohonan/dana masuk is edited AFTER being approved (and jurnal was already created), the linked jurnal entry is not updated with the new nominal. Similarly, when a permohonan/dana masuk is deleted, its linked jurnal entry is not cleaned up. This causes the system saldo to differ from the actual bank saldo.",
+  "status": "in_progress",
+  "steps": [
+    "1. In simpanEditPermohonan() (line ~6150): After saving the updated permohonan, check if p.jurnalId exists. If it does, fetch the jurnal entry via KDB and update its lines (debit/kredit amounts) to match the new nominal, keterangan, etc. Update totalDebit and totalKredit as well.",
+    "2. In simpanEditDanaMasuk() (line ~6355): Same pattern - after saving, if d.jurnalId exists, update the linked jurnal entry's lines and totals with the new nominal.",
+    "3. In simpanEditPermohonanPC() (line ~4896): Same pattern - if the permohonan has a jurnalId, update the linked jurnal.",
+    "4. In simpanEditDanaMasukPC() (line ~4934): Same pattern - if the dana masuk has a jurnalId, update the linked jurnal.",
+    "5. In hapusPermohonan() (line ~6122): Before or after deleting the permohonan, check if the item has a jurnalId. If yes, also delete the linked jurnal entry via KDB.delete('jurnal', jurnalId).",
+    "6. In hapusDanaMasuk() (line ~6330): Same pattern - delete the linked jurnal if jurnalId exists.",
+    "7. In hapusPermohonanPC() (line ~4912): Same pattern - delete linked jurnal.",
+    "8. In hapusDanaMasukPC() (line ~4950): Same pattern - delete linked jurnal."
+  ],
+  "acceptance_criteria": [
+    "When a user edits the nominal of an already-approved permohonan that has a linked jurnal, the jurnal entry debit/kredit amounts are updated to match the new nominal",
+    "When a user edits the nominal of an already-approved dana masuk that has a linked jurnal, the jurnal entry debit/kredit amounts are updated to match the new nominal",
+    "When a user deletes a permohonan/dana masuk that has a linked jurnal, the jurnal entry is also deleted",
+    "node -c keuangan-app.js passes without errors"
+  ],
+  "verification": [
+    "Run: node -c keuangan-app.js",
+    "Code review: confirm simpanEditPermohonan updates linked jurnal when jurnalId exists",
+    "Code review: confirm simpanEditDanaMasuk updates linked jurnal when jurnalId exists",
+    "Code review: confirm hapusPermohonan and hapusDanaMasuk delete linked jurnal"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

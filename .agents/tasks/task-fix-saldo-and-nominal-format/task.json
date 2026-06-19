@@ -1,0 +1,7 @@
+{
+  "task_id": "task-fix-saldo-and-nominal-format",
+  "task_description": "Fix two issues: (1) System saldo discrepancy caused by edit/delete operations not updating linked jurnal entries, (2) Add thousand-separator dot formatting on nominal input fields in Permohonan Dana and Dana Masuk forms.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}
