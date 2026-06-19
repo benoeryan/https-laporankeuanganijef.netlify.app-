@@ -9628,6 +9628,7 @@ async function exportCSV(col) {
     } catch(e) {}
     var saldo = saldoAwal;
 
+    html += '<tr><td colspan="6" style="border:none;padding:4px 0;"><h3 style="margin:0;">Jurnal Kas - Rekening Koran</h3><p style="margin:0;font-size:9pt;color:#555;">(Bank Mandiri + BNI)</p></td></tr>';
     html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Saldo</th></tr>';
     // Baris saldo awal
     html += '<tr><td class="date">' + yr + '-01-01</td><td>-</td><td><b>Saldo Awal ' + yr + '</b></td><td class="num"></td><td class="num"></td><td class="num">' + fmtNum(saldo) + '</td></tr>';
@@ -9739,25 +9740,22 @@ async function exportJurnalDebit() {
     }
   } catch(e) {}
 
-  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#2E7D32;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Debit - Uang Masuk</h3><table>';
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#2E7D32;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Debit - Uang Masuk</h3><p style="margin:0 0 8px;font-size:9pt;color:#555;">(Bank Mandiri + BNI)</p><table>';
   html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit (Masuk)</th><th>Saldo</th></tr>';
   var totalDebit = 0;
 
   list.forEach(function(j) {
     var lines = parseLines(j);
-    var debitKas = 0, kreditKas = 0;
+    var debitKas = 0;
     lines.forEach(function(l) {
       if (kasAkuns.indexOf(l.akun) >= 0) {
         debitKas += (parseFloat(l.debit) || 0);
-        kreditKas += (parseFloat(l.kredit) || 0);
       }
     });
-    if (debitKas === 0 && kreditKas === 0) return;
-    saldo = saldo + debitKas - kreditKas;
-    if (debitKas > 0) {
-      html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(debitKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
-      totalDebit += debitKas;
-    }
+    if (debitKas <= 0) return;
+    saldo += debitKas;
+    totalDebit += debitKas;
+    html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(debitKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
   });
   html += '<tr style="font-weight:bold;background:#E8F5E9"><td colspan="3">TOTAL UANG MASUK</td><td class="num">'+fmtNum(totalDebit)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
   html += '</table></body></html>';
@@ -9792,25 +9790,22 @@ async function exportJurnalKredit() {
     }
   } catch(e) {}
 
-  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#C62828;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Kredit - Uang Keluar</h3><table>';
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#C62828;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Kredit - Uang Keluar</h3><p style="margin:0 0 8px;font-size:9pt;color:#555;">(Bank Mandiri + BNI)</p><table>';
   html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Kredit (Keluar)</th><th>Saldo</th></tr>';
   var totalKredit = 0;
 
   list.forEach(function(j) {
     var lines = parseLines(j);
-    var debitKas = 0, kreditKas = 0;
+    var kreditKas = 0;
     lines.forEach(function(l) {
       if (kasAkuns.indexOf(l.akun) >= 0) {
-        debitKas += (parseFloat(l.debit) || 0);
         kreditKas += (parseFloat(l.kredit) || 0);
       }
     });
-    if (debitKas === 0 && kreditKas === 0) return;
-    saldo = saldo + debitKas - kreditKas;
-    if (kreditKas > 0) {
-      totalKredit += kreditKas;
-      html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(kreditKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
-    }
+    if (kreditKas <= 0) return;
+    saldo -= kreditKas;
+    totalKredit += kreditKas;
+    html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(kreditKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
   });
   html += '<tr style="font-weight:bold;background:#FFEBEE"><td colspan="3">TOTAL UANG KELUAR</td><td class="num">'+fmtNum(totalKredit)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
   html += '</table></body></html>';
