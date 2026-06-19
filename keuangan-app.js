@@ -1593,7 +1593,7 @@ async function renderSetupCustomer() {
     + '<div class="fg"><label>PIC</label><input id="c-pic" placeholder="Nama PIC"></div>'
     + '<div class="fg"><label>Telepon</label><input id="c-telp" placeholder="08xx"></div>'
     + '<div class="fg"><label>Email</label><input id="c-email" placeholder="email@..."></div>'
-    + '<div class="fg"><label>Limit Kredit</label><input type="number" id="c-limit" placeholder="0"></div>'
+    + '<div class="fg"><label>Limit Kredit</label><input type="text" id="c-limit" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>TOP (hari)</label><input type="number" id="c-top" placeholder="30"></div>'
     + '<div class="fg"><label>Akun Debit (COA)</label><select id="c-akun-debit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
     + '<div class="fg"><label>Akun Kredit (COA)</label><select id="c-akun-kredit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
@@ -1618,7 +1618,7 @@ async function tambahCustomer() {
   const nama = document.getElementById('c-nama').value.trim();
   if (!nama) { showAlert('Nama wajib diisi!', 'danger'); return; }
   const id = genId('CUS');
-  await KDB.save('customer', id, { id: id, nama: nama, kode: document.getElementById('c-kode').value, pic: document.getElementById('c-pic').value, telp: document.getElementById('c-telp').value, email: document.getElementById('c-email').value, limit: document.getElementById('c-limit').value, top: document.getElementById('c-top').value, alamat: document.getElementById('c-alamat').value, akunDebit: document.getElementById('c-akun-debit').value, akunKredit: document.getElementById('c-akun-kredit').value, bank: document.getElementById('c-bank').value, atasnama: document.getElementById('c-atasnama').value, norek: document.getElementById('c-norek').value });
+  await KDB.save('customer', id, { id: id, nama: nama, kode: document.getElementById('c-kode').value, pic: document.getElementById('c-pic').value, telp: document.getElementById('c-telp').value, email: document.getElementById('c-email').value, limit: parseNominal(document.getElementById('c-limit').value), top: document.getElementById('c-top').value, alamat: document.getElementById('c-alamat').value, akunDebit: document.getElementById('c-akun-debit').value, akunKredit: document.getElementById('c-akun-kredit').value, bank: document.getElementById('c-bank').value, atasnama: document.getElementById('c-atasnama').value, norek: document.getElementById('c-norek').value });
   showAlert('Customer ditambahkan!');
   navigate('setup-customer');
 }
@@ -1664,7 +1664,7 @@ function editCustomer(id) {
       + '<div class="fg"><label>PIC</label><input id="ec-pic" value="' + (c.pic||'') + '"></div>'
       + '<div class="fg"><label>Telepon</label><input id="ec-telp" value="' + (c.telp||'') + '"></div>'
       + '<div class="fg"><label>Email</label><input id="ec-email" value="' + (c.email||'') + '"></div>'
-      + '<div class="fg"><label>Limit Kredit</label><input type="number" id="ec-limit" value="' + (c.limit||'') + '"></div>'
+      + '<div class="fg"><label>Limit Kredit</label><input type="text" id="ec-limit" value="' + (c.limit ? formatNominalValue(c.limit) : '') + '" oninput="formatNominalInput(this)"></div>'
       + '<div class="fg"><label>TOP (hari)</label><input type="number" id="ec-top" value="' + (c.top||'') + '"></div>'
       + '<div class="fg"><label>Akun Debit</label><select id="ec-akun-debit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
       + '<div class="fg"><label>Akun Kredit</label><select id="ec-akun-kredit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
@@ -1693,7 +1693,7 @@ async function simpanEditCustomer(id) {
     pic: (document.getElementById('ec-pic')||{}).value || '',
     telp: (document.getElementById('ec-telp')||{}).value || '',
     email: (document.getElementById('ec-email')||{}).value || '',
-    limit: (document.getElementById('ec-limit')||{}).value || '',
+    limit: parseNominal((document.getElementById('ec-limit')||{}).value),
     top: (document.getElementById('ec-top')||{}).value || '',
     akunDebit: (document.getElementById('ec-akun-debit')||{}).value || '',
     akunKredit: (document.getElementById('ec-akun-kredit')||{}).value || '',
@@ -1724,13 +1724,13 @@ async function renderJurnalUmum() {
     + '<tbody id="jurnal-lines-body">'
     + '<tr><td><select class="j-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="j-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="j-debit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updateJurnalTotal()"></td>'
-    + '<td><input class="j-kredit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updateJurnalTotal()"></td>'
+    + '<td><input class="j-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
     + '<td></td></tr>'
     + '<tr><td><select class="j-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="j-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="j-debit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updateJurnalTotal()"></td>'
-    + '<td><input class="j-kredit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updateJurnalTotal()"></td>'
+    + '<td><input class="j-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
     + '<td></td></tr>'
     + '</tbody></table></div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">'
@@ -1793,16 +1793,16 @@ async function addJurnalLine() {
   const tr = document.createElement('tr');
   tr.innerHTML = '<td><select class="j-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="j-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="j-debit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updateJurnalTotal()"></td>'
-    + '<td><input class="j-kredit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updateJurnalTotal()"></td>'
+    + '<td><input class="j-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
     + '<td><button onclick="this.closest(\'tr\').remove();updateJurnalTotal()" style="background:#f44336;color:white;border:none;border-radius:4px;padding:3px 7px;cursor:pointer">x</button></td>';
   tbody.appendChild(tr);
 }
 
 function updateJurnalTotal() {
   let d = 0, k = 0;
-  document.querySelectorAll('.j-debit').forEach(function(el){ d += parseFloat(el.value)||0; });
-  document.querySelectorAll('.j-kredit').forEach(function(el){ k += parseFloat(el.value)||0; });
+  document.querySelectorAll('.j-debit').forEach(function(el){ d += parseNominal(el.value); });
+  document.querySelectorAll('.j-kredit').forEach(function(el){ k += parseNominal(el.value); });
   const el = document.getElementById('jurnal-total');
   if (el) {
     const bal = Math.abs(d-k) < 1;
@@ -1821,8 +1821,8 @@ async function simpanJurnal() {
   document.querySelectorAll('#jurnal-lines-body tr').forEach(function(row) {
     const akun = row.querySelector('.j-akun') ? row.querySelector('.j-akun').value : '';
     const lineKet = row.querySelector('.j-line-ket') ? row.querySelector('.j-line-ket').value : '';
-    const debit = parseFloat(row.querySelector('.j-debit') ? row.querySelector('.j-debit').value : 0) || 0;
-    const kredit = parseFloat(row.querySelector('.j-kredit') ? row.querySelector('.j-kredit').value : 0) || 0;
+    const debit = parseNominal(row.querySelector('.j-debit') ? row.querySelector('.j-debit').value : 0);
+    const kredit = parseNominal(row.querySelector('.j-kredit') ? row.querySelector('.j-kredit').value : 0);
     if (akun) { lines.push({ akun: akun, ket: lineKet, debit: debit, kredit: kredit }); totalD += debit; totalK += kredit; }
   });
   if (lines.length < 2) { showAlert('Minimal 2 baris jurnal!', 'danger'); return; }
@@ -2578,8 +2578,8 @@ async function editJurnal(id) {
     return '<tr>'
       + '<td><select class="ej-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts.replace('value="' + l.akun + '"', 'value="' + l.akun + '" selected') + '</select></td>'
       + '<td><input class="ej-ket" value="' + (l.ket||'') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px"></td>'
-      + '<td><input class="ej-debit" type="number" value="' + (l.debit||0) + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="updateEditJurnalTotal()"></td>'
-      + '<td><input class="ej-kredit" type="number" value="' + (l.kredit||0) + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="updateEditJurnalTotal()"></td>'
+      + '<td><input class="ej-debit" type="text" value="' + (l.debit ? formatNominalValue(l.debit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
+      + '<td><input class="ej-kredit" type="text" value="' + (l.kredit ? formatNominalValue(l.kredit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
       + '<td><button class="btn btn-xs btn-danger" onclick="this.closest(\'tr\').remove();updateEditJurnalTotal()">✕</button></td>'
       + '</tr>';
   }).join('');
@@ -2611,8 +2611,8 @@ function addEditJurnalLine() {
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><select class="ej-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts + '</select></td>'
     + '<td><input class="ej-ket" value="" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan"></td>'
-    + '<td><input class="ej-debit" type="number" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="updateEditJurnalTotal()"></td>'
-    + '<td><input class="ej-kredit" type="number" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="updateEditJurnalTotal()"></td>'
+    + '<td><input class="ej-debit" type="text" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
+    + '<td><input class="ej-kredit" type="text" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
     + '<td><button class="btn btn-xs btn-danger" onclick="this.closest(\'tr\').remove();updateEditJurnalTotal()">✕</button></td>';
   tbody.appendChild(tr);
   updateEditJurnalTotal();
@@ -2620,8 +2620,8 @@ function addEditJurnalLine() {
 
 function updateEditJurnalTotal() {
   var d = 0, k = 0;
-  document.querySelectorAll('.ej-debit').forEach(function(el){ d += parseFloat(el.value)||0; });
-  document.querySelectorAll('.ej-kredit').forEach(function(el){ k += parseFloat(el.value)||0; });
+  document.querySelectorAll('.ej-debit').forEach(function(el){ d += parseNominal(el.value); });
+  document.querySelectorAll('.ej-kredit').forEach(function(el){ k += parseNominal(el.value); });
   var el = document.getElementById('ej-total');
   if (!el) return;
   var balanceStatus = Math.abs(d - k) < 0.01 ? '<span style="color:#2e7d32">✅ Balance</span>' : '<span style="color:#c62828">❌ Selisih: ' + fmtRp(Math.abs(d-k)) + '</span>';
@@ -2640,8 +2640,8 @@ async function simpanEditJurnal(id) {
   document.querySelectorAll('.ej-akun').forEach(function(el, i) {
     var akun = el.value;
     var ket = document.querySelectorAll('.ej-ket')[i] ? document.querySelectorAll('.ej-ket')[i].value : '';
-    var debit = parseFloat(document.querySelectorAll('.ej-debit')[i] ? document.querySelectorAll('.ej-debit')[i].value : 0) || 0;
-    var kredit = parseFloat(document.querySelectorAll('.ej-kredit')[i] ? document.querySelectorAll('.ej-kredit')[i].value : 0) || 0;
+    var debit = parseNominal(document.querySelectorAll('.ej-debit')[i] ? document.querySelectorAll('.ej-debit')[i].value : 0);
+    var kredit = parseNominal(document.querySelectorAll('.ej-kredit')[i] ? document.querySelectorAll('.ej-kredit')[i].value : 0);
     if (akun) { newLines.push({ akun: akun, ket: ket, debit: debit, kredit: kredit }); totalD += debit; totalK += kredit; }
   });
   if (newLines.length < 1) { showAlert('Minimal 1 baris jurnal!', 'danger'); return; }
@@ -2704,7 +2704,7 @@ async function renderJurnalPenyesuaian() {
     + '<div class="fg full"><label>Keterangan</label><input id="jp-ket" placeholder="Keterangan penyesuaian"></div>'
     + '<div class="fg"><label>Akun Debit</label><select id="jp-akun-d"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
     + '<div class="fg"><label>Akun Kredit</label><select id="jp-akun-k"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
-    + '<div class="fg"><label>Jumlah (Rp)</label><input type="number" id="jp-jumlah" placeholder="0"></div>'
+    + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" id="jp-jumlah" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="simpanJurnalPenyesuaian()">Simpan</button></div></div>' : '';
 
   const rows = jurnal.map(function(j) {
@@ -2748,7 +2748,7 @@ async function simpanJurnalPenyesuaian() {
   const ket = document.getElementById('jp-ket').value.trim();
   const akunD = document.getElementById('jp-akun-d').value;
   const akunK = document.getElementById('jp-akun-k').value;
-  const jumlah = parseFloat(document.getElementById('jp-jumlah').value) || 0;
+  const jumlah = parseNominal(document.getElementById('jp-jumlah').value);
   const tipeAdj = document.getElementById('jp-tipe-adj').value;
   if (!tgl || !ket || !akunD || !akunK || !jumlah) { showAlert('Semua field wajib diisi!', 'danger'); return; }
   const id = genId('JP');
@@ -2923,9 +2923,9 @@ async function renderUtangPiutang() {
     + '<div class="fg"><label>No. Dokumen</label><input id="up-nodok" placeholder="No. Invoice / PO"></div>'
     + '<div class="fg"><label>Tanggal</label><input type="date" id="up-tgl" value="' + today() + '"></div>'
     + '<div class="fg"><label>Jatuh Tempo</label><input type="date" id="up-jt"></div>'
-    + '<div class="fg"><label>Jumlah (Rp)</label><input type="number" id="up-jumlah" placeholder="0"></div>'
-    + '<div class="fg"><label>Sudah Dibayar (Rp)</label><input type="number" id="up-bayar" placeholder="0" oninput="hitungSisa()"></div>'
-    + '<div class="fg"><label>Sisa (Rp)</label><input type="number" id="up-sisa" placeholder="0" readonly></div>'
+    + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" id="up-jumlah" placeholder="0" oninput="formatNominalInput(this);hitungSisa()"></div>'
+    + '<div class="fg"><label>Sudah Dibayar (Rp)</label><input type="text" id="up-bayar" placeholder="0" oninput="formatNominalInput(this);hitungSisa()"></div>'
+    + '<div class="fg"><label>Sisa (Rp)</label><input type="text" id="up-sisa" placeholder="0" readonly></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="up-ket" placeholder="Keterangan"></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="tambahUtangPiutang()">Tambah</button></div></div>' : '';
 
@@ -2967,17 +2967,17 @@ function renderUPTable(list, tipe) {
 }
 
 function hitungSisa() {
-  const jumlah = parseFloat(document.getElementById('up-jumlah') ? document.getElementById('up-jumlah').value : 0) || 0;
-  const bayar = parseFloat(document.getElementById('up-bayar') ? document.getElementById('up-bayar').value : 0) || 0;
+  const jumlah = parseNominal(document.getElementById('up-jumlah') ? document.getElementById('up-jumlah').value : 0);
+  const bayar = parseNominal(document.getElementById('up-bayar') ? document.getElementById('up-bayar').value : 0);
   const sisa = document.getElementById('up-sisa');
-  if (sisa) sisa.value = Math.max(0, jumlah - bayar);
+  if (sisa) sisa.value = formatNominalValue(Math.max(0, jumlah - bayar));
 }
 
 async function tambahUtangPiutang() {
   const nama = document.getElementById('up-nama').value.trim();
-  const jumlah = parseFloat(document.getElementById('up-jumlah').value) || 0;
+  const jumlah = parseNominal(document.getElementById('up-jumlah').value);
   if (!nama || !jumlah) { showAlert('Nama dan jumlah wajib diisi!', 'danger'); return; }
-  const bayar = parseFloat(document.getElementById('up-bayar').value) || 0;
+  const bayar = parseNominal(document.getElementById('up-bayar').value);
   const id = genId('UP');
   await KDB.save('utangpiutang', id, { id: id, tipe: document.getElementById('up-tipe').value, nama: nama, noDok: document.getElementById('up-nodok').value, tanggal: document.getElementById('up-tgl').value, jatuhTempo: document.getElementById('up-jt').value, jumlah: jumlah, bayar: bayar, sisa: Math.max(0, jumlah - bayar), ket: document.getElementById('up-ket').value, createdBy: KU.username });
   showAlert('Data ditambahkan!');
@@ -3805,7 +3805,29 @@ async function analisaSelisihSaldo(skipPrompt) {
     issues.push({ tipe: 'ℹ️ Saldo Awal', id: '-', tanggal: tahun + '-01-01', ket: 'Saldo Awal yang di-set', nominal: saldoAwalMandiri, detail: 'Pastikan sesuai dengan saldo real per 1 Januari ' + tahun });
   }
 
-  // 5. Hitung total debit & kredit ke kas mandiri
+  // 5. Cek jurnal yatim (orphan) - jurnals linked to deleted permohonan/dana masuk
+  var allPD = await KDB.getAll('permohonan');
+  var allDM = await KDB.getAll('danamasuk');
+  var pdIds = {};
+  allPD.forEach(function(p) { pdIds[p.id] = true; });
+  var dmIds = {};
+  allDM.forEach(function(d) { dmIds[d.id] = true; });
+  jurnal.forEach(function(j) {
+    if (j.sumber === 'permohonan-dana' && j.meta && j.meta.permohonanId) {
+      if (!pdIds[j.meta.permohonanId]) {
+        var nom = parseFloat(j.totalDebit) || 0;
+        issues.push({ tipe: '👻 Jurnal Yatim (Orphan)', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: nom, detail: 'Permohonan ' + j.meta.permohonanId + ' sudah dihapus, tapi jurnal masih ada' });
+      }
+    }
+    if (j.sumber === 'dana-masuk' && j.meta && j.meta.danaMasukId) {
+      if (!dmIds[j.meta.danaMasukId]) {
+        var nom2 = parseFloat(j.totalDebit) || 0;
+        issues.push({ tipe: '👻 Jurnal Yatim (Orphan)', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: nom2, detail: 'Dana Masuk ' + j.meta.danaMasukId + ' sudah dihapus, tapi jurnal masih ada' });
+      }
+    }
+  });
+
+  // 6. Hitung total debit & kredit ke kas mandiri
   var totalDebitKas = 0, totalKreditKas = 0, countTrx = 0;
   jurnal.forEach(function(j) {
     (j.lines || []).forEach(function(l) {
@@ -4255,8 +4277,8 @@ async function renderKalkPenyusutan() {
     + '<div class="fg"><label>Nama Aset</label><input id="py-nama" placeholder="Laptop / Kendaraan / Mesin"></div>'
     + '<div class="fg"><label>Tanggal Perolehan</label><input type="date" id="py-tglbeli" value="' + today() + '"></div>'
     + '<div class="fg"><label>Metode</label><select id="py-metode"><option value="garis-lurus">Garis Lurus (Straight Line)</option><option value="saldo-menurun">Saldo Menurun (Declining Balance)</option><option value="jumlah-angka">Jumlah Angka Tahun</option></select></div>'
-    + '<div class="fg"><label>Harga Perolehan (Rp)</label><input type="number" id="py-harga" placeholder="0"></div>'
-    + '<div class="fg"><label>Nilai Sisa / Residu (Rp)</label><input type="number" id="py-sisa" placeholder="0"></div>'
+    + '<div class="fg"><label>Harga Perolehan (Rp)</label><input type="text" id="py-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Nilai Sisa / Residu (Rp)</label><input type="text" id="py-sisa" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Umur Ekonomis (Tahun)</label><input type="number" id="py-umur" placeholder="5"></div>'
     + '</div><div class="mt-12 flex-row" style="gap:8px"><button class="btn btn-primary" onclick="simpanAsetPenyusutan()">💾 Simpan Aset</button><button class="btn btn-outline" onclick="hitungPenyusutanPreview()">🧮 Preview Penyusutan</button></div>'
     + '<div id="py-result" class="mt-12"></div></div>'
@@ -4278,7 +4300,7 @@ async function renderKalkPenyusutan() {
 async function simpanAsetPenyusutan() {
   var nama = (document.getElementById('py-nama')||{}).value;
   if (!nama || !nama.trim()) { showAlert('Nama aset wajib diisi!', 'danger'); return; }
-  var harga = parseFloat((document.getElementById('py-harga')||{}).value)||0;
+  var harga = parseNominal((document.getElementById('py-harga')||{}).value);
   if (!harga) { showAlert('Harga perolehan wajib diisi!', 'danger'); return; }
   var id = genId('ASET');
   var data = {
@@ -4287,7 +4309,7 @@ async function simpanAsetPenyusutan() {
     tglBeli: (document.getElementById('py-tglbeli')||{}).value || today(),
     metode: (document.getElementById('py-metode')||{}).value || 'garis-lurus',
     harga: harga,
-    sisa: parseFloat((document.getElementById('py-sisa')||{}).value)||0,
+    sisa: parseNominal((document.getElementById('py-sisa')||{}).value),
     umur: parseInt((document.getElementById('py-umur')||{}).value)||5,
     createdBy: KU.username,
     createdAt: new Date().toISOString()
@@ -4315,8 +4337,8 @@ async function simpanAsetPenyusutan() {
 }
 
 function hitungPenyusutanPreview() {
-  var harga = parseFloat((document.getElementById('py-harga')||{}).value)||0;
-  var sisa = parseFloat((document.getElementById('py-sisa')||{}).value)||0;
+  var harga = parseNominal((document.getElementById('py-harga')||{}).value);
+  var sisa = parseNominal((document.getElementById('py-sisa')||{}).value);
   var umur = parseInt((document.getElementById('py-umur')||{}).value)||1;
   var metode = (document.getElementById('py-metode')||{}).value || 'garis-lurus';
   if (!harga) { showAlert('Isi harga perolehan dulu!', 'warning'); return; }
@@ -4374,8 +4396,8 @@ async function editAsetPenyusutan(id) {
     + '<div class="fg"><label>Nama</label><input id="easet-nama" value="' + (a.nama||'') + '"></div>'
     + '<div class="fg"><label>Tgl Beli</label><input type="date" id="easet-tgl" value="' + (a.tglBeli||'') + '"></div>'
     + '<div class="fg"><label>Metode</label><select id="easet-metode"><option value="garis-lurus"' + (a.metode==='garis-lurus'?' selected':'') + '>Garis Lurus</option><option value="saldo-menurun"' + (a.metode==='saldo-menurun'?' selected':'') + '>Saldo Menurun</option><option value="jumlah-angka"' + (a.metode==='jumlah-angka'?' selected':'') + '>Jumlah Angka</option></select></div>'
-    + '<div class="fg"><label>Harga (Rp)</label><input type="number" id="easet-harga" value="' + (a.harga||0) + '"></div>'
-    + '<div class="fg"><label>Residu (Rp)</label><input type="number" id="easet-sisa" value="' + (a.sisa||0) + '"></div>'
+    + '<div class="fg"><label>Harga (Rp)</label><input type="text" id="easet-harga" value="' + (a.harga ? formatNominalValue(a.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Residu (Rp)</label><input type="text" id="easet-sisa" value="' + (a.sisa ? formatNominalValue(a.sisa) : '0') + '" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Umur (Tahun)</label><input type="number" id="easet-umur" value="' + (a.umur||5) + '"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditAset(\'' + id + '\')">Simpan</button></div>',
     'Edit Aset: ' + a.nama);
@@ -4389,8 +4411,8 @@ async function simpanEditAset(id) {
     nama: (document.getElementById('easet-nama')||{}).value || a.nama,
     tglBeli: (document.getElementById('easet-tgl')||{}).value || a.tglBeli,
     metode: (document.getElementById('easet-metode')||{}).value || a.metode,
-    harga: parseFloat((document.getElementById('easet-harga')||{}).value)||a.harga,
-    sisa: parseFloat((document.getElementById('easet-sisa')||{}).value)||a.sisa,
+    harga: parseNominal((document.getElementById('easet-harga')||{}).value) || a.harga,
+    sisa: parseNominal((document.getElementById('easet-sisa')||{}).value) || a.sisa,
     umur: parseInt((document.getElementById('easet-umur')||{}).value)||a.umur
   }));
   closeModalDirect();
@@ -4446,7 +4468,7 @@ async function tambahPerlengkapan() {
   const nama = document.getElementById('pl-nama').value.trim();
   if (!nama) { showAlert('Nama wajib diisi!', 'danger'); return; }
   const id = genId('PL');
-  const harga = parseFloat(document.getElementById('pl-harga').value) || 0;
+  const harga = parseNominal(document.getElementById('pl-harga').value);
   const beli = parseInt(document.getElementById('pl-beli').value) || 0;
   await KDB.save('perlengkapan', id, { id: id, nama: nama, satuan: document.getElementById('pl-satuan').value, awal: document.getElementById('pl-awal').value, beli: beli, pakai: document.getElementById('pl-pakai').value, harga: harga });
   // Auto-create Permohonan Dana if ada pembelian
@@ -4549,7 +4571,7 @@ async function renderPettyCash() {
     // Set saldo awal
     + '<div class="card"><div class="card-header"><h2>Saldo Awal / Top-up Kas Kecil</h2></div>'
     + '<div class="flex-row" style="gap:8px;flex-wrap:wrap">'
-    + '<input type="number" id="pc-saldo" value="' + saldoAwal + '" placeholder="Saldo awal" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem">'
+    + '<input type="text" id="pc-saldo" value="' + (saldoAwal ? formatNominalValue(saldoAwal) : '') + '" placeholder="Saldo awal" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" oninput="formatNominalInput(this)">'
     + '<button class="btn btn-success" onclick="setSaldoPettyCash()">Set Saldo Awal</button>'
     + '<button class="btn btn-info" onclick="topUpPettyCash()">+ Top-up Kas Kecil</button>'
     + '<button class="btn btn-warning btn-sm" onclick="fixJurnalPettyCash()" style="margin-left:auto">🔧 Fix Akun Jurnal Lama</button>'
@@ -4557,7 +4579,7 @@ async function renderPettyCash() {
     + '<div id="topup-form" style="display:none;margin-top:12px;padding:12px;background:#f8fff8;border-radius:8px;border:1.5px solid #4caf50">'
     + '<div class="form-grid">'
     + '<div class="fg"><label>Tanggal</label><input type="date" id="topup-tgl" value="' + today() + '"></div>'
-    + '<div class="fg"><label>Jumlah Top-up (Rp)</label><input type="number" id="topup-jumlah" placeholder="0"></div>'
+    + '<div class="fg"><label>Jumlah Top-up (Rp)</label><input type="text" id="topup-jumlah" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="topup-ket" placeholder="Isi kas kecil / top-up dari..."></div>'
     + '</div>'
     + '<div class="mt-8 flex-row"><button class="btn btn-success" onclick="simpanTopUpPC()">Simpan Top-up</button><button class="btn btn-outline" onclick="document.getElementById(\'topup-form\').style.display=\'none\'">Batal</button></div>'
@@ -4574,12 +4596,12 @@ async function renderPettyCash() {
     + '<tbody id="pc-lines-body">'
     + '<tr><td><select class="pc-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="pc-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="pc-debit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updatePCTotal()"></td>'
-    + '<td><input class="pc-kredit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updatePCTotal()"></td></tr>'
+    + '<td><input class="pc-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
+    + '<td><input class="pc-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td></tr>'
     + '<tr><td><select class="pc-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="pc-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="pc-debit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updatePCTotal()"></td>'
-    + '<td><input class="pc-kredit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updatePCTotal()"></td></tr>'
+    + '<td><input class="pc-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
+    + '<td><input class="pc-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td></tr>'
     + '</tbody></table></div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">'
     + '<button class="btn btn-outline btn-sm" onclick="addPCLine()">+ Tambah Baris</button>'
@@ -4598,8 +4620,8 @@ async function renderPettyCash() {
 
 function updatePCTotal() {
   var d = 0, k = 0;
-  document.querySelectorAll('.pc-debit').forEach(function(el){ d += parseFloat(el.value)||0; });
-  document.querySelectorAll('.pc-kredit').forEach(function(el){ k += parseFloat(el.value)||0; });
+  document.querySelectorAll('.pc-debit').forEach(function(el){ d += parseNominal(el.value); });
+  document.querySelectorAll('.pc-kredit').forEach(function(el){ k += parseNominal(el.value); });
   var el = document.getElementById('pc-total');
   if (el) el.innerHTML = 'Debit: <b class="text-green">' + fmtRp(d) + '</b> | Kredit: <b class="text-red">' + fmtRp(k) + '</b>';
 }
@@ -4611,8 +4633,8 @@ async function addPCLine() {
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><select class="pc-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts + '</select></td>'
     + '<td><input class="pc-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan"></td>'
-    + '<td><input class="pc-debit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updatePCTotal()"></td>'
-    + '<td><input class="pc-kredit" type="number" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="updatePCTotal()"></td>';
+    + '<td><input class="pc-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
+    + '<td><input class="pc-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>';
   tbody.appendChild(tr);
 }
 
@@ -4626,8 +4648,8 @@ async function simpanPettyCashJurnal() {
   document.querySelectorAll('#pc-lines-body tr').forEach(function(row) {
     var akun = row.querySelector('.pc-akun') ? row.querySelector('.pc-akun').value : '';
     var lineKet = row.querySelector('.pc-line-ket') ? row.querySelector('.pc-line-ket').value : '';
-    var debit = parseFloat(row.querySelector('.pc-debit') ? row.querySelector('.pc-debit').value : 0) || 0;
-    var kredit = parseFloat(row.querySelector('.pc-kredit') ? row.querySelector('.pc-kredit').value : 0) || 0;
+    var debit = parseNominal(row.querySelector('.pc-debit') ? row.querySelector('.pc-debit').value : 0);
+    var kredit = parseNominal(row.querySelector('.pc-kredit') ? row.querySelector('.pc-kredit').value : 0);
     if (akun && (debit > 0 || kredit > 0)) { lines.push({ akun: akun, ket: lineKet, debit: debit, kredit: kredit }); totalD += debit; totalK += kredit; }
   });
   if (lines.length < 1) { showAlert('Minimal 1 baris transaksi!', 'danger'); return; }
@@ -4644,7 +4666,7 @@ async function simpanPettyCashJurnal() {
 }
 
 async function setSaldoPettyCash() {
-  const saldo = parseFloat(document.getElementById('pc-saldo').value) || 0;
+  const saldo = parseNominal(document.getElementById('pc-saldo').value);
   await KDB.saveSetting('pettycash_saldo', saldo);
   showAlert('Saldo awal petty cash diperbarui: ' + fmtRp(saldo));
   navigate('kalk-pettycash');
@@ -4691,7 +4713,7 @@ async function fixJurnalPettyCash() {
 
 async function simpanTopUpPC() {
   var tgl = (document.getElementById('topup-tgl')||{}).value || today();
-  var jumlah = parseFloat((document.getElementById('topup-jumlah')||{}).value) || 0;
+  var jumlah = parseNominal((document.getElementById('topup-jumlah')||{}).value);
   var ket = (document.getElementById('topup-ket')||{}).value || 'Top-up kas kecil';
   if (!jumlah || jumlah <= 0) { showAlert('Jumlah top-up wajib diisi!', 'danger'); return; }
   var id = genId('PC');
@@ -5071,14 +5093,14 @@ async function renderPettyCashRec() {
     + '<tr><td>Total Top-up / Masuk</td><td class="text-right text-green">+' + fmtRp(totalMasuk) + '</td></tr>'
     + '<tr><td>Total Pengeluaran Tercatat</td><td class="text-right text-red">(' + fmtRp(totalKeluar) + ')</td></tr>'
     + '<tr style="background:#e3f2fd"><td><b>Sisa Seharusnya</b></td><td class="text-right fw-bold">' + fmtRp(sisaSeharusnya) + '</td></tr>'
-    + '<tr><td>Saldo Fisik (isi manual)</td><td class="text-right"><input type="number" id="pc-fisik" placeholder="0" style="padding:6px;border:1px solid #ddd;border-radius:5px;text-align:right" oninput="hitungSelisihPC()"></td></tr>'
+    + '<tr><td>Saldo Fisik (isi manual)</td><td class="text-right"><input type="text" id="pc-fisik" placeholder="0" style="padding:6px;border:1px solid #ddd;border-radius:5px;text-align:right" oninput="formatNominalInput(this);hitungSelisihPC()"></td></tr>'
     + '<tr id="pc-selisih-row" style="display:none"><td><b>Selisih</b></td><td class="text-right fw-bold" id="pc-selisih-val">-</td></tr>'
     + '</tbody></table></div>'
     + '<div class="mt-12"><button class="btn btn-primary" onclick="hitungSelisihPC()">Hitung Selisih</button></div></div>';
 }
 
 function hitungSelisihPC() {
-  const fisik = parseFloat(document.getElementById('pc-fisik') ? document.getElementById('pc-fisik').value : 0) || 0;
+  const fisik = parseNominal(document.getElementById('pc-fisik') ? document.getElementById('pc-fisik').value : 0);
   const saldoAwal = parseFloat(_klget('ksetting_pettycash_saldo', 0));
   const list = _klget('k_pettycash_all', []);
   var tahunSekarang = new Date().getFullYear();
@@ -5132,7 +5154,7 @@ async function renderBankRec() {
       : '<span class="badge badge-danger">Selisih ' + fmtRp(Math.abs(selisih)) + '</span>';
     return '<tr><td class="fw-bold">' + a.kode + '</td><td>' + a.nama + '</td>'
       + '<td class="text-right fw-bold">' + fmtRp(saldoSistem) + '</td>'
-      + '<td class="text-right"><input type="number" class="br-actual-input" data-kode="' + a.kode + '" value="' + (savedActual||'') + '" placeholder="Isi saldo aktual rekening" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.85rem"></td>'
+      + '<td class="text-right"><input type="text" class="br-actual-input" data-kode="' + a.kode + '" value="' + (savedActual ? formatNominalValue(savedActual) : '') + '" placeholder="Isi saldo aktual rekening" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.85rem" oninput="formatNominalInput(this)"></td>'
       + '<td class="text-right fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '">' + (savedActual ? fmtRp(selisih) : '-') + '</td>'
       + '<td>' + statusBadge + '</td>'
       + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewBankRecDetail(\'' + a.kode + '\',' + saldoSistem + ')">👁️ Detail</button>' + (savedActual && Math.abs(selisih) >= 1 ? ' <button class="btn btn-xs btn-warning" onclick="koreksiSaldoAwalBank(\'' + a.kode + '\',' + saldoSistem + ',' + savedActual + ')">🔧 Koreksi</button>' : '') + '</td></tr>';
@@ -5176,12 +5198,12 @@ async function renderBankRec() {
     + '<div class="form-grid">'
     + '<div class="fg"><label>Nama Bank</label><select id="br-bank" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%"><option value="">-- Pilih Bank --</option>' + bankOpts + '</select></div>'
     + '<div class="fg"><label>Periode</label><input id="br-periode" placeholder="Januari 2026"></div>'
-    + '<div class="fg"><label>Saldo Buku (Rp)</label><input type="number" id="br-buku" placeholder="0"></div>'
-    + '<div class="fg"><label>Saldo Bank Statement (Rp)</label><input type="number" id="br-bank-saldo" placeholder="0"></div>'
-    + '<div class="fg"><label>Deposit in Transit (Rp)</label><input type="number" id="br-dit" placeholder="0" oninput="hitungBankRec()"></div>'
-    + '<div class="fg"><label>Outstanding Check (Rp)</label><input type="number" id="br-oc" placeholder="0" oninput="hitungBankRec()"></div>'
-    + '<div class="fg"><label>Bank Charge (Rp)</label><input type="number" id="br-charge" placeholder="0" oninput="hitungBankRec()"></div>'
-    + '<div class="fg"><label>Bunga Bank (Rp)</label><input type="number" id="br-bunga" placeholder="0" oninput="hitungBankRec()"></div>'
+    + '<div class="fg"><label>Saldo Buku (Rp)</label><input type="text" id="br-buku" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Saldo Bank Statement (Rp)</label><input type="text" id="br-bank-saldo" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Deposit in Transit (Rp)</label><input type="text" id="br-dit" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Outstanding Check (Rp)</label><input type="text" id="br-oc" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Bank Charge (Rp)</label><input type="text" id="br-charge" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Bunga Bank (Rp)</label><input type="text" id="br-bunga" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
     + '</div><div id="br-result" class="mt-12"></div>'
     + '<div class="mt-12 flex-row"><button class="btn btn-primary" onclick="simpanBankRec()">Simpan Rekonsiliasi</button><button class="btn btn-outline" onclick="hitungBankRec()">Hitung</button></div></div>'
     + '<div class="card"><div class="card-header"><h2>Riwayat Rekonsiliasi (' + list.length + ')</h2></div>'
@@ -5192,7 +5214,7 @@ async function renderBankRec() {
 function simpanSaldoAktualBank() {
   document.querySelectorAll('.br-actual-input').forEach(function(el) {
     var kode = el.dataset.kode;
-    var val = parseFloat(el.value) || 0;
+    var val = parseNominal(el.value);
     if (val > 0) localStorage.setItem('k_bankrec_actual_' + kode, val);
     else localStorage.removeItem('k_bankrec_actual_' + kode);
   });
@@ -5660,12 +5682,12 @@ function pilihTahunBankRec(tahun) {
 }
 
 function hitungBankRec() {
-  const buku = parseFloat(document.getElementById('br-buku') ? document.getElementById('br-buku').value : 0) || 0;
-  const bankSaldo = parseFloat(document.getElementById('br-bank-saldo') ? document.getElementById('br-bank-saldo').value : 0) || 0;
-  const dit = parseFloat(document.getElementById('br-dit') ? document.getElementById('br-dit').value : 0) || 0;
-  const oc = parseFloat(document.getElementById('br-oc') ? document.getElementById('br-oc').value : 0) || 0;
-  const charge = parseFloat(document.getElementById('br-charge') ? document.getElementById('br-charge').value : 0) || 0;
-  const bunga = parseFloat(document.getElementById('br-bunga') ? document.getElementById('br-bunga').value : 0) || 0;
+  const buku = parseNominal(document.getElementById('br-buku') ? document.getElementById('br-buku').value : 0);
+  const bankSaldo = parseNominal(document.getElementById('br-bank-saldo') ? document.getElementById('br-bank-saldo').value : 0);
+  const dit = parseNominal(document.getElementById('br-dit') ? document.getElementById('br-dit').value : 0);
+  const oc = parseNominal(document.getElementById('br-oc') ? document.getElementById('br-oc').value : 0);
+  const charge = parseNominal(document.getElementById('br-charge') ? document.getElementById('br-charge').value : 0);
+  const bunga = parseNominal(document.getElementById('br-bunga') ? document.getElementById('br-bunga').value : 0);
   const bukuAdj = buku - charge + bunga;
   const bankAdj = bankSaldo + dit - oc;
   const selisih = bukuAdj - bankAdj;
@@ -5692,12 +5714,12 @@ async function simpanBankRec() {
   const bank = document.getElementById('br-bank').value.trim();
   const periode = document.getElementById('br-periode').value.trim();
   if (!bank || !periode) { showAlert('Bank dan periode wajib diisi!', 'danger'); return; }
-  const buku = parseFloat(document.getElementById('br-buku').value) || 0;
-  const bankSaldo = parseFloat(document.getElementById('br-bank-saldo').value) || 0;
-  const dit = parseFloat(document.getElementById('br-dit').value) || 0;
-  const oc = parseFloat(document.getElementById('br-oc').value) || 0;
-  const charge = parseFloat(document.getElementById('br-charge').value) || 0;
-  const bunga = parseFloat(document.getElementById('br-bunga').value) || 0;
+  const buku = parseNominal(document.getElementById('br-buku').value);
+  const bankSaldo = parseNominal(document.getElementById('br-bank-saldo').value);
+  const dit = parseNominal(document.getElementById('br-dit').value);
+  const oc = parseNominal(document.getElementById('br-oc').value);
+  const charge = parseNominal(document.getElementById('br-charge').value);
+  const bunga = parseNominal(document.getElementById('br-bunga').value);
   const bukuAdj = buku - charge + bunga;
   const bankAdj = bankSaldo + dit - oc;
   const id = genId('BR');
@@ -5730,7 +5752,7 @@ async function renderInvoice() {
     + '<tbody id="inv-items"><tr>'
     + '<td><input class="inv-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Deskripsi item"></td>'
     + '<td><input class="inv-qty" type="number" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungInvoice()"></td>'
-    + '<td><input class="inv-harga" type="number" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="hitungInvoice()"></td>'
+    + '<td><input class="inv-harga" type="text" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungInvoice()"></td>'
     + '<td class="inv-total-cell" style="padding:6px">Rp 0</td><td></td></tr></tbody></table>'
     + '<button class="btn btn-outline btn-sm mt-8" onclick="addInvItem()">+ Tambah Item</button></div>'
     + '<div class="form-grid mt-12"><div class="fg"><label>Diskon (%)</label><input type="number" id="inv-diskon" placeholder="0" oninput="hitungInvoice()"></div>'
@@ -5749,7 +5771,7 @@ function addInvItem() {
   const tr = document.createElement('tr');
   tr.innerHTML = '<td><input class="inv-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Deskripsi item"></td>'
     + '<td><input class="inv-qty" type="number" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungInvoice()"></td>'
-    + '<td><input class="inv-harga" type="number" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="hitungInvoice()"></td>'
+    + '<td><input class="inv-harga" type="text" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungInvoice()"></td>'
     + '<td class="inv-total-cell" style="padding:6px">Rp 0</td>'
     + '<td><button onclick="this.closest(\'tr\').remove();hitungInvoice()" style="background:#f44336;color:white;border:none;border-radius:4px;padding:3px 7px;cursor:pointer">x</button></td>';
   tbody.appendChild(tr);
@@ -5759,7 +5781,7 @@ function hitungInvoice() {
   let subtotal = 0;
   document.querySelectorAll('#inv-items tr').forEach(function(row) {
     const qty = parseFloat(row.querySelector('.inv-qty') ? row.querySelector('.inv-qty').value : 0) || 0;
-    const harga = parseFloat(row.querySelector('.inv-harga') ? row.querySelector('.inv-harga').value : 0) || 0;
+    const harga = parseNominal(row.querySelector('.inv-harga') ? row.querySelector('.inv-harga').value : 0);
     const total = qty * harga;
     const cell = row.querySelector('.inv-total-cell');
     if (cell) cell.textContent = fmtRp(total);
@@ -5789,7 +5811,7 @@ async function simpanInvoice() {
   document.querySelectorAll('#inv-items tr').forEach(function(row) {
     const desc = row.querySelector('.inv-desc') ? row.querySelector('.inv-desc').value.trim() : '';
     const qty = parseFloat(row.querySelector('.inv-qty') ? row.querySelector('.inv-qty').value : 0) || 0;
-    const harga = parseFloat(row.querySelector('.inv-harga') ? row.querySelector('.inv-harga').value : 0) || 0;
+    const harga = parseNominal(row.querySelector('.inv-harga') ? row.querySelector('.inv-harga').value : 0);
     if (desc) { items.push({ desc: desc, qty: qty, harga: harga, total: qty*harga }); subtotal += qty*harga; }
   });
   const diskon = parseFloat(document.getElementById('inv-diskon').value) || 0;
@@ -5864,7 +5886,7 @@ async function renderPO() {
     + '<td><input class="po-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Nama barang/jasa"></td>'
     + '<td><input class="po-qty" type="number" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungPO()"></td>'
     + '<td><input class="po-sat" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="pcs"></td>'
-    + '<td><input class="po-harga" type="number" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="hitungPO()"></td>'
+    + '<td><input class="po-harga" type="text" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungPO()"></td>'
     + '<td class="po-total-cell" style="padding:6px">Rp 0</td><td></td></tr></tbody></table>'
     + '<button class="btn btn-outline btn-sm mt-8" onclick="addPOItem()">+ Tambah Item</button></div>'
     + '<div class="form-grid mt-12"><div class="fg"><label>PPN (%)</label><input type="number" id="po-ppn" placeholder="11" oninput="hitungPO()"></div>'
@@ -5883,7 +5905,7 @@ function addPOItem() {
   tr.innerHTML = '<td><input class="po-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Nama barang/jasa"></td>'
     + '<td><input class="po-qty" type="number" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungPO()"></td>'
     + '<td><input class="po-sat" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="pcs"></td>'
-    + '<td><input class="po-harga" type="number" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="hitungPO()"></td>'
+    + '<td><input class="po-harga" type="text" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungPO()"></td>'
     + '<td class="po-total-cell" style="padding:6px">Rp 0</td>'
     + '<td><button onclick="this.closest(\'tr\').remove();hitungPO()" style="background:#f44336;color:white;border:none;border-radius:4px;padding:3px 7px;cursor:pointer">x</button></td>';
   tbody.appendChild(tr);
@@ -5893,7 +5915,7 @@ function hitungPO() {
   let subtotal = 0;
   document.querySelectorAll('#po-items tr').forEach(function(row) {
     const qty = parseFloat(row.querySelector('.po-qty') ? row.querySelector('.po-qty').value : 0) || 0;
-    const harga = parseFloat(row.querySelector('.po-harga') ? row.querySelector('.po-harga').value : 0) || 0;
+    const harga = parseNominal(row.querySelector('.po-harga') ? row.querySelector('.po-harga').value : 0);
     const total = qty * harga;
     const cell = row.querySelector('.po-total-cell');
     if (cell) cell.textContent = fmtRp(total);
@@ -5920,7 +5942,7 @@ async function simpanPO() {
     const desc = row.querySelector('.po-desc') ? row.querySelector('.po-desc').value.trim() : '';
     const qty = parseFloat(row.querySelector('.po-qty') ? row.querySelector('.po-qty').value : 0) || 0;
     const sat = row.querySelector('.po-sat') ? row.querySelector('.po-sat').value : '';
-    const harga = parseFloat(row.querySelector('.po-harga') ? row.querySelector('.po-harga').value : 0) || 0;
+    const harga = parseNominal(row.querySelector('.po-harga') ? row.querySelector('.po-harga').value : 0);
     if (desc) { items.push({ desc: desc, qty: qty, sat: sat, harga: harga, total: qty*harga }); subtotal += qty*harga; }
   });
   const ppn = parseFloat(document.getElementById('po-ppn').value) || 0;
@@ -5971,14 +5993,14 @@ async function renderGaji() {
     + '<div class="fg"><label>Jabatan</label><input id="g-jabatan" placeholder="Jabatan"></div>'
     + '<div class="fg"><label>Periode</label><input id="g-periode" placeholder="Januari 2026"></div>'
     + '<div class="fg"><label>Tanggal Bayar</label><input type="date" id="g-tgl" value="' + today() + '"></div>'
-    + '<div class="fg"><label>Gaji Pokok (Rp)</label><input type="number" id="g-pokok" placeholder="0" oninput="hitungGaji()"></div>'
-    + '<div class="fg"><label>Tunjangan (Rp)</label><input type="number" id="g-tunjangan" placeholder="0" oninput="hitungGaji()"></div>'
-    + '<div class="fg"><label>Lembur (Rp)</label><input type="number" id="g-lembur" placeholder="0" oninput="hitungGaji()"></div>'
-    + '<div class="fg"><label>Bonus (Rp)</label><input type="number" id="g-bonus" placeholder="0" oninput="hitungGaji()"></div>'
+    + '<div class="fg"><label>Gaji Pokok (Rp)</label><input type="text" id="g-pokok" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Tunjangan (Rp)</label><input type="text" id="g-tunjangan" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Lembur (Rp)</label><input type="text" id="g-lembur" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Bonus (Rp)</label><input type="text" id="g-bonus" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
     + '<div class="fg"><label>BPJS Kesehatan (%)</label><input type="number" id="g-bpjskes" value="1" oninput="hitungGaji()"></div>'
     + '<div class="fg"><label>BPJS Ketenagakerjaan (%)</label><input type="number" id="g-bpjstk" value="2" oninput="hitungGaji()"></div>'
     + '<div class="fg"><label>PPh 21 (%)</label><input type="number" id="g-pph" value="5" oninput="hitungGaji()"></div>'
-    + '<div class="fg"><label>Potongan Lain (Rp)</label><input type="number" id="g-potongan" placeholder="0" oninput="hitungGaji()"></div>'
+    + '<div class="fg"><label>Potongan Lain (Rp)</label><input type="text" id="g-potongan" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
     + '</div><div id="g-result" class="mt-12"></div>'
     + '<div class="mt-12 flex-row"><button class="btn btn-primary" onclick="simpanGaji()">Simpan</button><button class="btn btn-outline" onclick="hitungGaji()">Hitung</button></div></div>'
     + '<div class="card"><div class="card-header"><h2>Riwayat Penggajian (' + list.length + ')</h2></div>'
@@ -5987,14 +6009,14 @@ async function renderGaji() {
 }
 
 function hitungGaji() {
-  const pokok = parseFloat(document.getElementById('g-pokok') ? document.getElementById('g-pokok').value : 0) || 0;
-  const tunjangan = parseFloat(document.getElementById('g-tunjangan') ? document.getElementById('g-tunjangan').value : 0) || 0;
-  const lembur = parseFloat(document.getElementById('g-lembur') ? document.getElementById('g-lembur').value : 0) || 0;
-  const bonus = parseFloat(document.getElementById('g-bonus') ? document.getElementById('g-bonus').value : 0) || 0;
+  const pokok = parseNominal(document.getElementById('g-pokok') ? document.getElementById('g-pokok').value : 0);
+  const tunjangan = parseNominal(document.getElementById('g-tunjangan') ? document.getElementById('g-tunjangan').value : 0);
+  const lembur = parseNominal(document.getElementById('g-lembur') ? document.getElementById('g-lembur').value : 0);
+  const bonus = parseNominal(document.getElementById('g-bonus') ? document.getElementById('g-bonus').value : 0);
   const bpjsKes = parseFloat(document.getElementById('g-bpjskes') ? document.getElementById('g-bpjskes').value : 0) || 0;
   const bpjsTk = parseFloat(document.getElementById('g-bpjstk') ? document.getElementById('g-bpjstk').value : 0) || 0;
   const pph = parseFloat(document.getElementById('g-pph') ? document.getElementById('g-pph').value : 0) || 0;
-  const potonganLain = parseFloat(document.getElementById('g-potongan') ? document.getElementById('g-potongan').value : 0) || 0;
+  const potonganLain = parseNominal(document.getElementById('g-potongan') ? document.getElementById('g-potongan').value : 0);
   const totalBruto = pokok + tunjangan + lembur + bonus;
   const bpjsKesAmt = pokok*(bpjsKes/100);
   const bpjsTkAmt = pokok*(bpjsTk/100);
@@ -6021,14 +6043,14 @@ async function simpanGaji() {
   const nama = document.getElementById('g-nama').value.trim();
   const periode = document.getElementById('g-periode').value.trim();
   if (!nama || !periode) { showAlert('Nama dan periode wajib diisi!', 'danger'); return; }
-  const pokok = parseFloat(document.getElementById('g-pokok').value) || 0;
-  const tunjangan = parseFloat(document.getElementById('g-tunjangan').value) || 0;
-  const lembur = parseFloat(document.getElementById('g-lembur').value) || 0;
-  const bonus = parseFloat(document.getElementById('g-bonus').value) || 0;
+  const pokok = parseNominal(document.getElementById('g-pokok').value);
+  const tunjangan = parseNominal(document.getElementById('g-tunjangan').value);
+  const lembur = parseNominal(document.getElementById('g-lembur').value);
+  const bonus = parseNominal(document.getElementById('g-bonus').value);
   const bpjsKes = parseFloat(document.getElementById('g-bpjskes').value) || 0;
   const bpjsTk = parseFloat(document.getElementById('g-bpjstk').value) || 0;
   const pph = parseFloat(document.getElementById('g-pph').value) || 0;
-  const potonganLain = parseFloat(document.getElementById('g-potongan').value) || 0;
+  const potonganLain = parseNominal(document.getElementById('g-potongan').value);
   const totalBruto = pokok + tunjangan + lembur + bonus;
   const bpjsKesAmt = pokok*(bpjsKes/100);
   const bpjsTkAmt = pokok*(bpjsTk/100);
@@ -9893,7 +9915,7 @@ async function renderPortalAset() {
     + '<div class="fg"><label>Nama Item</label><input id="pl-nama" placeholder="Nama perlengkapan / aset"></div>'
     + '<div class="fg"><label>Nama PIC</label><input id="pl-pic" value="' + (KU.nama||KU.username) + '" placeholder="Nama PIC"></div>'
     + '<div class="fg"><label>Satuan</label><input id="pl-satuan" placeholder="pcs / unit / set"></div>'
-    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="number" id="pl-harga" placeholder="0"></div>'
+    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="text" id="pl-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div id="pl-fields-perlengkapan" style="display:contents">'
     + '<div class="fg"><label>Stok Awal</label><input type="number" id="pl-awal" placeholder="0" value="0"></div>'
     + '<div class="fg"><label>Jumlah Pembelian</label><input type="number" id="pl-beli" placeholder="0" value="0"></div>'
@@ -9955,7 +9977,7 @@ async function tambahPerlengkapanPortal(noPermohonan) {
   const nama = (document.getElementById('pl-nama') || {}).value;
   if (!nama || !nama.trim()) { showAlert('Nama item wajib diisi!', 'danger'); return; }
   const tipeItem = (document.getElementById('pl-tipe-item') || {}).value || 'Perlengkapan';
-  const harga = parseFloat((document.getElementById('pl-harga') || {}).value) || 0;
+  const harga = parseNominal((document.getElementById('pl-harga') || {}).value);
   const satuan = (document.getElementById('pl-satuan') || {}).value || '';
   const ket = (document.getElementById('pl-ket') || {}).value || '';
   const akunDebit = (document.getElementById('pl-akun-debit') || {}).value || '5-1400';
@@ -10010,7 +10032,7 @@ async function editPerlengkapan(id) {
   openModal('<div class="form-grid">'
     + '<div class="fg"><label>Nama</label><input id="ep-nama" value="' + (p.nama||'') + '"></div>'
     + '<div class="fg"><label>Satuan</label><input id="ep-satuan" value="' + (p.satuan||'') + '"></div>'
-    + '<div class="fg"><label>Harga Satuan</label><input type="number" id="ep-harga" value="' + (p.harga||0) + '"></div>'
+    + '<div class="fg"><label>Harga Satuan</label><input type="text" id="ep-harga" value="' + (p.harga ? formatNominalValue(p.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
     + extraFields
     + '<div class="fg full"><label>Keterangan</label><textarea id="ep-ket">' + (p.keterangan||'') + '</textarea></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditPerlengkapan(\'' + id + '\')">Simpan</button></div>',
@@ -10024,7 +10046,7 @@ async function simpanEditPerlengkapan(id) {
   const updated = Object.assign({}, p, {
     nama: (document.getElementById('ep-nama') || {}).value || p.nama,
     satuan: (document.getElementById('ep-satuan') || {}).value || p.satuan,
-    harga: parseFloat((document.getElementById('ep-harga') || {}).value) || p.harga,
+    harga: parseNominal((document.getElementById('ep-harga') || {}).value) || p.harga,
     keterangan: (document.getElementById('ep-ket') || {}).value || p.keterangan,
   });
   if (p.tipeItem === 'Aset Tetap') {
@@ -10845,7 +10867,7 @@ function editPettyCash(id) {
       + '<div class="fg full"><label>Keterangan</label><input id="epc-ket" value="' + (p.keterangan||'') + '"></div>'
       + '<div class="fg"><label>Akun Debit</label><select id="epc-akun-debit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></div>'
       + '<div class="fg"><label>Akun Kredit</label><select id="epc-akun-kredit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></div>'
-      + '<div class="fg"><label>Jumlah (Rp)</label><input type="number" id="epc-jumlah" value="' + (p.jumlah||0) + '"></div>'
+      + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" id="epc-jumlah" value="' + (p.jumlah ? formatNominalValue(p.jumlah) : '0') + '" oninput="formatNominalInput(this)"></div>'
       + '<div class="fg"><label>Kategori</label><select id="epc-kat" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="Petty Cash"' + (p.kategori==='Petty Cash'?' selected':'') + '>Petty Cash</option><option value="Jurnal"' + (p.kategori==='Jurnal'?' selected':'') + '>Jurnal</option><option value="Operasional"' + (p.kategori==='Operasional'?' selected':'') + '>Operasional</option><option value="Lainnya"' + (p.kategori==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
       + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditPC(\'' + id + '\')">Simpan</button></div>',
       'Edit Petty Cash');
@@ -10866,7 +10888,7 @@ async function simpanEditPC(id) {
   var updated = Object.assign({}, p, {
     tanggal: (document.getElementById('epc-tgl')||{}).value || p.tanggal,
     noRef: (document.getElementById('epc-ref')||{}).value || p.noRef,
-    jumlah: parseFloat((document.getElementById('epc-jumlah')||{}).value) || p.jumlah,
+    jumlah: parseNominal((document.getElementById('epc-jumlah')||{}).value) || p.jumlah,
     keterangan: (document.getElementById('epc-ket')||{}).value || p.keterangan,
     akunDebit: (document.getElementById('epc-akun-debit')||{}).value || p.akunDebit || '',
     akunKredit: (document.getElementById('epc-akun-kredit')||{}).value || p.akunKredit || '',
@@ -11569,7 +11591,7 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Stok Awal</label><input type="number" id="atk-stok" placeholder="0" value="0"></div>'
     + '<div class="fg"><label>Pembelian</label><input type="number" id="atk-beli" placeholder="0" value="0"></div>'
     + '<div class="fg"><label>Pemakaian</label><input type="number" id="atk-pakai" placeholder="0" value="0"></div>'
-    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="number" id="atk-harga" placeholder="0"></div>'
+    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="text" id="atk-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="tambahATK()">Tambah ATK</button></div></div>'
     // Input Masuk / Keluar ATK
     + '<div class="card"><div class="card-header"><h2>📦 Input Barang Masuk / Keluar</h2></div>'
@@ -11855,7 +11877,7 @@ async function tambahATK() {
   var nama = (document.getElementById('atk-nama')||{}).value;
   if (!nama || !nama.trim()) { showAlert('Nama ATK wajib diisi!', 'danger'); return; }
   var id = genId('ATK');
-  await KDB.save('inventori_atk', id, { id: id, nama: nama.trim(), satuan: (document.getElementById('atk-satuan')||{}).value||'', stok: parseInt((document.getElementById('atk-stok')||{}).value)||0, beli: parseInt((document.getElementById('atk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('atk-pakai')||{}).value)||0, harga: parseFloat((document.getElementById('atk-harga')||{}).value)||0, createdBy: KU.username, createdAt: new Date().toISOString() });
+  await KDB.save('inventori_atk', id, { id: id, nama: nama.trim(), satuan: (document.getElementById('atk-satuan')||{}).value||'', stok: parseInt((document.getElementById('atk-stok')||{}).value)||0, beli: parseInt((document.getElementById('atk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('atk-pakai')||{}).value)||0, harga: parseNominal((document.getElementById('atk-harga')||{}).value), createdBy: KU.username, createdAt: new Date().toISOString() });
   showAlert('ATK ditambahkan!');
   navigate('kalk-inventori-atk');
 }
@@ -11870,7 +11892,7 @@ async function editATK(id) {
     + '<div class="fg"><label>Stok</label><input type="number" id="eatk-stok" value="' + (item.stok||0) + '"></div>'
     + '<div class="fg"><label>Beli</label><input type="number" id="eatk-beli" value="' + (item.beli||0) + '"></div>'
     + '<div class="fg"><label>Pakai</label><input type="number" id="eatk-pakai" value="' + (item.pakai||0) + '"></div>'
-    + '<div class="fg"><label>Harga</label><input type="number" id="eatk-harga" value="' + (item.harga||0) + '"></div>'
+    + '<div class="fg"><label>Harga</label><input type="text" id="eatk-harga" value="' + (item.harga ? formatNominalValue(item.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditATK(\'' + id + '\')">Simpan</button></div>',
     'Edit ATK: ' + item.nama);
 }
@@ -11879,7 +11901,7 @@ async function simpanEditATK(id) {
   var list = await KDB.getAll('inventori_atk');
   var item = list.find(function(x){ return x.id === id; });
   if (!item) return;
-  await KDB.save('inventori_atk', id, Object.assign({}, item, { nama: (document.getElementById('eatk-nama')||{}).value||item.nama, satuan: (document.getElementById('eatk-satuan')||{}).value||item.satuan, stok: parseInt((document.getElementById('eatk-stok')||{}).value)||0, beli: parseInt((document.getElementById('eatk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('eatk-pakai')||{}).value)||0, harga: parseFloat((document.getElementById('eatk-harga')||{}).value)||0 }));
+  await KDB.save('inventori_atk', id, Object.assign({}, item, { nama: (document.getElementById('eatk-nama')||{}).value||item.nama, satuan: (document.getElementById('eatk-satuan')||{}).value||item.satuan, stok: parseInt((document.getElementById('eatk-stok')||{}).value)||0, beli: parseInt((document.getElementById('eatk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('eatk-pakai')||{}).value)||0, harga: parseNominal((document.getElementById('eatk-harga')||{}).value) }));
   closeModalDirect();
   showAlert('ATK diperbarui!');
   navigate('kalk-inventori-atk');
