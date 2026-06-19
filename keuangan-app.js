@@ -135,7 +135,7 @@ function formatNominalInput(el) {
   }
   el.value = formatted;
   var newLen = el.value.length;
-  var newPos = cursorPos + (newLen - oldLen);
+  var newPos = Math.max(0, cursorPos + (newLen - oldLen));
   el.setSelectionRange(newPos, newPos);
 }
 
@@ -1593,7 +1593,7 @@ async function renderSetupCustomer() {
     + '<div class="fg"><label>PIC</label><input id="c-pic" placeholder="Nama PIC"></div>'
     + '<div class="fg"><label>Telepon</label><input id="c-telp" placeholder="08xx"></div>'
     + '<div class="fg"><label>Email</label><input id="c-email" placeholder="email@..."></div>'
-    + '<div class="fg"><label>Limit Kredit</label><input type="text" id="c-limit" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Limit Kredit</label><input type="text" inputmode="numeric" id="c-limit" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>TOP (hari)</label><input type="number" id="c-top" placeholder="30"></div>'
     + '<div class="fg"><label>Akun Debit (COA)</label><select id="c-akun-debit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
     + '<div class="fg"><label>Akun Kredit (COA)</label><select id="c-akun-kredit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
@@ -1664,7 +1664,7 @@ function editCustomer(id) {
       + '<div class="fg"><label>PIC</label><input id="ec-pic" value="' + (c.pic||'') + '"></div>'
       + '<div class="fg"><label>Telepon</label><input id="ec-telp" value="' + (c.telp||'') + '"></div>'
       + '<div class="fg"><label>Email</label><input id="ec-email" value="' + (c.email||'') + '"></div>'
-      + '<div class="fg"><label>Limit Kredit</label><input type="text" id="ec-limit" value="' + (c.limit ? formatNominalValue(c.limit) : '') + '" oninput="formatNominalInput(this)"></div>'
+      + '<div class="fg"><label>Limit Kredit</label><input type="text" inputmode="numeric" id="ec-limit" value="' + (c.limit ? formatNominalValue(c.limit) : '') + '" oninput="formatNominalInput(this)"></div>'
       + '<div class="fg"><label>TOP (hari)</label><input type="number" id="ec-top" value="' + (c.top||'') + '"></div>'
       + '<div class="fg"><label>Akun Debit</label><select id="ec-akun-debit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
       + '<div class="fg"><label>Akun Kredit</label><select id="ec-akun-kredit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
@@ -1724,13 +1724,13 @@ async function renderJurnalUmum() {
     + '<tbody id="jurnal-lines-body">'
     + '<tr><td><select class="j-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="j-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="j-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
-    + '<td><input class="j-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-debit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-kredit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
     + '<td></td></tr>'
     + '<tr><td><select class="j-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="j-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="j-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
-    + '<td><input class="j-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-debit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-kredit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
     + '<td></td></tr>'
     + '</tbody></table></div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">'
@@ -1793,8 +1793,8 @@ async function addJurnalLine() {
   const tr = document.createElement('tr');
   tr.innerHTML = '<td><select class="j-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="j-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="j-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
-    + '<td><input class="j-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-debit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
+    + '<td><input class="j-kredit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updateJurnalTotal()"></td>'
     + '<td><button onclick="this.closest(\'tr\').remove();updateJurnalTotal()" style="background:#f44336;color:white;border:none;border-radius:4px;padding:3px 7px;cursor:pointer">x</button></td>';
   tbody.appendChild(tr);
 }
@@ -2578,8 +2578,8 @@ async function editJurnal(id) {
     return '<tr>'
       + '<td><select class="ej-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts.replace('value="' + l.akun + '"', 'value="' + l.akun + '" selected') + '</select></td>'
       + '<td><input class="ej-ket" value="' + (l.ket||'') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px"></td>'
-      + '<td><input class="ej-debit" type="text" value="' + (l.debit ? formatNominalValue(l.debit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
-      + '<td><input class="ej-kredit" type="text" value="' + (l.kredit ? formatNominalValue(l.kredit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
+      + '<td><input class="ej-debit" type="text" inputmode="numeric" value="' + (l.debit ? formatNominalValue(l.debit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
+      + '<td><input class="ej-kredit" type="text" inputmode="numeric" value="' + (l.kredit ? formatNominalValue(l.kredit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
       + '<td><button class="btn btn-xs btn-danger" onclick="this.closest(\'tr\').remove();updateEditJurnalTotal()">✕</button></td>'
       + '</tr>';
   }).join('');
@@ -2611,8 +2611,8 @@ function addEditJurnalLine() {
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><select class="ej-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts + '</select></td>'
     + '<td><input class="ej-ket" value="" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan"></td>'
-    + '<td><input class="ej-debit" type="text" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
-    + '<td><input class="ej-kredit" type="text" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
+    + '<td><input class="ej-debit" type="text" inputmode="numeric" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
+    + '<td><input class="ej-kredit" type="text" inputmode="numeric" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditJurnalTotal()"></td>'
     + '<td><button class="btn btn-xs btn-danger" onclick="this.closest(\'tr\').remove();updateEditJurnalTotal()">✕</button></td>';
   tbody.appendChild(tr);
   updateEditJurnalTotal();
@@ -2704,7 +2704,7 @@ async function renderJurnalPenyesuaian() {
     + '<div class="fg full"><label>Keterangan</label><input id="jp-ket" placeholder="Keterangan penyesuaian"></div>'
     + '<div class="fg"><label>Akun Debit</label><select id="jp-akun-d"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
     + '<div class="fg"><label>Akun Kredit</label><select id="jp-akun-k"><option value="">-- Pilih --</option>' + akunOpts + '</select></div>'
-    + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" id="jp-jumlah" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" inputmode="numeric" id="jp-jumlah" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="simpanJurnalPenyesuaian()">Simpan</button></div></div>' : '';
 
   const rows = jurnal.map(function(j) {
@@ -2923,8 +2923,8 @@ async function renderUtangPiutang() {
     + '<div class="fg"><label>No. Dokumen</label><input id="up-nodok" placeholder="No. Invoice / PO"></div>'
     + '<div class="fg"><label>Tanggal</label><input type="date" id="up-tgl" value="' + today() + '"></div>'
     + '<div class="fg"><label>Jatuh Tempo</label><input type="date" id="up-jt"></div>'
-    + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" id="up-jumlah" placeholder="0" oninput="formatNominalInput(this);hitungSisa()"></div>'
-    + '<div class="fg"><label>Sudah Dibayar (Rp)</label><input type="text" id="up-bayar" placeholder="0" oninput="formatNominalInput(this);hitungSisa()"></div>'
+    + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" inputmode="numeric" id="up-jumlah" placeholder="0" oninput="formatNominalInput(this);hitungSisa()"></div>'
+    + '<div class="fg"><label>Sudah Dibayar (Rp)</label><input type="text" inputmode="numeric" id="up-bayar" placeholder="0" oninput="formatNominalInput(this);hitungSisa()"></div>'
     + '<div class="fg"><label>Sisa (Rp)</label><input type="text" id="up-sisa" placeholder="0" readonly></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="up-ket" placeholder="Keterangan"></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="tambahUtangPiutang()">Tambah</button></div></div>' : '';
@@ -3812,32 +3812,47 @@ async function analisaSelisihSaldo(skipPrompt) {
   allPD.forEach(function(p) { pdIds[p.id] = true; });
   var dmIds = {};
   allDM.forEach(function(d) { dmIds[d.id] = true; });
+  var orphanIds = {};
   jurnal.forEach(function(j) {
     if (j.sumber === 'permohonan-dana' && j.meta && j.meta.permohonanId) {
       if (!pdIds[j.meta.permohonanId]) {
+        orphanIds[j.id] = true;
         var nom = parseFloat(j.totalDebit) || 0;
         issues.push({ tipe: '👻 Jurnal Yatim (Orphan)', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: nom, detail: 'Permohonan ' + j.meta.permohonanId + ' sudah dihapus, tapi jurnal masih ada' });
       }
     }
     if (j.sumber === 'dana-masuk' && j.meta && j.meta.danaMasukId) {
       if (!dmIds[j.meta.danaMasukId]) {
+        orphanIds[j.id] = true;
         var nom2 = parseFloat(j.totalDebit) || 0;
         issues.push({ tipe: '👻 Jurnal Yatim (Orphan)', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: nom2, detail: 'Dana Masuk ' + j.meta.danaMasukId + ' sudah dihapus, tapi jurnal masih ada' });
       }
     }
   });
 
-  // 6. Hitung total debit & kredit ke kas mandiri
+  // 6. Hitung total debit & kredit ke kas mandiri (exclude orphan jurnals)
   var totalDebitKas = 0, totalKreditKas = 0, countTrx = 0;
+  var orphanDebitKas = 0, orphanKreditKas = 0;
   jurnal.forEach(function(j) {
+    var isOrphan = !!orphanIds[j.id];
     (j.lines || []).forEach(function(l) {
       if (l.akun === kasAkun) {
-        totalDebitKas += (parseFloat(l.debit) || 0);
-        totalKreditKas += (parseFloat(l.kredit) || 0);
-        if ((parseFloat(l.debit)||0) > 0 || (parseFloat(l.kredit)||0) > 0) countTrx++;
+        var deb = parseFloat(l.debit) || 0;
+        var kre = parseFloat(l.kredit) || 0;
+        if (isOrphan) {
+          orphanDebitKas += deb;
+          orphanKreditKas += kre;
+        } else {
+          totalDebitKas += deb;
+          totalKreditKas += kre;
+          if (deb > 0 || kre > 0) countTrx++;
+        }
       }
     });
   });
+  var orphanImpact = orphanDebitKas - orphanKreditKas;
+  var saldoSistemAdjusted = saldoSistem - orphanImpact;
+  var selisihAdjusted = saldoSistemAdjusted - saldoReal;
 
   showLoading(false);
 
@@ -3846,8 +3861,13 @@ async function analisaSelisihSaldo(skipPrompt) {
     + '<table style="width:100%;font-size:0.85rem;border-collapse:collapse"><tbody>'
     + '<tr style="background:#e3f2fd"><td style="padding:8px">Saldo Sistem (1-1101-2)</td><td class="text-right fw-bold">' + fmtRp(saldoSistem) + '</td></tr>'
     + '<tr style="background:#e8f5e9"><td style="padding:8px">Saldo Real Bank Mandiri</td><td class="text-right fw-bold">' + fmtRp(saldoReal) + '</td></tr>'
-    + '<tr style="background:' + (selisih===0?'#e8f5e9':'#ffebee') + '"><td style="padding:8px"><b>SELISIH</b></td><td class="text-right fw-bold ' + (selisih===0?'text-green':'text-red') + '">' + fmtRp(Math.abs(selisih)) + (selisih > 0 ? ' (Sistem lebih besar)' : selisih < 0 ? ' (Bank lebih besar)' : ' ✅ Match') + '</td></tr>'
-    + '<tr><td style="padding:8px;color:#888">Saldo Awal ' + tahun + '</td><td class="text-right">' + fmtRp(saldoAwalMandiri) + '</td></tr>'
+    + '<tr style="background:' + (selisih===0?'#e8f5e9':'#ffebee') + '"><td style="padding:8px"><b>SELISIH</b></td><td class="text-right fw-bold ' + (selisih===0?'text-green':'text-red') + '">' + fmtRp(Math.abs(selisih)) + (selisih > 0 ? ' (Sistem lebih besar)' : selisih < 0 ? ' (Bank lebih besar)' : ' ✅ Match') + '</td></tr>';
+  if (orphanImpact !== 0) {
+    html += '<tr style="background:#fff8e1"><td style="padding:8px">👻 Dampak Jurnal Yatim (Orphan)</td><td class="text-right fw-bold text-red">' + fmtRp(Math.abs(orphanImpact)) + (orphanImpact > 0 ? ' (inflate saldo)' : ' (deflate saldo)') + '</td></tr>'
+    + '<tr style="background:#e8f5e9"><td style="padding:8px"><b>Saldo Adjusted (tanpa Orphan)</b></td><td class="text-right fw-bold">' + fmtRp(saldoSistemAdjusted) + '</td></tr>'
+    + '<tr style="background:' + (selisihAdjusted===0?'#e8f5e9':'#ffebee') + '"><td style="padding:8px"><b>SELISIH ADJUSTED</b></td><td class="text-right fw-bold ' + (selisihAdjusted===0?'text-green':'text-red') + '">' + fmtRp(Math.abs(selisihAdjusted)) + (selisihAdjusted > 0 ? ' (Sistem lebih besar)' : selisihAdjusted < 0 ? ' (Bank lebih besar)' : ' ✅ Match') + '</td></tr>';
+  }
+  html += '<tr><td style="padding:8px;color:#888">Saldo Awal ' + tahun + '</td><td class="text-right">' + fmtRp(saldoAwalMandiri) + '</td></tr>'
     + '<tr><td style="padding:8px;color:#888">Total Debit (masuk)</td><td class="text-right text-green">' + fmtRp(totalDebitKas) + '</td></tr>'
     + '<tr><td style="padding:8px;color:#888">Total Kredit (keluar)</td><td class="text-right text-red">' + fmtRp(totalKreditKas) + '</td></tr>'
     + '<tr><td style="padding:8px;color:#888">Jumlah Transaksi</td><td class="text-right">' + countTrx + '</td></tr>'
@@ -3860,6 +3880,16 @@ async function analisaSelisihSaldo(skipPrompt) {
       + '<b>💵 Dampak Petty Cash ke saldo Mandiri:</b><br>'
       + (pcDebitKeMandiri > 0 ? '• Jurnal PC yang debit ke Mandiri (tidak wajar): <b class="text-red">' + fmtRp(pcDebitKeMandiri) + '</b><br>' : '')
       + (pcKreditDariMandiri > 0 ? '• Pengeluaran kecil (≤500rb) langsung kredit Mandiri (mungkin harusnya dari PC): <b>' + fmtRp(pcKreditDariMandiri) + '</b><br>' : '')
+      + '</div>';
+  }
+
+  // Summary orphan jurnal impact
+  if (orphanImpact !== 0) {
+    html += '<div style="margin:12px 0;padding:10px 14px;background:#fce4ec;border-radius:8px;border-left:4px solid #e91e63;font-size:0.82rem">'
+      + '<b>👻 Dampak Jurnal Yatim (Orphan) ke saldo Mandiri:</b><br>'
+      + '• Orphan Debit: <b class="text-green">' + fmtRp(orphanDebitKas) + '</b> | Orphan Kredit: <b class="text-red">' + fmtRp(orphanKreditKas) + '</b><br>'
+      + '• Total dampak orphan: <b class="text-red">' + fmtRp(Math.abs(orphanImpact)) + '</b> (' + (orphanImpact > 0 ? 'menambah saldo sistem' : 'mengurangi saldo sistem') + ')<br>'
+      + '• <b>Hapus jurnal orphan di bawah untuk memperbaiki selisih saldo.</b>'
       + '</div>';
   }
 
@@ -4277,8 +4307,8 @@ async function renderKalkPenyusutan() {
     + '<div class="fg"><label>Nama Aset</label><input id="py-nama" placeholder="Laptop / Kendaraan / Mesin"></div>'
     + '<div class="fg"><label>Tanggal Perolehan</label><input type="date" id="py-tglbeli" value="' + today() + '"></div>'
     + '<div class="fg"><label>Metode</label><select id="py-metode"><option value="garis-lurus">Garis Lurus (Straight Line)</option><option value="saldo-menurun">Saldo Menurun (Declining Balance)</option><option value="jumlah-angka">Jumlah Angka Tahun</option></select></div>'
-    + '<div class="fg"><label>Harga Perolehan (Rp)</label><input type="text" id="py-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
-    + '<div class="fg"><label>Nilai Sisa / Residu (Rp)</label><input type="text" id="py-sisa" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Harga Perolehan (Rp)</label><input type="text" inputmode="numeric" id="py-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Nilai Sisa / Residu (Rp)</label><input type="text" inputmode="numeric" id="py-sisa" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Umur Ekonomis (Tahun)</label><input type="number" id="py-umur" placeholder="5"></div>'
     + '</div><div class="mt-12 flex-row" style="gap:8px"><button class="btn btn-primary" onclick="simpanAsetPenyusutan()">💾 Simpan Aset</button><button class="btn btn-outline" onclick="hitungPenyusutanPreview()">🧮 Preview Penyusutan</button></div>'
     + '<div id="py-result" class="mt-12"></div></div>'
@@ -4396,8 +4426,8 @@ async function editAsetPenyusutan(id) {
     + '<div class="fg"><label>Nama</label><input id="easet-nama" value="' + (a.nama||'') + '"></div>'
     + '<div class="fg"><label>Tgl Beli</label><input type="date" id="easet-tgl" value="' + (a.tglBeli||'') + '"></div>'
     + '<div class="fg"><label>Metode</label><select id="easet-metode"><option value="garis-lurus"' + (a.metode==='garis-lurus'?' selected':'') + '>Garis Lurus</option><option value="saldo-menurun"' + (a.metode==='saldo-menurun'?' selected':'') + '>Saldo Menurun</option><option value="jumlah-angka"' + (a.metode==='jumlah-angka'?' selected':'') + '>Jumlah Angka</option></select></div>'
-    + '<div class="fg"><label>Harga (Rp)</label><input type="text" id="easet-harga" value="' + (a.harga ? formatNominalValue(a.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
-    + '<div class="fg"><label>Residu (Rp)</label><input type="text" id="easet-sisa" value="' + (a.sisa ? formatNominalValue(a.sisa) : '0') + '" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Harga (Rp)</label><input type="text" inputmode="numeric" id="easet-harga" value="' + (a.harga ? formatNominalValue(a.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Residu (Rp)</label><input type="text" inputmode="numeric" id="easet-sisa" value="' + (a.sisa ? formatNominalValue(a.sisa) : '0') + '" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Umur (Tahun)</label><input type="number" id="easet-umur" value="' + (a.umur||5) + '"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditAset(\'' + id + '\')">Simpan</button></div>',
     'Edit Aset: ' + a.nama);
@@ -4571,7 +4601,7 @@ async function renderPettyCash() {
     // Set saldo awal
     + '<div class="card"><div class="card-header"><h2>Saldo Awal / Top-up Kas Kecil</h2></div>'
     + '<div class="flex-row" style="gap:8px;flex-wrap:wrap">'
-    + '<input type="text" id="pc-saldo" value="' + (saldoAwal ? formatNominalValue(saldoAwal) : '') + '" placeholder="Saldo awal" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" oninput="formatNominalInput(this)">'
+    + '<input type="text" inputmode="numeric" id="pc-saldo" value="' + (saldoAwal ? formatNominalValue(saldoAwal) : '') + '" placeholder="Saldo awal" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem" oninput="formatNominalInput(this)">'
     + '<button class="btn btn-success" onclick="setSaldoPettyCash()">Set Saldo Awal</button>'
     + '<button class="btn btn-info" onclick="topUpPettyCash()">+ Top-up Kas Kecil</button>'
     + '<button class="btn btn-warning btn-sm" onclick="fixJurnalPettyCash()" style="margin-left:auto">🔧 Fix Akun Jurnal Lama</button>'
@@ -4579,7 +4609,7 @@ async function renderPettyCash() {
     + '<div id="topup-form" style="display:none;margin-top:12px;padding:12px;background:#f8fff8;border-radius:8px;border:1.5px solid #4caf50">'
     + '<div class="form-grid">'
     + '<div class="fg"><label>Tanggal</label><input type="date" id="topup-tgl" value="' + today() + '"></div>'
-    + '<div class="fg"><label>Jumlah Top-up (Rp)</label><input type="text" id="topup-jumlah" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Jumlah Top-up (Rp)</label><input type="text" inputmode="numeric" id="topup-jumlah" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="topup-ket" placeholder="Isi kas kecil / top-up dari..."></div>'
     + '</div>'
     + '<div class="mt-8 flex-row"><button class="btn btn-success" onclick="simpanTopUpPC()">Simpan Top-up</button><button class="btn btn-outline" onclick="document.getElementById(\'topup-form\').style.display=\'none\'">Batal</button></div>'
@@ -4596,12 +4626,12 @@ async function renderPettyCash() {
     + '<tbody id="pc-lines-body">'
     + '<tr><td><select class="pc-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="pc-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="pc-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
-    + '<td><input class="pc-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td></tr>'
+    + '<td><input class="pc-debit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
+    + '<td><input class="pc-kredit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td></tr>'
     + '<tr><td><select class="pc-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></td>'
     + '<td><input class="pc-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan baris"></td>'
-    + '<td><input class="pc-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
-    + '<td><input class="pc-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td></tr>'
+    + '<td><input class="pc-debit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
+    + '<td><input class="pc-kredit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td></tr>'
     + '</tbody></table></div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">'
     + '<button class="btn btn-outline btn-sm" onclick="addPCLine()">+ Tambah Baris</button>'
@@ -4633,8 +4663,8 @@ async function addPCLine() {
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><select class="pc-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts + '</select></td>'
     + '<td><input class="pc-line-ket" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan"></td>'
-    + '<td><input class="pc-debit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
-    + '<td><input class="pc-kredit" type="text" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>';
+    + '<td><input class="pc-debit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>'
+    + '<td><input class="pc-kredit" type="text" inputmode="numeric" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);updatePCTotal()"></td>';
   tbody.appendChild(tr);
 }
 
@@ -4943,7 +4973,7 @@ async function editPermohonanPC(id) {
     + '<div class="fg"><label>Tanggal</label><input type="date" id="epdpc-tgl" value="' + (p.tanggal||'') + '"></div>'
     + '<div class="fg"><label>Nama Pemohon</label><input id="epdpc-nama" value="' + (p.namaPemohon||'') + '"></div>'
     + '<div class="fg"><label>No PO/Invoice</label><input id="epdpc-nopo" value="' + (p.noPOInvoice||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="epdpc-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(p.nominal) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" inputmode="numeric" id="epdpc-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(p.nominal) + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="epdpc-ket" value="' + (p.keterangan||'') + '"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditPermohonanPC(\'' + id + '\')">Simpan</button></div>',
     'Edit Permohonan Dana');
@@ -5006,7 +5036,7 @@ async function editDanaMasukPC(id) {
     + '<div class="fg"><label>Tanggal</label><input type="date" id="edmpc-tgl" value="' + (d.tanggal||'') + '"></div>'
     + '<div class="fg"><label>Sumber</label><input id="edmpc-sumber" value="' + (d.sumber||'') + '"></div>'
     + '<div class="fg"><label>No Ref</label><input id="edmpc-ref" value="' + (d.noRef||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="edmpc-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(d.nominal) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" inputmode="numeric" id="edmpc-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(d.nominal) + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="edmpc-ket" value="' + (d.keterangan||'') + '"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditDanaMasukPC(\'' + id + '\')">Simpan</button></div>',
     'Edit Dana Masuk');
@@ -5093,7 +5123,7 @@ async function renderPettyCashRec() {
     + '<tr><td>Total Top-up / Masuk</td><td class="text-right text-green">+' + fmtRp(totalMasuk) + '</td></tr>'
     + '<tr><td>Total Pengeluaran Tercatat</td><td class="text-right text-red">(' + fmtRp(totalKeluar) + ')</td></tr>'
     + '<tr style="background:#e3f2fd"><td><b>Sisa Seharusnya</b></td><td class="text-right fw-bold">' + fmtRp(sisaSeharusnya) + '</td></tr>'
-    + '<tr><td>Saldo Fisik (isi manual)</td><td class="text-right"><input type="text" id="pc-fisik" placeholder="0" style="padding:6px;border:1px solid #ddd;border-radius:5px;text-align:right" oninput="formatNominalInput(this);hitungSelisihPC()"></td></tr>'
+    + '<tr><td>Saldo Fisik (isi manual)</td><td class="text-right"><input type="text" inputmode="numeric" id="pc-fisik" placeholder="0" style="padding:6px;border:1px solid #ddd;border-radius:5px;text-align:right" oninput="formatNominalInput(this);hitungSelisihPC()"></td></tr>'
     + '<tr id="pc-selisih-row" style="display:none"><td><b>Selisih</b></td><td class="text-right fw-bold" id="pc-selisih-val">-</td></tr>'
     + '</tbody></table></div>'
     + '<div class="mt-12"><button class="btn btn-primary" onclick="hitungSelisihPC()">Hitung Selisih</button></div></div>';
@@ -5154,7 +5184,7 @@ async function renderBankRec() {
       : '<span class="badge badge-danger">Selisih ' + fmtRp(Math.abs(selisih)) + '</span>';
     return '<tr><td class="fw-bold">' + a.kode + '</td><td>' + a.nama + '</td>'
       + '<td class="text-right fw-bold">' + fmtRp(saldoSistem) + '</td>'
-      + '<td class="text-right"><input type="text" class="br-actual-input" data-kode="' + a.kode + '" value="' + (savedActual ? formatNominalValue(savedActual) : '') + '" placeholder="Isi saldo aktual rekening" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.85rem" oninput="formatNominalInput(this)"></td>'
+      + '<td class="text-right"><input type="text" inputmode="numeric" class="br-actual-input" data-kode="' + a.kode + '" value="' + (savedActual ? formatNominalValue(savedActual) : '') + '" placeholder="Isi saldo aktual rekening" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.85rem" oninput="formatNominalInput(this)"></td>'
       + '<td class="text-right fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '">' + (savedActual ? fmtRp(selisih) : '-') + '</td>'
       + '<td>' + statusBadge + '</td>'
       + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewBankRecDetail(\'' + a.kode + '\',' + saldoSistem + ')">👁️ Detail</button>' + (savedActual && Math.abs(selisih) >= 1 ? ' <button class="btn btn-xs btn-warning" onclick="koreksiSaldoAwalBank(\'' + a.kode + '\',' + saldoSistem + ',' + savedActual + ')">🔧 Koreksi</button>' : '') + '</td></tr>';
@@ -5198,12 +5228,12 @@ async function renderBankRec() {
     + '<div class="form-grid">'
     + '<div class="fg"><label>Nama Bank</label><select id="br-bank" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%"><option value="">-- Pilih Bank --</option>' + bankOpts + '</select></div>'
     + '<div class="fg"><label>Periode</label><input id="br-periode" placeholder="Januari 2026"></div>'
-    + '<div class="fg"><label>Saldo Buku (Rp)</label><input type="text" id="br-buku" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
-    + '<div class="fg"><label>Saldo Bank Statement (Rp)</label><input type="text" id="br-bank-saldo" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
-    + '<div class="fg"><label>Deposit in Transit (Rp)</label><input type="text" id="br-dit" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
-    + '<div class="fg"><label>Outstanding Check (Rp)</label><input type="text" id="br-oc" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
-    + '<div class="fg"><label>Bank Charge (Rp)</label><input type="text" id="br-charge" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
-    + '<div class="fg"><label>Bunga Bank (Rp)</label><input type="text" id="br-bunga" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Saldo Buku (Rp)</label><input type="text" inputmode="numeric" id="br-buku" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Saldo Bank Statement (Rp)</label><input type="text" inputmode="numeric" id="br-bank-saldo" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Deposit in Transit (Rp)</label><input type="text" inputmode="numeric" id="br-dit" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Outstanding Check (Rp)</label><input type="text" inputmode="numeric" id="br-oc" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Bank Charge (Rp)</label><input type="text" inputmode="numeric" id="br-charge" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
+    + '<div class="fg"><label>Bunga Bank (Rp)</label><input type="text" inputmode="numeric" id="br-bunga" placeholder="0" oninput="formatNominalInput(this);hitungBankRec()"></div>'
     + '</div><div id="br-result" class="mt-12"></div>'
     + '<div class="mt-12 flex-row"><button class="btn btn-primary" onclick="simpanBankRec()">Simpan Rekonsiliasi</button><button class="btn btn-outline" onclick="hitungBankRec()">Hitung</button></div></div>'
     + '<div class="card"><div class="card-header"><h2>Riwayat Rekonsiliasi (' + list.length + ')</h2></div>'
@@ -5752,7 +5782,7 @@ async function renderInvoice() {
     + '<tbody id="inv-items"><tr>'
     + '<td><input class="inv-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Deskripsi item"></td>'
     + '<td><input class="inv-qty" type="number" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungInvoice()"></td>'
-    + '<td><input class="inv-harga" type="text" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungInvoice()"></td>'
+    + '<td><input class="inv-harga" type="text" inputmode="numeric" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungInvoice()"></td>'
     + '<td class="inv-total-cell" style="padding:6px">Rp 0</td><td></td></tr></tbody></table>'
     + '<button class="btn btn-outline btn-sm mt-8" onclick="addInvItem()">+ Tambah Item</button></div>'
     + '<div class="form-grid mt-12"><div class="fg"><label>Diskon (%)</label><input type="number" id="inv-diskon" placeholder="0" oninput="hitungInvoice()"></div>'
@@ -5771,7 +5801,7 @@ function addInvItem() {
   const tr = document.createElement('tr');
   tr.innerHTML = '<td><input class="inv-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Deskripsi item"></td>'
     + '<td><input class="inv-qty" type="number" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungInvoice()"></td>'
-    + '<td><input class="inv-harga" type="text" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungInvoice()"></td>'
+    + '<td><input class="inv-harga" type="text" inputmode="numeric" style="width:130px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungInvoice()"></td>'
     + '<td class="inv-total-cell" style="padding:6px">Rp 0</td>'
     + '<td><button onclick="this.closest(\'tr\').remove();hitungInvoice()" style="background:#f44336;color:white;border:none;border-radius:4px;padding:3px 7px;cursor:pointer">x</button></td>';
   tbody.appendChild(tr);
@@ -5886,7 +5916,7 @@ async function renderPO() {
     + '<td><input class="po-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Nama barang/jasa"></td>'
     + '<td><input class="po-qty" type="number" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungPO()"></td>'
     + '<td><input class="po-sat" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="pcs"></td>'
-    + '<td><input class="po-harga" type="text" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungPO()"></td>'
+    + '<td><input class="po-harga" type="text" inputmode="numeric" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungPO()"></td>'
     + '<td class="po-total-cell" style="padding:6px">Rp 0</td><td></td></tr></tbody></table>'
     + '<button class="btn btn-outline btn-sm mt-8" onclick="addPOItem()">+ Tambah Item</button></div>'
     + '<div class="form-grid mt-12"><div class="fg"><label>PPN (%)</label><input type="number" id="po-ppn" placeholder="11" oninput="hitungPO()"></div>'
@@ -5905,7 +5935,7 @@ function addPOItem() {
   tr.innerHTML = '<td><input class="po-desc" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Nama barang/jasa"></td>'
     + '<td><input class="po-qty" type="number" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" value="1" oninput="hitungPO()"></td>'
     + '<td><input class="po-sat" style="width:70px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="pcs"></td>'
-    + '<td><input class="po-harga" type="text" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungPO()"></td>'
+    + '<td><input class="po-harga" type="text" inputmode="numeric" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="0" oninput="formatNominalInput(this);hitungPO()"></td>'
     + '<td class="po-total-cell" style="padding:6px">Rp 0</td>'
     + '<td><button onclick="this.closest(\'tr\').remove();hitungPO()" style="background:#f44336;color:white;border:none;border-radius:4px;padding:3px 7px;cursor:pointer">x</button></td>';
   tbody.appendChild(tr);
@@ -5993,14 +6023,14 @@ async function renderGaji() {
     + '<div class="fg"><label>Jabatan</label><input id="g-jabatan" placeholder="Jabatan"></div>'
     + '<div class="fg"><label>Periode</label><input id="g-periode" placeholder="Januari 2026"></div>'
     + '<div class="fg"><label>Tanggal Bayar</label><input type="date" id="g-tgl" value="' + today() + '"></div>'
-    + '<div class="fg"><label>Gaji Pokok (Rp)</label><input type="text" id="g-pokok" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
-    + '<div class="fg"><label>Tunjangan (Rp)</label><input type="text" id="g-tunjangan" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
-    + '<div class="fg"><label>Lembur (Rp)</label><input type="text" id="g-lembur" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
-    + '<div class="fg"><label>Bonus (Rp)</label><input type="text" id="g-bonus" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Gaji Pokok (Rp)</label><input type="text" inputmode="numeric" id="g-pokok" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Tunjangan (Rp)</label><input type="text" inputmode="numeric" id="g-tunjangan" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Lembur (Rp)</label><input type="text" inputmode="numeric" id="g-lembur" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Bonus (Rp)</label><input type="text" inputmode="numeric" id="g-bonus" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
     + '<div class="fg"><label>BPJS Kesehatan (%)</label><input type="number" id="g-bpjskes" value="1" oninput="hitungGaji()"></div>'
     + '<div class="fg"><label>BPJS Ketenagakerjaan (%)</label><input type="number" id="g-bpjstk" value="2" oninput="hitungGaji()"></div>'
     + '<div class="fg"><label>PPh 21 (%)</label><input type="number" id="g-pph" value="5" oninput="hitungGaji()"></div>'
-    + '<div class="fg"><label>Potongan Lain (Rp)</label><input type="text" id="g-potongan" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
+    + '<div class="fg"><label>Potongan Lain (Rp)</label><input type="text" inputmode="numeric" id="g-potongan" placeholder="0" oninput="formatNominalInput(this);hitungGaji()"></div>'
     + '</div><div id="g-result" class="mt-12"></div>'
     + '<div class="mt-12 flex-row"><button class="btn btn-primary" onclick="simpanGaji()">Simpan</button><button class="btn btn-outline" onclick="hitungGaji()">Hitung</button></div></div>'
     + '<div class="card"><div class="card-header"><h2>Riwayat Penggajian (' + list.length + ')</h2></div>'
@@ -6130,7 +6160,7 @@ async function renderPermohonanDana() {
     + '<div class="fg"><label>Nama PIC</label><input id="pd-pic" value="' + (KU.nama||KU.username) + '" placeholder="Nama PIC yang mengajukan"></div>'
     + '<div class="fg"><label>Nama Leader / Atasan</label><input id="pd-leader" placeholder="Nama leader"></div>'
     + '<div class="fg"><label>Nomor PO / Invoice</label><input id="pd-nopo" placeholder="PO-2026-001 / INV-001"></div>'
-    + '<div class="fg"><label>Nominal Pengajuan (IDR)</label><input type="text" id="pd-nominal" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Nominal Pengajuan (IDR)</label><input type="text" inputmode="numeric" id="pd-nominal" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Jatuh Tempo Pembayaran</label><input type="date" id="pd-jt"></div>'
     + '<div class="fg"><label>Tipe Transaksi</label><select id="pd-tipe"><option>Transfer</option><option>Tunai</option><option>Cek/Giro</option><option>RTGS</option><option>Lainnya</option></select></div>'
     + '<div class="fg"><label>Nama Bank</label><input id="pd-bank" placeholder="BCA / Mandiri / BNI"></div>'
@@ -6248,7 +6278,7 @@ async function editPermohonan(id) {
     + '<div class="fg"><label>Nama PIC</label><input id="epd-pic" value="' + (p.namaPIC||'') + '"></div>'
     + '<div class="fg"><label>Nama Leader</label><input id="epd-leader" value="' + (p.namaLeader||'') + '"></div>'
     + '<div class="fg"><label>No PO/Invoice</label><input id="epd-nopo" value="' + (p.noPOInvoice||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="epd-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(p.nominal) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" inputmode="numeric" id="epd-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(p.nominal) + '"></div>'
     + '<div class="fg"><label>Jatuh Tempo</label><input type="date" id="epd-jt" value="' + (p.jatuhTempo||'') + '"></div>'
     + '<div class="fg"><label>Tipe Transaksi</label><select id="epd-tipe"><option' + (p.tipeTransaksi==='Transfer'?' selected':'') + '>Transfer</option><option' + (p.tipeTransaksi==='Tunai'?' selected':'') + '>Tunai</option><option' + (p.tipeTransaksi==='Cek/Giro'?' selected':'') + '>Cek/Giro</option><option' + (p.tipeTransaksi==='RTGS'?' selected':'') + '>RTGS</option><option' + (p.tipeTransaksi==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
     + '<div class="fg"><label>Nama Bank</label><input id="epd-bank" value="' + (p.namaBank||'') + '"></div>'
@@ -6406,7 +6436,7 @@ async function renderDanaMasuk() {
     + '<div class="fg"><label>Nama PIC</label><input id="dm-pic" value="' + (KU.nama||KU.username) + '" placeholder="Nama PIC yang mencatat"></div>'
     + '<div class="fg"><label>Nomor Referensi</label><input id="dm-ref" placeholder="No. Invoice / Transfer / Bukti"></div>'
     + '<div class="fg"><label>Tanggal Terima</label><input type="date" id="dm-tgl" value="' + today() + '"></div>'
-    + '<div class="fg"><label>Nominal (IDR)</label><input type="text" id="dm-nominal" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Nominal (IDR)</label><input type="text" inputmode="numeric" id="dm-nominal" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Tipe Penerimaan</label><select id="dm-tipe"><option>Transfer Bank</option><option>Tunai</option><option>Cek/Giro</option><option>RTGS</option><option>Lainnya</option></select></div>'
     + '<div class="fg"><label>Diterima di Bank / Kas (COA)</label><select id="dm-akun-terima" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%">' + akunTerimaOpts + '</select></div>'
     + '<div class="fg"><label>Kategori / Akun Kredit (COA)</label><select id="dm-akun-kredit" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%">' + akunKreditOpts + '</select></div>'
@@ -6479,7 +6509,7 @@ async function editDanaMasuk(id) {
     + '<div class="fg"><label>Sumber Dana</label><input id="edm-sumber" value="' + (d.sumber||'') + '"></div>'
     + '<div class="fg"><label>Nama PIC</label><input id="edm-pic" value="' + (d.namaPIC||'') + '"></div>'
     + '<div class="fg"><label>No Referensi</label><input id="edm-ref" value="' + (d.noRef||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="edm-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(d.nominal) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" inputmode="numeric" id="edm-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(d.nominal) + '"></div>'
     + '<div class="fg"><label>Tipe Transaksi</label><select id="edm-tipe"><option' + (d.tipeTransaksi==='Transfer Bank'?' selected':'') + '>Transfer Bank</option><option' + (d.tipeTransaksi==='Tunai'?' selected':'') + '>Tunai</option><option' + (d.tipeTransaksi==='Cek/Giro'?' selected':'') + '>Cek/Giro</option><option' + (d.tipeTransaksi==='RTGS'?' selected':'') + '>RTGS</option><option' + (d.tipeTransaksi==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
     + '<div class="fg"><label>Nama Rekening</label><input id="edm-namarek" value="' + (d.namaRekening||'') + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><textarea id="edm-ket">' + (d.keterangan||'') + '</textarea></div>'
@@ -9915,7 +9945,7 @@ async function renderPortalAset() {
     + '<div class="fg"><label>Nama Item</label><input id="pl-nama" placeholder="Nama perlengkapan / aset"></div>'
     + '<div class="fg"><label>Nama PIC</label><input id="pl-pic" value="' + (KU.nama||KU.username) + '" placeholder="Nama PIC"></div>'
     + '<div class="fg"><label>Satuan</label><input id="pl-satuan" placeholder="pcs / unit / set"></div>'
-    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="text" id="pl-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="text" inputmode="numeric" id="pl-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div id="pl-fields-perlengkapan" style="display:contents">'
     + '<div class="fg"><label>Stok Awal</label><input type="number" id="pl-awal" placeholder="0" value="0"></div>'
     + '<div class="fg"><label>Jumlah Pembelian</label><input type="number" id="pl-beli" placeholder="0" value="0"></div>'
@@ -10032,7 +10062,7 @@ async function editPerlengkapan(id) {
   openModal('<div class="form-grid">'
     + '<div class="fg"><label>Nama</label><input id="ep-nama" value="' + (p.nama||'') + '"></div>'
     + '<div class="fg"><label>Satuan</label><input id="ep-satuan" value="' + (p.satuan||'') + '"></div>'
-    + '<div class="fg"><label>Harga Satuan</label><input type="text" id="ep-harga" value="' + (p.harga ? formatNominalValue(p.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Harga Satuan</label><input type="text" inputmode="numeric" id="ep-harga" value="' + (p.harga ? formatNominalValue(p.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
     + extraFields
     + '<div class="fg full"><label>Keterangan</label><textarea id="ep-ket">' + (p.keterangan||'') + '</textarea></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditPerlengkapan(\'' + id + '\')">Simpan</button></div>',
@@ -10867,7 +10897,7 @@ function editPettyCash(id) {
       + '<div class="fg full"><label>Keterangan</label><input id="epc-ket" value="' + (p.keterangan||'') + '"></div>'
       + '<div class="fg"><label>Akun Debit</label><select id="epc-akun-debit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></div>'
       + '<div class="fg"><label>Akun Kredit</label><select id="epc-akun-kredit" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="">-- Pilih Akun --</option>' + akunOpts + '</select></div>'
-      + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" id="epc-jumlah" value="' + (p.jumlah ? formatNominalValue(p.jumlah) : '0') + '" oninput="formatNominalInput(this)"></div>'
+      + '<div class="fg"><label>Jumlah (Rp)</label><input type="text" inputmode="numeric" id="epc-jumlah" value="' + (p.jumlah ? formatNominalValue(p.jumlah) : '0') + '" oninput="formatNominalInput(this)"></div>'
       + '<div class="fg"><label>Kategori</label><select id="epc-kat" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;width:100%"><option value="Petty Cash"' + (p.kategori==='Petty Cash'?' selected':'') + '>Petty Cash</option><option value="Jurnal"' + (p.kategori==='Jurnal'?' selected':'') + '>Jurnal</option><option value="Operasional"' + (p.kategori==='Operasional'?' selected':'') + '>Operasional</option><option value="Lainnya"' + (p.kategori==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
       + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditPC(\'' + id + '\')">Simpan</button></div>',
       'Edit Petty Cash');
@@ -11591,7 +11621,7 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Stok Awal</label><input type="number" id="atk-stok" placeholder="0" value="0"></div>'
     + '<div class="fg"><label>Pembelian</label><input type="number" id="atk-beli" placeholder="0" value="0"></div>'
     + '<div class="fg"><label>Pemakaian</label><input type="number" id="atk-pakai" placeholder="0" value="0"></div>'
-    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="text" id="atk-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="text" inputmode="numeric" id="atk-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="tambahATK()">Tambah ATK</button></div></div>'
     // Input Masuk / Keluar ATK
     + '<div class="card"><div class="card-header"><h2>📦 Input Barang Masuk / Keluar</h2></div>'
@@ -11892,7 +11922,7 @@ async function editATK(id) {
     + '<div class="fg"><label>Stok</label><input type="number" id="eatk-stok" value="' + (item.stok||0) + '"></div>'
     + '<div class="fg"><label>Beli</label><input type="number" id="eatk-beli" value="' + (item.beli||0) + '"></div>'
     + '<div class="fg"><label>Pakai</label><input type="number" id="eatk-pakai" value="' + (item.pakai||0) + '"></div>'
-    + '<div class="fg"><label>Harga</label><input type="text" id="eatk-harga" value="' + (item.harga ? formatNominalValue(item.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
+    + '<div class="fg"><label>Harga</label><input type="text" inputmode="numeric" id="eatk-harga" value="' + (item.harga ? formatNominalValue(item.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditATK(\'' + id + '\')">Simpan</button></div>',
     'Edit ATK: ' + item.nama);
 }
