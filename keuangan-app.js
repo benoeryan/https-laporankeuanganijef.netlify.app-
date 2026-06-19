@@ -721,8 +721,8 @@ async function getFinancialData() {
         var autoKat = autoKategoriCOA(l.akun, l.ket || '', '');
         saldo[l.akun] = { akun: { kode: l.akun, nama: l.ket || l.akun, kategori: autoKat.kategori, tipe: autoKat.tipe }, debit: 0, kredit: 0, net: 0 };
       }
-      saldo[l.akun].debit += l.debit || 0;
-      saldo[l.akun].kredit += l.kredit || 0;
+      saldo[l.akun].debit += (parseFloat(l.debit) || 0);
+      saldo[l.akun].kredit += (parseFloat(l.kredit) || 0);
     });
   });
   Object.values(saldo).forEach(function(s) {
@@ -10007,6 +10007,29 @@ async function renderPrintBundle() {
   var akun = await getAkun();
   var saldo = {};
   akun.forEach(function(a) { saldo[a.kode] = { akun: a, debit: 0, kredit: 0, net: 0 }; });
+
+  // === SALDO AWAL: Tambahkan saldo awal tahun berjalan (sama seperti getFinancialData) ===
+  var tahunSekarang = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahunSekarang, {});
+  Object.keys(saldoAwalData).forEach(function(kode) {
+    var nominal = parseFloat(saldoAwalData[kode]) || 0;
+    if (nominal === 0) return;
+    if (!saldo[kode]) {
+      var autoKat = autoKategoriCOA(kode, '', '');
+      saldo[kode] = { akun: { kode: kode, nama: kode, kategori: autoKat.kategori, tipe: autoKat.tipe }, debit: 0, kredit: 0, net: 0 };
+    }
+    var tipe = saldo[kode].akun.tipe;
+    var kat = (saldo[kode].akun.kategori || '').toLowerCase();
+    var isDebitNormal = (tipe === 'Debit') ||
+      kat.includes('aset') || kat.includes('beban') ||
+      (kode.charAt(0) === '1') || (kode.charAt(0) === '5') || (kode.charAt(0) === '6');
+    if (isDebitNormal) {
+      saldo[kode].debit += nominal;
+    } else {
+      saldo[kode].kredit += nominal;
+    }
+  });
+
   jurnal.filter(function(j) { return j.tipe !== 'penutup'; }).forEach(function(j) {
     (j.lines || []).forEach(function(l) {
       if (!l.akun) return;
@@ -10014,8 +10037,8 @@ async function renderPrintBundle() {
         var autoKat = autoKategoriCOA(l.akun, l.ket || '', '');
         saldo[l.akun] = { akun: { kode: l.akun, nama: l.ket || l.akun, kategori: autoKat.kategori, tipe: autoKat.tipe }, debit: 0, kredit: 0, net: 0 };
       }
-      saldo[l.akun].debit += l.debit || 0;
-      saldo[l.akun].kredit += l.kredit || 0;
+      saldo[l.akun].debit += (parseFloat(l.debit) || 0);
+      saldo[l.akun].kredit += (parseFloat(l.kredit) || 0);
     });
   });
   Object.values(saldo).forEach(function(s) {
@@ -10103,7 +10126,7 @@ async function renderPrintBundle() {
   jurnal.filter(function(j){ return j.tipe !== 'penutup'; }).forEach(function(j) {
     (j.lines||[]).forEach(function(l) {
       if (kasAkunList.indexOf(l.akun) >= 0) {
-        var net = (l.debit||0) - (l.kredit||0);
+        var net = (parseFloat(l.debit) || 0) - (parseFloat(l.kredit) || 0);
         var ref = (j.noRef||'').toString();
         if (ref.startsWith('INV') || ref.startsWith('JU')) operasi += net;
         else if (ref.startsWith('PO') || ref.startsWith('ASET')) investasi += net;
@@ -10604,8 +10627,8 @@ function buildDashboardExtras(jurnal, fd, allPD, allDM) {
       (j.lines||[]).forEach(function(l) {
         if (!l.akun) return;
         if (!coaSaldo[l.akun]) coaSaldo[l.akun] = { debit: 0, kredit: 0 };
-        coaSaldo[l.akun].debit += l.debit || 0;
-        coaSaldo[l.akun].kredit += l.kredit || 0;
+        coaSaldo[l.akun].debit += (parseFloat(l.debit) || 0);
+        coaSaldo[l.akun].kredit += (parseFloat(l.kredit) || 0);
       });
     });
   }

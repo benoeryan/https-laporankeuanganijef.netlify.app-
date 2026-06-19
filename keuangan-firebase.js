@@ -71,6 +71,8 @@ const KDB = {
   },
 
   // ---- GENERIC COLLECTION ----
+  _recentSaves: {},
+
   async save(col, id, data) {
     data.id = id;
     _klset('k_' + col + '_' + id, data);
@@ -79,8 +81,17 @@ const KDB = {
     const idx = all.findIndex(x => x.id === id || x._id === id);
     if (idx >= 0) { all[idx] = data; } else { all.push(data); }
     _klset('k_' + col + '_all', all);
+    // Track dirty item to protect against Firebase read lag
+    _klset('k_' + col + '_dirty_' + id, Date.now());
+    if (!this._recentSaves[col]) this._recentSaves[col] = {};
+    this._recentSaves[col][id] = Date.now();
     if (kfbReady) {
-      try { await kfs.setDoc(kfs.doc(kdb, 'k_' + col, id), data); } catch(e) { console.warn(e); }
+      try {
+        await kfs.setDoc(kfs.doc(kdb, 'k_' + col, id), data);
+        // Clear dirty flag after successful Firebase write
+        localStorage.removeItem('k_' + col + '_dirty_' + id);
+        if (this._recentSaves[col]) delete this._recentSaves[col][id];
+      } catch(e) { console.warn(e); }
     }
   },
 
@@ -98,7 +109,25 @@ const KDB = {
     if (kfbReady) {
       try {
         const snap = await kfs.getDocs(kfs.collection(kdb, 'k_' + col));
-        const items = snap.docs.map(d => d.data());
+        var items = snap.docs.map(d => d.data());
+        // Merge locally-dirty items that Firebase may not have synced yet
+        var now = Date.now();
+        var dirtyIds = this._recentSaves[col] ? Object.keys(this._recentSaves[col]) : [];
+        dirtyIds.forEach(function(dirtyId) {
+          var dirtyTime = _klget('k_' + col + '_dirty_' + dirtyId, 0);
+          if (dirtyTime && (now - dirtyTime) < 10000) {
+            // Use local version for recently-saved items (within 10 seconds)
+            var localItem = _klget('k_' + col + '_' + dirtyId, null);
+            if (localItem) {
+              var idx = items.findIndex(function(x) { return x.id === dirtyId || x._id === dirtyId; });
+              if (idx >= 0) { items[idx] = localItem; } else { items.push(localItem); }
+            }
+          } else {
+            // Dirty flag is old, clear it
+            localStorage.removeItem('k_' + col + '_dirty_' + dirtyId);
+            if (KDB._recentSaves[col]) delete KDB._recentSaves[col][dirtyId];
+          }
+        });
         _klset('k_' + col + '_all', items);
         return items;
       } catch(e) { console.warn(e); }
