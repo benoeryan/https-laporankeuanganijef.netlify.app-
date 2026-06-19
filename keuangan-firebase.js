@@ -96,6 +96,12 @@ const KDB = {
   },
 
   async get(col, id) {
+    // Check dirty flag - if item was recently saved locally, return local version
+    var dirtyTime = _klget('k_' + col + '_dirty_' + id, 0);
+    if (dirtyTime && (Date.now() - dirtyTime) < 10000) {
+      var localItem = _klget('k_' + col + '_' + id, null);
+      if (localItem) return localItem;
+    }
     if (kfbReady) {
       try {
         const snap = await kfs.getDoc(kfs.doc(kdb, 'k_' + col, id));
@@ -112,8 +118,21 @@ const KDB = {
         var items = snap.docs.map(d => d.data());
         // Merge locally-dirty items that Firebase may not have synced yet
         var now = Date.now();
-        var dirtyIds = this._recentSaves[col] ? Object.keys(this._recentSaves[col]) : [];
-        dirtyIds.forEach(function(dirtyId) {
+        // Collect dirty IDs from in-memory tracking
+        var dirtyIdSet = {};
+        if (this._recentSaves[col]) {
+          Object.keys(this._recentSaves[col]).forEach(function(id) { dirtyIdSet[id] = true; });
+        }
+        // Also scan localStorage for dirty keys to handle page reload scenario
+        var dirtyPrefix = 'k_' + col + '_dirty_';
+        for (var i = 0; i < localStorage.length; i++) {
+          var lsKey = localStorage.key(i);
+          if (lsKey && lsKey.indexOf(dirtyPrefix) === 0) {
+            var dirtyId = lsKey.substring(dirtyPrefix.length);
+            dirtyIdSet[dirtyId] = true;
+          }
+        }
+        Object.keys(dirtyIdSet).forEach(function(dirtyId) {
           var dirtyTime = _klget('k_' + col + '_dirty_' + dirtyId, 0);
           if (dirtyTime && (now - dirtyTime) < 10000) {
             // Use local version for recently-saved items (within 10 seconds)

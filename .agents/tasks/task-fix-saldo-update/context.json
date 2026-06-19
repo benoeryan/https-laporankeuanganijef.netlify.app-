@@ -1,0 +1,19 @@
+{
+  "project_type": "Vanilla JavaScript SPA (financial management app) deployed on Netlify",
+  "language": "JavaScript (browser-side, no build step)",
+  "build_system": "No build system - static HTML/JS files served directly by Netlify",
+  "test_framework": "None - no test infrastructure exists",
+  "build_command": "N/A - static files",
+  "test_command": "N/A - no tests exist",
+  "verification_instructions": "Open index.html in a browser, log in, create/edit journal entries, then check if the Posisi Saldo Hari Ini report reflects the updated values",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - static HTML/JS files",
+  "environment_constraints": "No build tools needed. Changes are to plain JS files. Firebase Firestore is used as database with localStorage as cache/fallback.",
+  "contribution_requirements": "No formal contribution guide exists",
+  "key_patterns": "KDB.save(collection, id, data) saves to localStorage + Firebase. KDB.getAll(collection) fetches from Firebase (if ready) and caches to localStorage. getFinancialData() is the central function that computes all account balances from journal entries + saldo awal settings.",
+  "relevant_files": [
+    "keuangan-app.js (main app logic, 12060 lines)",
+    "keuangan-firebase.js (Firebase + KDB data layer)"
+  ],
+  "directory_structure": "Root: index.html (UI), keuangan-app.js (all app logic), keuangan-firebase.js (data layer), netlify/ (serverless functions)"
+}
