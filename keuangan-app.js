@@ -6150,8 +6150,9 @@ async function renderPermohonanDana() {
     const ajukanBtn = p.status === STATUS.DRAFT && p.pemohon === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanPermohonan(\'' + p.id + '\')">Ajukan</button>' : '';
     const editBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-warning" onclick="editPermohonan(\'' + p.id + '\')">Edit</button>' : '';
     const hapusBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-danger" onclick="hapusPermohonan(\'' + p.id + '\')">Hapus</button>' : '';
+    const undoBtn = p.status === STATUS.APPROVED && hasRole('leader') ? '<button class="btn btn-xs btn-secondary" onclick="undoApproval(\'permohonan\',\'' + p.id + '\')" title="Undo Approval">↩️ Undo</button>' : '';
     const jurnalBadge = p.jurnalId ? '<span class="badge badge-success">✓ Jurnal Otomatis</span>' : '';
-    return '<tr data-status="' + p.status + '"><td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||p.pemohon) + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + statusBadge(p.status) + '</td><td>' + approvalFlow(p.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button>' + editBtn + ajukanBtn + hapusBtn + jurnalBadge + '</td></tr>';
+    return '<tr data-status="' + p.status + '"><td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||p.pemohon) + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + statusBadge(p.status) + '</td><td>' + approvalFlow(p.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button>' + editBtn + ajukanBtn + hapusBtn + undoBtn + jurnalBadge + '</td></tr>';
   }).join('');
 
   return '<div class="page-title">📤 Permohonan Dana</div>' + pendingBanner
@@ -6425,9 +6426,10 @@ async function renderDanaMasuk() {
     const ajukanBtn = d.status === STATUS.DRAFT && d.createdBy === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanDanaMasuk(\'' + d.id + '\')">Ajukan</button>' : '';
     const editBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-warning" onclick="editDanaMasuk(\'' + d.id + '\')">Edit</button>' : '';
     const hapusBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-danger" onclick="hapusDanaMasuk(\'' + d.id + '\')">Hapus</button>' : '';
+    const undoBtn = d.status === STATUS.APPROVED && hasRole('leader') ? '<button class="btn btn-xs btn-secondary" onclick="undoApproval(\'danamasuk\',\'' + d.id + '\')" title="Undo Approval">↩️ Undo</button>' : '';
     const jurnalBtn = d.status === STATUS.APPROVED && !d.jurnalId ? '' : '';
     const jurnalBadge = d.jurnalId ? '<span class="badge badge-success">✓ Jurnal Otomatis</span>' : '';
-    return '<tr data-status="' + d.status + '"><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td>' + statusBadge(d.status) + '</td><td>' + approvalFlow(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button>' + editBtn + ajukanBtn + hapusBtn + jurnalBtn + jurnalBadge + '</td></tr>';
+    return '<tr data-status="' + d.status + '"><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td>' + statusBadge(d.status) + '</td><td>' + approvalFlow(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button>' + editBtn + ajukanBtn + hapusBtn + undoBtn + jurnalBtn + jurnalBadge + '</td></tr>';
   }).join('');
 
   return '<div class="page-title">📥 Dana Masuk</div>' + pendingBanner
@@ -6735,10 +6737,11 @@ function renderAllApprovalTable(list, col) {
   const rows = sorted.map(function(x) {
     const isPending = x.status && x.status.startsWith('Pending');
     const approveBtn = isPending && hasRole('leader') ? '<button class="btn btn-xs btn-success" onclick="approveItem(\'' + col + '\',\'' + x.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'' + col + '\',\'' + x.id + '\')">Tolak</button>' : '';
+    const undoBtn = x.status === STATUS.APPROVED && hasRole('leader') ? '<button class="btn btn-xs btn-secondary" onclick="undoApproval(\'' + col + '\',\'' + x.id + '\')" title="Undo Approval">↩️ Undo</button>' : '';
     const jurnalBadge = x.jurnalId ? '<span class="badge badge-success">✓ Jurnal</span>' : (x.status === STATUS.APPROVED ? '<span class="badge badge-warning">⏳</span>' : '');
     const detailFn = isPD ? 'detailPermohonan' : 'detailDanaMasuk';
     const checkBox = isPending ? '<input type="checkbox" class="appr-check" data-col="' + col + '" data-id="' + x.id + '">' : '';
-    return '<tr data-status="' + x.status + '"><td>' + checkBox + '</td><td>' + fmtDate(x.tanggal) + '</td><td class="fw-bold">' + (isPD ? x.namaPemohon : x.sumber) + '</td><td class="fw-bold ' + (isPD?'text-blue':'text-green') + '">' + fmtRp(x.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (x.keterangan||'-') + '</td><td>' + statusBadge(x.status) + '</td><td>' + approvalFlow(x.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="' + detailFn + '(\'' + x.id + '\')">Detail</button>' + approveBtn + jurnalBadge + '</td></tr>';
+    return '<tr data-status="' + x.status + '"><td>' + checkBox + '</td><td>' + fmtDate(x.tanggal) + '</td><td class="fw-bold">' + (isPD ? x.namaPemohon : x.sumber) + '</td><td class="fw-bold ' + (isPD?'text-blue':'text-green') + '">' + fmtRp(x.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (x.keterangan||'-') + '</td><td>' + statusBadge(x.status) + '</td><td>' + approvalFlow(x.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="' + detailFn + '(\'' + x.id + '\')">Detail</button>' + approveBtn + undoBtn + jurnalBadge + '</td></tr>';
   }).join('');
   return '<div style="padding:8px 12px;background:#f8f9ff;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
     + '<label style="font-size:0.82rem;font-weight:600"><input type="checkbox" onchange="toggleSelectAll(this,\'' + col + '\')"> Pilih Semua Pending</label>'
@@ -6805,6 +6808,35 @@ async function rejectItem(col, id) {
   kirimEmailNotifikasi('Transaksi Ditolak Layer ' + currentLayer, 'Transaksi: ' + (item.namaPemohon||item.sumber||id) + '\nNominal: ' + fmtRp(item.nominal||0) + '\nDitolak oleh: ' + KU.nama + '\nAlasan: ' + catatan, 'rejected');
   showAlert('Ditolak di Layer ' + currentLayer + '. Pemohon perlu merevisi dan mengajukan ulang.');
   navigate('dana-approval');
+}
+
+async function undoApproval(col, id) {
+  if (!confirm('Undo approval item ini? Jurnal otomatis yang terkait akan dihapus dan status dikembalikan ke Draft.')) return;
+  const list = await KDB.getAll(col);
+  const item = list.find(function(x){ return x.id === id; });
+  if (!item) { showAlert('Data tidak ditemukan!', 'warning'); return; }
+  if (item.status !== STATUS.APPROVED) { showAlert('Hanya item Approved Final yang bisa di-undo!', 'warning'); return; }
+  showLoading(true);
+  // Hapus jurnal terkait jika ada
+  if (item.jurnalId) {
+    await KDB.delete('jurnal', item.jurnalId);
+  }
+  // Tambahkan log undo
+  var log = (item.approvalLog || []).concat([{ layer: 0, action: 'undo', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: 'Undo approval - dikembalikan ke Draft' }]);
+  // Reset status dan hapus jurnalId
+  var updated = Object.assign({}, item, { status: STATUS.DRAFT, jurnalId: null, approvalLog: log, lastUpdatedAt: new Date().toISOString() });
+  delete updated.jurnalId;
+  await KDB.save(col, id, updated);
+  showLoading(false);
+  showAlert('Approval berhasil di-undo! Item dikembalikan ke Draft dan jurnal dihapus.');
+  // Navigate back to the appropriate page
+  if (col === 'permohonan') {
+    navigate('dana-permohonan');
+  } else if (col === 'danamasuk') {
+    navigate('dana-masuk');
+  } else {
+    navigate('dana-approval');
+  }
 }
 
 async function approveSemuaItem(col) {
