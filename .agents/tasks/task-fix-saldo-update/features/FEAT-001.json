@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix saldo/balance report not updating after transaction edits due to Firebase race condition and missing saldo awal in print bundle",
+  "status": "completed",
+  "steps": [
+    "Step 1: Fix the race condition in KDB.getAll() in keuangan-firebase.js. The problem: KDB.save() writes to localStorage immediately and async-writes to Firebase. But KDB.getAll() fetches from Firebase and overwrites localStorage. If the Firebase write hasn't propagated yet, the getAll returns stale data and overwrites the fresh localStorage cache. Fix: After KDB.save(), store a timestamp marker for the collection in localStorage (e.g., 'k_jurnal_lastwrite'). In KDB.getAll(), after fetching from Firebase, compare: if the fetched data for a specific item is OLDER than what was just written locally, merge the local version in. ALTERNATIVELY (simpler approach): In KDB.getAll(), after fetching from Firebase, also check the individual item caches ('k_jurnal_ID') and merge any that are newer than what Firebase returned. SIMPLEST FIX: After a KDB.save(), track the saved item's id in a Set (e.g., KDB._recentSaves). In KDB.getAll(), after getting Firebase results, for each id in _recentSaves, check if the localStorage individual cache ('k_col_id') is different from what Firebase returned, and if so, use the localStorage version. Clear from _recentSaves after some time or after confirmed sync.",
+    "Step 2: Actually the simplest correct fix is: In KDB.getAll() in keuangan-firebase.js, after getting items from Firebase, merge with any locally-saved items that may not be in the Firebase response yet. Change the getAll method so that after fetching from Firebase, it also checks the localStorage '_all' cache for items that have an 'id' not present in the Firebase response (could happen with write lag), and includes them. Additionally, for items that ARE in both, prefer the item with a more recent 'updatedAt' or 'createdAt' timestamp. A simpler approach: after KDB.save(), store a 'k_<col>_dirty' flag with the id and timestamp. In getAll(), after Firebase fetch, overlay any dirty items from localStorage onto the Firebase results before caching.",
+    "Step 3: THE SIMPLEST CORRECT FIX - modify KDB.save() to also store the save timestamp, and modify KDB.getAll() to merge local writes that happened after the last successful Firebase read. Implementation: (a) In KDB.save(), after saving to localStorage and before/after Firebase write, set a flag: _klset('k_' + col + '_dirty_' + id, Date.now()). (b) In KDB.getAll(), after fetching from Firebase successfully, check all dirty flags for that collection. For each dirty id, if the dirty timestamp is more recent than now minus 5 seconds (grace period), replace that item in the results array with the locally-cached version from 'k_' + col + '_' + id. Then clear old dirty flags. (c) This ensures that within 5 seconds of a save, getAll() uses the local version, giving Firebase time to sync.",
+    "Step 4: Fix renderPrintBundle() in keuangan-app.js (around line 10000). It duplicates the saldo calculation logic from getFinancialData() but does NOT include saldo awal. Replace the duplicated logic with a call to getFinancialData() (or add saldo awal loading identical to what getFinancialData does). Specifically, after line where 'akun.forEach(function(a) { saldo[a.kode] = ...' and before the jurnal loop, add the saldo awal loading logic (load from KDB.getSetting('saldo_awal_' + tahunSekarang, {}), then iterate and add to debit/kredit based on account type).",
+    "Step 5: Ensure parseFloat safety in getFinancialData() line 724-725. Change 'saldo[l.akun].debit += l.debit || 0' to 'saldo[l.akun].debit += (parseFloat(l.debit) || 0)' and same for kredit. This protects against edge cases where Firebase might return string values. Apply the same fix in renderPrintBundle() at line 10017-10018.",
+    "Step 6: After simpanEditJurnal() saves, force a re-render of the current view by adding a small delay and re-calling navigate() to refresh the data. In the simpanEditJurnal function (around line 2630), after 'navigate(jurnal-umum)', also invalidate any cached financial data so that when the user navigates to lap-saldo or dashboard, fresh data is used."
+  ],
+  "acceptance_criteria": [
+    "After editing a journal entry (simpanEditJurnal), navigating to 'Posisi Saldo Hari Ini' shows the updated balance reflecting the edit",
+    "The renderPrintBundle report shows the same saldo values as getFinancialData (including saldo awal)",
+    "String debit/kredit values from Firebase are handled safely with parseFloat",
+    "No JavaScript errors are introduced"
+  ],
+  "verification": [
+    "Verify the code changes are syntactically correct by checking no obvious JS errors (review the modified functions)",
+    "Verify that KDB.getAll now merges local dirty writes",
+    "Verify that renderPrintBundle includes saldo awal loading",
+    "Verify that parseFloat is used for debit/kredit in getFinancialData and renderPrintBundle"
+  ],
+  "blocked_reason": null,
+  "findings": "All 4 bugs fixed successfully plus 2 additional review issues addressed: (1) KDB.get() now checks dirty flag before fetching from Firebase, preventing stale reads for single-document fetches during the save-to-ack window. (2) KDB.getAll() now scans localStorage for dirty keys (not just in-memory _recentSaves), so dirty items remain protected even after page reload. Syntax validation passed (node -c). No build/test system exists for this project (static files)."
+}
