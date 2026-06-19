@@ -122,6 +122,40 @@ function today() {
   return new Date().toISOString().split('T')[0];
 }
 
+function formatNominalInput(el) {
+  var cursorPos = el.selectionStart;
+  var oldLen = el.value.length;
+  var raw = el.value.replace(/[^0-9]/g, '');
+  if (!raw) { el.value = ''; return; }
+  var formatted = '';
+  for (var i = raw.length - 1, count = 0; i >= 0; i--) {
+    formatted = raw[i] + formatted;
+    count++;
+    if (count % 3 === 0 && i > 0) formatted = '.' + formatted;
+  }
+  el.value = formatted;
+  var newLen = el.value.length;
+  var newPos = cursorPos + (newLen - oldLen);
+  el.setSelectionRange(newPos, newPos);
+}
+
+function parseNominal(val) {
+  if (!val) return 0;
+  return parseFloat(String(val).replace(/\./g, '')) || 0;
+}
+
+function formatNominalValue(n) {
+  if (!n) return '0';
+  var s = String(Math.round(Number(n)));
+  var formatted = '';
+  for (var i = s.length - 1, count = 0; i >= 0; i--) {
+    formatted = s[i] + formatted;
+    count++;
+    if (count % 3 === 0 && i > 0) formatted = '.' + formatted;
+  }
+  return formatted;
+}
+
 function genId(prefix) {
   return prefix + '-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
 }
@@ -4887,7 +4921,7 @@ async function editPermohonanPC(id) {
     + '<div class="fg"><label>Tanggal</label><input type="date" id="epdpc-tgl" value="' + (p.tanggal||'') + '"></div>'
     + '<div class="fg"><label>Nama Pemohon</label><input id="epdpc-nama" value="' + (p.namaPemohon||'') + '"></div>'
     + '<div class="fg"><label>No PO/Invoice</label><input id="epdpc-nopo" value="' + (p.noPOInvoice||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="number" id="epdpc-nominal" value="' + (p.nominal||0) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="epdpc-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(p.nominal) + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="epdpc-ket" value="' + (p.keterangan||'') + '"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditPermohonanPC(\'' + id + '\')">Simpan</button></div>',
     'Edit Permohonan Dana');
@@ -4897,7 +4931,7 @@ async function simpanEditPermohonanPC(id) {
   var list = await KDB.getAll('permohonan');
   var p = list.find(function(x){ return x.id === id; });
   if (!p) return;
-  var updatedNominal = parseFloat((document.getElementById('epdpc-nominal')||{}).value) || p.nominal;
+  var updatedNominal = parseNominal((document.getElementById('epdpc-nominal')||{}).value) || p.nominal;
   var updatedKet = (document.getElementById('epdpc-ket')||{}).value || p.keterangan;
   var updatedNama = (document.getElementById('epdpc-nama')||{}).value || p.namaPemohon;
   await KDB.save('permohonan', id, Object.assign({}, p, {
@@ -4950,7 +4984,7 @@ async function editDanaMasukPC(id) {
     + '<div class="fg"><label>Tanggal</label><input type="date" id="edmpc-tgl" value="' + (d.tanggal||'') + '"></div>'
     + '<div class="fg"><label>Sumber</label><input id="edmpc-sumber" value="' + (d.sumber||'') + '"></div>'
     + '<div class="fg"><label>No Ref</label><input id="edmpc-ref" value="' + (d.noRef||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="number" id="edmpc-nominal" value="' + (d.nominal||0) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="edmpc-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(d.nominal) + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="edmpc-ket" value="' + (d.keterangan||'') + '"></div>'
     + '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Batal</button><button class="btn btn-primary" onclick="simpanEditDanaMasukPC(\'' + id + '\')">Simpan</button></div>',
     'Edit Dana Masuk');
@@ -4960,7 +4994,7 @@ async function simpanEditDanaMasukPC(id) {
   var list = await KDB.getAll('danamasuk');
   var d = list.find(function(x){ return x.id === id; });
   if (!d) return;
-  var updatedNominal = parseFloat((document.getElementById('edmpc-nominal')||{}).value) || d.nominal;
+  var updatedNominal = parseNominal((document.getElementById('edmpc-nominal')||{}).value) || d.nominal;
   var updatedKet = (document.getElementById('edmpc-ket')||{}).value || d.keterangan;
   var updatedSumber = (document.getElementById('edmpc-sumber')||{}).value || d.sumber;
   await KDB.save('danamasuk', id, Object.assign({}, d, {
@@ -6074,7 +6108,7 @@ async function renderPermohonanDana() {
     + '<div class="fg"><label>Nama PIC</label><input id="pd-pic" value="' + (KU.nama||KU.username) + '" placeholder="Nama PIC yang mengajukan"></div>'
     + '<div class="fg"><label>Nama Leader / Atasan</label><input id="pd-leader" placeholder="Nama leader"></div>'
     + '<div class="fg"><label>Nomor PO / Invoice</label><input id="pd-nopo" placeholder="PO-2026-001 / INV-001"></div>'
-    + '<div class="fg"><label>Nominal Pengajuan (IDR)</label><input type="number" id="pd-nominal" placeholder="0"></div>'
+    + '<div class="fg"><label>Nominal Pengajuan (IDR)</label><input type="text" id="pd-nominal" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Jatuh Tempo Pembayaran</label><input type="date" id="pd-jt"></div>'
     + '<div class="fg"><label>Tipe Transaksi</label><select id="pd-tipe"><option>Transfer</option><option>Tunai</option><option>Cek/Giro</option><option>RTGS</option><option>Lainnya</option></select></div>'
     + '<div class="fg"><label>Nama Bank</label><input id="pd-bank" placeholder="BCA / Mandiri / BNI"></div>'
@@ -6143,7 +6177,7 @@ function handleBuktiUpload(input, fieldId) {
 }
 
 async function submitPermohonan(isDraft) {
-  const nominal = parseFloat(document.getElementById('pd-nominal').value) || 0;
+  const nominal = parseNominal(document.getElementById('pd-nominal').value);
   const ket = document.getElementById('pd-ket').value.trim();
   if (!isDraft && (!nominal || !ket)) { showAlert('Nominal dan keterangan wajib diisi!', 'danger'); return; }
   const id = genId('PD');
@@ -6192,7 +6226,7 @@ async function editPermohonan(id) {
     + '<div class="fg"><label>Nama PIC</label><input id="epd-pic" value="' + (p.namaPIC||'') + '"></div>'
     + '<div class="fg"><label>Nama Leader</label><input id="epd-leader" value="' + (p.namaLeader||'') + '"></div>'
     + '<div class="fg"><label>No PO/Invoice</label><input id="epd-nopo" value="' + (p.noPOInvoice||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="number" id="epd-nominal" value="' + (p.nominal||0) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="epd-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(p.nominal) + '"></div>'
     + '<div class="fg"><label>Jatuh Tempo</label><input type="date" id="epd-jt" value="' + (p.jatuhTempo||'') + '"></div>'
     + '<div class="fg"><label>Tipe Transaksi</label><select id="epd-tipe"><option' + (p.tipeTransaksi==='Transfer'?' selected':'') + '>Transfer</option><option' + (p.tipeTransaksi==='Tunai'?' selected':'') + '>Tunai</option><option' + (p.tipeTransaksi==='Cek/Giro'?' selected':'') + '>Cek/Giro</option><option' + (p.tipeTransaksi==='RTGS'?' selected':'') + '>RTGS</option><option' + (p.tipeTransaksi==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
     + '<div class="fg"><label>Nama Bank</label><input id="epd-bank" value="' + (p.namaBank||'') + '"></div>'
@@ -6213,7 +6247,7 @@ async function simpanEditPermohonan(id) {
   var valPIC = (document.getElementById('epd-pic')||{}).value;
   var valLeader = (document.getElementById('epd-leader')||{}).value;
   var valNoPO = (document.getElementById('epd-nopo')||{}).value;
-  var valNominal = parseFloat((document.getElementById('epd-nominal')||{}).value);
+  var valNominal = parseNominal((document.getElementById('epd-nominal')||{}).value);
   var valJT = (document.getElementById('epd-jt')||{}).value;
   var valTipe = (document.getElementById('epd-tipe')||{}).value;
   var valBank = (document.getElementById('epd-bank')||{}).value;
@@ -6350,7 +6384,7 @@ async function renderDanaMasuk() {
     + '<div class="fg"><label>Nama PIC</label><input id="dm-pic" value="' + (KU.nama||KU.username) + '" placeholder="Nama PIC yang mencatat"></div>'
     + '<div class="fg"><label>Nomor Referensi</label><input id="dm-ref" placeholder="No. Invoice / Transfer / Bukti"></div>'
     + '<div class="fg"><label>Tanggal Terima</label><input type="date" id="dm-tgl" value="' + today() + '"></div>'
-    + '<div class="fg"><label>Nominal (IDR)</label><input type="number" id="dm-nominal" placeholder="0"></div>'
+    + '<div class="fg"><label>Nominal (IDR)</label><input type="text" id="dm-nominal" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '<div class="fg"><label>Tipe Penerimaan</label><select id="dm-tipe"><option>Transfer Bank</option><option>Tunai</option><option>Cek/Giro</option><option>RTGS</option><option>Lainnya</option></select></div>'
     + '<div class="fg"><label>Diterima di Bank / Kas (COA)</label><select id="dm-akun-terima" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%">' + akunTerimaOpts + '</select></div>'
     + '<div class="fg"><label>Kategori / Akun Kredit (COA)</label><select id="dm-akun-kredit" style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%">' + akunKreditOpts + '</select></div>'
@@ -6377,7 +6411,7 @@ function filterDanaMasuk(val) {
 }
 
 async function submitDanaMasuk(isDraft) {
-  const nominal = parseFloat(document.getElementById('dm-nominal').value) || 0;
+  const nominal = parseNominal(document.getElementById('dm-nominal').value);
   const sumber = document.getElementById('dm-sumber').value.trim();
   if (!isDraft && (!nominal || !sumber)) { showAlert('Sumber dan nominal wajib diisi!', 'danger'); return; }
   const id = genId('DM');
@@ -6423,7 +6457,7 @@ async function editDanaMasuk(id) {
     + '<div class="fg"><label>Sumber Dana</label><input id="edm-sumber" value="' + (d.sumber||'') + '"></div>'
     + '<div class="fg"><label>Nama PIC</label><input id="edm-pic" value="' + (d.namaPIC||'') + '"></div>'
     + '<div class="fg"><label>No Referensi</label><input id="edm-ref" value="' + (d.noRef||'') + '"></div>'
-    + '<div class="fg"><label>Nominal (Rp)</label><input type="number" id="edm-nominal" value="' + (d.nominal||0) + '"></div>'
+    + '<div class="fg"><label>Nominal (Rp)</label><input type="text" id="edm-nominal" oninput="formatNominalInput(this)" value="' + formatNominalValue(d.nominal) + '"></div>'
     + '<div class="fg"><label>Tipe Transaksi</label><select id="edm-tipe"><option' + (d.tipeTransaksi==='Transfer Bank'?' selected':'') + '>Transfer Bank</option><option' + (d.tipeTransaksi==='Tunai'?' selected':'') + '>Tunai</option><option' + (d.tipeTransaksi==='Cek/Giro'?' selected':'') + '>Cek/Giro</option><option' + (d.tipeTransaksi==='RTGS'?' selected':'') + '>RTGS</option><option' + (d.tipeTransaksi==='Lainnya'?' selected':'') + '>Lainnya</option></select></div>'
     + '<div class="fg"><label>Nama Rekening</label><input id="edm-namarek" value="' + (d.namaRekening||'') + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><textarea id="edm-ket">' + (d.keterangan||'') + '</textarea></div>'
@@ -6440,7 +6474,7 @@ async function simpanEditDanaMasuk(id) {
   var valSumber = (document.getElementById('edm-sumber')||{}).value;
   var valPIC = (document.getElementById('edm-pic')||{}).value;
   var valRef = (document.getElementById('edm-ref')||{}).value;
-  var valNominal = parseFloat((document.getElementById('edm-nominal')||{}).value);
+  var valNominal = parseNominal((document.getElementById('edm-nominal')||{}).value);
   var valTipe = (document.getElementById('edm-tipe')||{}).value;
   var valNamaRek = (document.getElementById('edm-namarek')||{}).value;
   var valKet = (document.getElementById('edm-ket')||{}).value;
