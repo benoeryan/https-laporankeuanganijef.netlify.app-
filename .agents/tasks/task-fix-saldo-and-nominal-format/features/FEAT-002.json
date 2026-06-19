@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Add live thousand-separator (dot) formatting on the nominal input fields in Permohonan Dana and Dana Masuk forms. When the user types a number, display it with Indonesian thousand separators (e.g., 1.000.000) so the user can verify the amount visually. The stored/submitted value must remain a clean number (strip dots before parseFloat).",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "1. Change input type from 'number' to 'text' for the following fields: pd-nominal (line ~6026), dm-nominal (line ~6278), epd-nominal (line ~6139), edm-nominal (line ~6345 in editDanaMasuk modal), epdpc-nominal (line ~4890 in editPermohonanPC modal), edmpc-nominal (line ~4928 in editDanaMasukPC modal).",
     "2. Add a helper function (e.g., formatNominalInput) near the top helpers section that: (a) strips all non-digit characters, (b) formats with dot thousand separators (Indonesian format), (c) sets the input value to the formatted string. Also add a parseNominal helper that strips dots and returns a float.",
