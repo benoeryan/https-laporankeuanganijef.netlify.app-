@@ -1,0 +1,18 @@
+{
+  "project_type": "Vanilla JavaScript financial reporting web app (SPA) using Firebase/Firestore",
+  "language": "JavaScript (ES6+ with some ES5 patterns)",
+  "build_system": "None - static files deployed to Netlify",
+  "test_framework": "None - no tests exist",
+  "build_command": "node -c keuangan-app.js && node -c keuangan-firebase.js",
+  "test_command": "node -c keuangan-app.js && node -c keuangan-firebase.js",
+  "verification_instructions": "Run node -c on all .js files to validate syntax. Manual verification of logic correctness through code review.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - static web files",
+  "environment_constraints": "No build system, no test framework, no Docker. Validation is limited to syntax checking with node -c.",
+  "contribution_requirements": "Commit to fix/saldo-update-bug branch",
+  "key_patterns": "All app logic in single keuangan-app.js file (12000+ lines). Firebase/Firestore data layer in keuangan-firebase.js via KDB object. Approval flow: Draft -> Pending Layer 1/2/3 -> Approved Final. On Approved Final, buatJurnalDariPermohonan/buatJurnalDariDanaMasuk creates a jurnal entry. edit functions save back to permohonan/danamasuk but do NOT update linked jurnal entries. delete functions do NOT clean up linked jurnal entries. getFinancialData() calculates saldo from saldo_awal + all jurnal lines.",
+  "relevant_files": [
+    "keuangan-app.js"
+  ],
+  "directory_structure": "Root: index.html (main page), keuangan-app.js (ALL app logic ~12000 lines), keuangan-firebase.js (Firebase/Firestore KDB layer), netlify.toml, netlify/functions/gemini.js (serverless)"
+}

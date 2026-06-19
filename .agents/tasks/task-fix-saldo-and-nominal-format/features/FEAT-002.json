@@ -1,0 +1,34 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add live thousand-separator (dot) formatting on the nominal input fields in Permohonan Dana and Dana Masuk forms. When the user types a number, display it with Indonesian thousand separators (e.g., 1.000.000) so the user can verify the amount visually. The stored/submitted value must remain a clean number (strip dots before parseFloat).",
+  "status": "pending",
+  "steps": [
+    "1. Change input type from 'number' to 'text' for the following fields: pd-nominal (line ~6026), dm-nominal (line ~6278), epd-nominal (line ~6139), edm-nominal (line ~6345 in editDanaMasuk modal), epdpc-nominal (line ~4890 in editPermohonanPC modal), edmpc-nominal (line ~4928 in editDanaMasukPC modal).",
+    "2. Add a helper function (e.g., formatNominalInput) near the top helpers section that: (a) strips all non-digit characters, (b) formats with dot thousand separators (Indonesian format), (c) sets the input value to the formatted string. Also add a parseNominal helper that strips dots and returns a float.",
+    "3. Attach 'input' event listeners to the nominal fields. Since these forms are dynamically rendered (innerHTML), use event delegation on the document/body or attach listeners after render. The cleanest approach is to add an 'oninput' attribute directly in the HTML string: oninput=\"formatNominalInput(this)\".",
+    "4. Update submitPermohonan() (line ~6095) to strip dots before parseFloat: replace parseFloat(document.getElementById('pd-nominal').value) with parseNominal(document.getElementById('pd-nominal').value).",
+    "5. Update submitDanaMasuk() (line ~6305) similarly.",
+    "6. Update simpanEditPermohonan() (line ~6160) to use parseNominal for epd-nominal.",
+    "7. Update simpanEditDanaMasuk() (line ~6362) to use parseNominal for edm-nominal.",
+    "8. Update simpanEditPermohonanPC() (line ~4900) to use parseNominal for epdpc-nominal.",
+    "9. Update simpanEditDanaMasukPC() (line ~4938) to use parseNominal for edmpc-nominal.",
+    "10. For edit modals that pre-fill with existing nominal value, format the initial value with dots when showing the modal (in editPermohonan, editDanaMasuk, editPermohonanPC, editDanaMasukPC functions)."
+  ],
+  "acceptance_criteria": [
+    "pd-nominal and dm-nominal input fields are type='text' with oninput='formatNominalInput(this)'",
+    "epd-nominal, edm-nominal, epdpc-nominal, edmpc-nominal edit modal inputs are type='text' with oninput='formatNominalInput(this)'",
+    "Typing 1000000 in any nominal field displays as '1.000.000'",
+    "Submitting the form correctly parses '1.000.000' back to 1000000 (number)",
+    "Edit modals show the existing nominal formatted with dots",
+    "node -c keuangan-app.js passes without errors"
+  ],
+  "verification": [
+    "Run: node -c keuangan-app.js",
+    "Code review: confirm formatNominalInput function exists and formats with dots",
+    "Code review: confirm parseNominal strips dots before parseFloat",
+    "Code review: confirm all submit/save functions use parseNominal"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

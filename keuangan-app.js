@@ -4897,13 +4897,33 @@ async function simpanEditPermohonanPC(id) {
   var list = await KDB.getAll('permohonan');
   var p = list.find(function(x){ return x.id === id; });
   if (!p) return;
+  var updatedNominal = parseFloat((document.getElementById('epdpc-nominal')||{}).value) || p.nominal;
+  var updatedKet = (document.getElementById('epdpc-ket')||{}).value || p.keterangan;
+  var updatedNama = (document.getElementById('epdpc-nama')||{}).value || p.namaPemohon;
   await KDB.save('permohonan', id, Object.assign({}, p, {
     tanggal: (document.getElementById('epdpc-tgl')||{}).value || p.tanggal,
-    namaPemohon: (document.getElementById('epdpc-nama')||{}).value || p.namaPemohon,
+    namaPemohon: updatedNama,
     noPOInvoice: (document.getElementById('epdpc-nopo')||{}).value || p.noPOInvoice,
-    nominal: parseFloat((document.getElementById('epdpc-nominal')||{}).value) || p.nominal,
-    keterangan: (document.getElementById('epdpc-ket')||{}).value || p.keterangan,
+    nominal: updatedNominal,
+    keterangan: updatedKet,
   }));
+  // Update linked jurnal entry if exists
+  if (p.jurnalId) {
+    var jurnalList = await KDB.getAll('jurnal');
+    var jurnal = jurnalList.find(function(j){ return j.id === p.jurnalId; });
+    if (jurnal) {
+      var akunDebit = p.akunDebit || '5-2200';
+      var akunKredit = p.akunKredit || '1-1100';
+      jurnal.lines = [
+        { akun: akunDebit, ket: updatedKet || ('Pembayaran ' + updatedNama), debit: updatedNominal, kredit: 0 },
+        { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank || 'Bank') + ' ' + (p.noRekening || ''), debit: 0, kredit: updatedNominal }
+      ];
+      jurnal.totalDebit = updatedNominal;
+      jurnal.totalKredit = updatedNominal;
+      jurnal.keterangan = updatedKet || ('Pembayaran - ' + updatedNama);
+      await KDB.save('jurnal', p.jurnalId, jurnal);
+    }
+  }
   closeModalDirect();
   showAlert('Permohonan dana diperbarui!');
   navigate('kalk-pettycash');
@@ -4911,6 +4931,11 @@ async function simpanEditPermohonanPC(id) {
 
 async function hapusPermohonanPC(id) {
   if (!confirm('Hapus permohonan dana ini?')) return;
+  var list = await KDB.getAll('permohonan');
+  var p = list.find(function(x){ return x.id === id; });
+  if (p && p.jurnalId) {
+    await KDB.delete('jurnal', p.jurnalId);
+  }
   await KDB.delete('permohonan', id);
   showAlert('Permohonan dana dihapus!');
   navigate('kalk-pettycash');
@@ -4935,13 +4960,34 @@ async function simpanEditDanaMasukPC(id) {
   var list = await KDB.getAll('danamasuk');
   var d = list.find(function(x){ return x.id === id; });
   if (!d) return;
+  var updatedNominal = parseFloat((document.getElementById('edmpc-nominal')||{}).value) || d.nominal;
+  var updatedKet = (document.getElementById('edmpc-ket')||{}).value || d.keterangan;
+  var updatedSumber = (document.getElementById('edmpc-sumber')||{}).value || d.sumber;
   await KDB.save('danamasuk', id, Object.assign({}, d, {
     tanggal: (document.getElementById('edmpc-tgl')||{}).value || d.tanggal,
-    sumber: (document.getElementById('edmpc-sumber')||{}).value || d.sumber,
+    sumber: updatedSumber,
     noRef: (document.getElementById('edmpc-ref')||{}).value || d.noRef,
-    nominal: parseFloat((document.getElementById('edmpc-nominal')||{}).value) || d.nominal,
-    keterangan: (document.getElementById('edmpc-ket')||{}).value || d.keterangan,
+    nominal: updatedNominal,
+    keterangan: updatedKet,
   }));
+  // Update linked jurnal entry if exists
+  if (d.jurnalId) {
+    var jurnalList = await KDB.getAll('jurnal');
+    var jurnal = jurnalList.find(function(j){ return j.id === d.jurnalId; });
+    if (jurnal) {
+      var akunDebit = d.akunTerima || '1-1100';
+      var akunKredit = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-'))
+        ? d.kategori : '4-2000';
+      jurnal.lines = [
+        { akun: akunDebit, ket: 'Dana masuk dari ' + updatedSumber, debit: updatedNominal, kredit: 0 },
+        { akun: akunKredit, ket: updatedKet || updatedSumber, debit: 0, kredit: updatedNominal }
+      ];
+      jurnal.totalDebit = updatedNominal;
+      jurnal.totalKredit = updatedNominal;
+      jurnal.keterangan = updatedKet || ('Dana masuk dari ' + updatedSumber);
+      await KDB.save('jurnal', d.jurnalId, jurnal);
+    }
+  }
   closeModalDirect();
   showAlert('Dana masuk diperbarui!');
   navigate('kalk-pettycash');
@@ -4949,6 +4995,11 @@ async function simpanEditDanaMasukPC(id) {
 
 async function hapusDanaMasukPC(id) {
   if (!confirm('Hapus dana masuk ini?')) return;
+  var list = await KDB.getAll('danamasuk');
+  var d = list.find(function(x){ return x.id === id; });
+  if (d && d.jurnalId) {
+    await KDB.delete('jurnal', d.jurnalId);
+  }
   await KDB.delete('danamasuk', id);
   showAlert('Dana masuk dihapus!');
   navigate('kalk-pettycash');
@@ -6121,6 +6172,11 @@ async function ajukanPermohonan(id) {
 
 async function hapusPermohonan(id) {
   if (!confirm('Hapus permohonan ini?')) return;
+  var list = await KDB.getAll('permohonan');
+  var p = list.find(function(x){ return x.id === id; });
+  if (p && p.jurnalId) {
+    await KDB.delete('jurnal', p.jurnalId);
+  }
   await KDB.delete('permohonan', id);
   navigate('dana-permohonan');
 }
@@ -6167,22 +6223,41 @@ async function simpanEditPermohonan(id) {
   var valBukti = (document.getElementById('epd-bukti')||{}).value;
   // Reset status to Draft if item was rejected, so user can re-submit
   var newStatus = (p.status === STATUS.REJECTED_L1 || p.status === STATUS.REJECTED_L2 || p.status === STATUS.REJECTED_L3) ? STATUS.DRAFT : p.status;
+  var updatedNominal = !isNaN(valNominal) ? valNominal : p.nominal;
+  var updatedKet = valKet !== undefined ? valKet : p.keterangan;
   await KDB.save('permohonan', id, Object.assign({}, p, {
     tanggal: valTanggal !== undefined ? valTanggal : p.tanggal,
     namaPemohon: valNama !== undefined ? valNama : p.namaPemohon,
     namaPIC: valPIC !== undefined ? valPIC : p.namaPIC,
     namaLeader: valLeader !== undefined ? valLeader : p.namaLeader,
     noPOInvoice: valNoPO !== undefined ? valNoPO : p.noPOInvoice,
-    nominal: !isNaN(valNominal) ? valNominal : p.nominal,
+    nominal: updatedNominal,
     jatuhTempo: valJT !== undefined ? valJT : p.jatuhTempo,
     tipeTransaksi: valTipe !== undefined ? valTipe : p.tipeTransaksi,
     namaBank: valBank !== undefined ? valBank : p.namaBank,
     noRekening: valNoRek !== undefined ? valNoRek : p.noRekening,
     namaRekening: valNamaRek !== undefined ? valNamaRek : p.namaRekening,
-    keterangan: valKet !== undefined ? valKet : p.keterangan,
+    keterangan: updatedKet,
     buktiDokumen: valBukti !== undefined ? valBukti : p.buktiDokumen,
     status: newStatus,
   }));
+  // Update linked jurnal entry if exists
+  if (p.jurnalId) {
+    var jurnalList = await KDB.getAll('jurnal');
+    var jurnal = jurnalList.find(function(j){ return j.id === p.jurnalId; });
+    if (jurnal) {
+      var akunDebit = p.akunDebit || '5-2200';
+      var akunKredit = p.akunKredit || '1-1100';
+      jurnal.lines = [
+        { akun: akunDebit, ket: updatedKet || ('Pembayaran ' + (valNama || p.namaPemohon)), debit: updatedNominal, kredit: 0 },
+        { akun: akunKredit, ket: 'Kas keluar - ' + (valBank || p.namaBank || 'Bank') + ' ' + (valNoRek || p.noRekening || ''), debit: 0, kredit: updatedNominal }
+      ];
+      jurnal.totalDebit = updatedNominal;
+      jurnal.totalKredit = updatedNominal;
+      jurnal.keterangan = updatedKet || ('Pembayaran - ' + (valNama || p.namaPemohon));
+      await KDB.save('jurnal', p.jurnalId, jurnal);
+    }
+  }
   closeModalDirect();
   showAlert('Permohonan dana berhasil diperbarui!');
   navigate('dana-permohonan');
@@ -6329,6 +6404,11 @@ async function ajukanDanaMasuk(id) {
 
 async function hapusDanaMasuk(id) {
   if (!confirm('Hapus data ini?')) return;
+  var list = await KDB.getAll('danamasuk');
+  var d = list.find(function(x){ return x.id === id; });
+  if (d && d.jurnalId) {
+    await KDB.delete('jurnal', d.jurnalId);
+  }
   await KDB.delete('danamasuk', id);
   navigate('dana-masuk');
 }
@@ -6367,18 +6447,39 @@ async function simpanEditDanaMasuk(id) {
   var valBukti = (document.getElementById('edm-bukti')||{}).value;
   // Reset status to Draft if item was rejected, so user can re-submit
   var newStatus = (d.status === STATUS.REJECTED_L1 || d.status === STATUS.REJECTED_L2 || d.status === STATUS.REJECTED_L3) ? STATUS.DRAFT : d.status;
+  var updatedNominal = !isNaN(valNominal) ? valNominal : d.nominal;
+  var updatedKet = valKet !== undefined ? valKet : d.keterangan;
+  var updatedSumber = valSumber !== undefined ? valSumber : d.sumber;
   await KDB.save('danamasuk', id, Object.assign({}, d, {
     tanggal: valTanggal !== undefined ? valTanggal : d.tanggal,
-    sumber: valSumber !== undefined ? valSumber : d.sumber,
+    sumber: updatedSumber,
     namaPIC: valPIC !== undefined ? valPIC : d.namaPIC,
     noRef: valRef !== undefined ? valRef : d.noRef,
-    nominal: !isNaN(valNominal) ? valNominal : d.nominal,
+    nominal: updatedNominal,
     tipeTransaksi: valTipe !== undefined ? valTipe : d.tipeTransaksi,
     namaRekening: valNamaRek !== undefined ? valNamaRek : d.namaRekening,
-    keterangan: valKet !== undefined ? valKet : d.keterangan,
+    keterangan: updatedKet,
     buktiDokumen: valBukti !== undefined ? valBukti : d.buktiDokumen,
     status: newStatus,
   }));
+  // Update linked jurnal entry if exists
+  if (d.jurnalId) {
+    var jurnalList = await KDB.getAll('jurnal');
+    var jurnal = jurnalList.find(function(j){ return j.id === d.jurnalId; });
+    if (jurnal) {
+      var akunDebit = d.akunTerima || '1-1100';
+      var akunKredit = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-'))
+        ? d.kategori : '4-2000';
+      jurnal.lines = [
+        { akun: akunDebit, ket: 'Dana masuk dari ' + updatedSumber, debit: updatedNominal, kredit: 0 },
+        { akun: akunKredit, ket: updatedKet || updatedSumber, debit: 0, kredit: updatedNominal }
+      ];
+      jurnal.totalDebit = updatedNominal;
+      jurnal.totalKredit = updatedNominal;
+      jurnal.keterangan = updatedKet || ('Dana masuk dari ' + updatedSumber);
+      await KDB.save('jurnal', d.jurnalId, jurnal);
+    }
+  }
   closeModalDirect();
   showAlert('Dana masuk berhasil diperbarui!');
   navigate('dana-masuk');
