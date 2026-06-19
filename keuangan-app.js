@@ -6147,7 +6147,7 @@ async function renderPermohonanDana() {
 
   const rows = sorted.map(function(p) {
     const isOwnerOrLeader = p.pemohon === KU.username || hasRole('leader');
-    const ajukanBtn = p.status === STATUS.DRAFT && p.pemohon === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanPermohonan(\'' + p.id + '\')">Ajukan</button>' : '';
+    const ajukanBtn = p.status === STATUS.DRAFT && (p.pemohon === KU.username || hasRole('leader')) ? '<button class="btn btn-xs btn-primary" onclick="ajukanPermohonan(\'' + p.id + '\')">Ajukan</button>' : '';
     const editBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-warning" onclick="editPermohonan(\'' + p.id + '\')">Edit</button>' : '';
     const hapusBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-danger" onclick="hapusPermohonan(\'' + p.id + '\')">Hapus</button>' : '';
     const undoBtn = p.status === STATUS.APPROVED && hasRole('leader') ? '<button class="btn btn-xs btn-secondary" onclick="undoApproval(\'permohonan\',\'' + p.id + '\')" title="Undo Approval">↩️ Undo</button>' : '';
@@ -6423,7 +6423,7 @@ async function renderDanaMasuk() {
 
   const rows = sorted.map(function(d) {
     const isOwnerOrLeader = d.createdBy === KU.username || hasRole('leader');
-    const ajukanBtn = d.status === STATUS.DRAFT && d.createdBy === KU.username ? '<button class="btn btn-xs btn-primary" onclick="ajukanDanaMasuk(\'' + d.id + '\')">Ajukan</button>' : '';
+    const ajukanBtn = d.status === STATUS.DRAFT && (d.createdBy === KU.username || hasRole('leader')) ? '<button class="btn btn-xs btn-primary" onclick="ajukanDanaMasuk(\'' + d.id + '\')">Ajukan</button>' : '';
     const editBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-warning" onclick="editDanaMasuk(\'' + d.id + '\')">Edit</button>' : '';
     const hapusBtn = isOwnerOrLeader ? '<button class="btn btn-xs btn-danger" onclick="hapusDanaMasuk(\'' + d.id + '\')">Hapus</button>' : '';
     const undoBtn = d.status === STATUS.APPROVED && hasRole('leader') ? '<button class="btn btn-xs btn-secondary" onclick="undoApproval(\'danamasuk\',\'' + d.id + '\')" title="Undo Approval">↩️ Undo</button>' : '';
@@ -6703,9 +6703,17 @@ async function renderApprovalCenter() {
       ? '<div class="alert alert-warning" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><span>⚠️ <b>' + totalBelumJurnal + '</b> transaksi Approved belum dibuatkan jurnal (' + pdBelumJurnal + ' PD + ' + dmBelumJurnal + ' DM)</span><button class="btn btn-sm btn-success" onclick="integrasiPermohonanDanaMasukKeJurnal()">🔗 Integrasikan Semua ke Jurnal</button></div>'
       : '<div class="alert alert-success">✅ Semua transaksi Approved sudah terintegrasi ke jurnal.</div>';
 
+    var pdDraft = allPD.filter(function(p){ return p.status === STATUS.DRAFT; }).length;
+    var dmDraft = allDM.filter(function(d){ return d.status === STATUS.DRAFT; }).length;
+    var totalDraft = pdDraft + dmDraft;
+    var draftBanner = totalDraft > 0
+      ? '<div class="alert alert-info" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><span>📋 <b>' + totalDraft + '</b> transaksi Draft belum diajukan (' + pdDraft + ' PD + ' + dmDraft + ' DM)</span><button class="btn btn-sm btn-primary" onclick="resubmitAllDraft(\'permohonan\')">🔄 Ajukan Ulang Semua Draft PD</button><button class="btn btn-sm btn-primary" onclick="resubmitAllDraft(\'danamasuk\')">🔄 Ajukan Ulang Semua Draft DM</button></div>'
+      : '';
+
     html += '<div class="card"><div class="card-header"><h2>Semua Transaksi (Admin View)</h2>'
       + '<select onchange="filterApprovalAll(this.value)" style="padding:6px 10px;border:1.5px solid #ddd;border-radius:7px;font-size:0.83rem"><option value="">Semua Status</option><option value="Pending">Pending</option><option value="Approved Final">Approved Final</option><option value="Rejected">Rejected</option><option value="Draft">Draft</option></select></div>'
       + integrasiBanner
+      + draftBanner
       + '<div class="tabs"><button class="tab-btn active" onclick="switchTab(this,\'tab-all-pd\')">Permohonan Dana (' + allPD.length + ')</button><button class="tab-btn" onclick="switchTab(this,\'tab-all-dm\')">Dana Masuk (' + allDM.length + ')</button></div>'
       + '<div class="tab-content active" id="tab-all-pd">' + renderAllApprovalTable(allPD, 'permohonan') + '</div>'
       + '<div class="tab-content" id="tab-all-dm">' + renderAllApprovalTable(allDM, 'danamasuk') + '</div>'
@@ -6738,10 +6746,11 @@ function renderAllApprovalTable(list, col) {
     const isPending = x.status && x.status.startsWith('Pending');
     const approveBtn = isPending && hasRole('leader') ? '<button class="btn btn-xs btn-success" onclick="approveItem(\'' + col + '\',\'' + x.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'' + col + '\',\'' + x.id + '\')">Tolak</button>' : '';
     const undoBtn = x.status === STATUS.APPROVED && hasRole('leader') ? '<button class="btn btn-xs btn-secondary" onclick="undoApproval(\'' + col + '\',\'' + x.id + '\')" title="Undo Approval">↩️ Undo</button>' : '';
+    const resubmitBtn = x.status === STATUS.DRAFT && hasRole('leader') ? '<button class="btn btn-xs btn-primary" onclick="resubmitItem(\'' + col + '\',\'' + x.id + '\')" title="Ajukan Ulang ke Pending Layer 1">🔄 Ajukan Ulang</button>' : '';
     const jurnalBadge = x.jurnalId ? '<span class="badge badge-success">✓ Jurnal</span>' : (x.status === STATUS.APPROVED ? '<span class="badge badge-warning">⏳</span>' : '');
     const detailFn = isPD ? 'detailPermohonan' : 'detailDanaMasuk';
     const checkBox = isPending ? '<input type="checkbox" class="appr-check" data-col="' + col + '" data-id="' + x.id + '">' : '';
-    return '<tr data-status="' + x.status + '"><td>' + checkBox + '</td><td>' + fmtDate(x.tanggal) + '</td><td class="fw-bold">' + (isPD ? x.namaPemohon : x.sumber) + '</td><td class="fw-bold ' + (isPD?'text-blue':'text-green') + '">' + fmtRp(x.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (x.keterangan||'-') + '</td><td>' + statusBadge(x.status) + '</td><td>' + approvalFlow(x.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="' + detailFn + '(\'' + x.id + '\')">Detail</button>' + approveBtn + undoBtn + jurnalBadge + '</td></tr>';
+    return '<tr data-status="' + x.status + '"><td>' + checkBox + '</td><td>' + fmtDate(x.tanggal) + '</td><td class="fw-bold">' + (isPD ? x.namaPemohon : x.sumber) + '</td><td class="fw-bold ' + (isPD?'text-blue':'text-green') + '">' + fmtRp(x.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (x.keterangan||'-') + '</td><td>' + statusBadge(x.status) + '</td><td>' + approvalFlow(x.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="' + detailFn + '(\'' + x.id + '\')">Detail</button>' + approveBtn + undoBtn + resubmitBtn + jurnalBadge + '</td></tr>';
   }).join('');
   return '<div style="padding:8px 12px;background:#f8f9ff;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
     + '<label style="font-size:0.82rem;font-weight:600"><input type="checkbox" onchange="toggleSelectAll(this,\'' + col + '\')"> Pilih Semua Pending</label>'
@@ -6830,6 +6839,41 @@ async function undoApproval(col, id) {
   showLoading(false);
   showAlert('Approval berhasil di-undo! Item dikembalikan ke Pending Layer 1 untuk approval ulang dan jurnal dihapus.');
   // Navigate to approval page so user can see the item back in queue
+  navigate('dana-approval');
+}
+
+async function resubmitItem(col, id) {
+  if (!confirm('Ajukan ulang item ini ke Pending Layer 1 untuk approval?')) return;
+  const list = await KDB.getAll(col);
+  const item = list.find(function(x){ return x.id === id; });
+  if (!item) { showAlert('Data tidak ditemukan!', 'warning'); return; }
+  if (item.status !== STATUS.DRAFT) { showAlert('Hanya item Draft yang bisa diajukan ulang!', 'warning'); return; }
+  showLoading(true);
+  var log = (item.approvalLog || []).concat([{ layer: 0, action: 'resubmit', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: 'Diajukan ulang untuk approval' }]);
+  var updated = Object.assign({}, item, { status: STATUS.PENDING_L1, approvalLog: log, lastUpdatedAt: new Date().toISOString() });
+  await KDB.save(col, id, updated);
+  showLoading(false);
+  showAlert('Item berhasil diajukan ulang ke Pending Layer 1!');
+  navigate('dana-approval');
+}
+
+async function resubmitAllDraft(col) {
+  var colName = col === 'permohonan' ? 'Permohonan Dana' : 'Dana Masuk';
+  if (!confirm('Ajukan ulang SEMUA item Draft ' + colName + ' ke Pending Layer 1?')) return;
+  const list = await KDB.getAll(col);
+  const drafts = list.filter(function(x){ return x.status === STATUS.DRAFT; });
+  if (!drafts.length) { showAlert('Tidak ada item Draft untuk diajukan ulang.', 'warning'); return; }
+  showLoading(true);
+  var ok = 0;
+  for (var i = 0; i < drafts.length; i++) {
+    var item = drafts[i];
+    var log = (item.approvalLog || []).concat([{ layer: 0, action: 'resubmit', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: 'Diajukan ulang untuk approval (batch)' }]);
+    var updated = Object.assign({}, item, { status: STATUS.PENDING_L1, approvalLog: log, lastUpdatedAt: new Date().toISOString() });
+    await KDB.save(col, item.id, updated);
+    ok++;
+  }
+  showLoading(false);
+  showAlert(ok + ' item ' + colName + ' berhasil diajukan ulang ke Pending Layer 1!');
   navigate('dana-approval');
 }
 
