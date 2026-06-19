@@ -9614,13 +9614,17 @@ async function exportCSV(col) {
   if (col === 'jurnal') {
     // Format rekening koran: Tanggal | Ref | Keterangan | Debit | Kredit | Saldo
     var kasAkuns = ['1-1101-2','1-1101-3'];
+    list = list.filter(function(j){ return j.tipe !== 'penutup'; });
     list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
 
-    // Ambil saldo awal dari setting
+    // Ambil saldo awal dari setting (object per akun)
     var saldoAwal = 0;
     try {
       var yr = new Date().getFullYear();
-      saldoAwal = parseFloat(await KDB.getSetting('saldo_awal_' + yr, 0)) || 0;
+      var saldoAwalData = await KDB.getSetting('saldo_awal_' + yr, {});
+      if (typeof saldoAwalData === 'object' && saldoAwalData !== null) {
+        kasAkuns.forEach(function(k){ saldoAwal += parseFloat(saldoAwalData[k]) || 0; });
+      }
     } catch(e) {}
     var saldo = saldoAwal;
 
@@ -9723,10 +9727,17 @@ async function exportJurnalDebit() {
   function parseLines(j) { var l=j.lines; if(!l)return[]; if(typeof l==='string'){try{l=JSON.parse(l);}catch(e){return[];}} if(!Array.isArray(l))return[]; return l; }
 
   var kasAkuns = ['1-1101-2','1-1101-3'];
+  list = list.filter(function(j){ return j.tipe !== 'penutup'; });
   list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
 
   var saldo = 0;
-  try { var yr=new Date().getFullYear(); saldo=parseFloat(await KDB.getSetting('saldo_awal_'+yr,0))||0; } catch(e){}
+  try {
+    var yr = new Date().getFullYear();
+    var saldoAwalData = await KDB.getSetting('saldo_awal_' + yr, {});
+    if (typeof saldoAwalData === 'object' && saldoAwalData !== null) {
+      kasAkuns.forEach(function(k){ saldo += parseFloat(saldoAwalData[k]) || 0; });
+    }
+  } catch(e) {}
 
   var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#2E7D32;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Debit - Uang Masuk</h3><table>';
   html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit (Masuk)</th><th>Saldo</th></tr>';
@@ -9734,12 +9745,16 @@ async function exportJurnalDebit() {
 
   list.forEach(function(j) {
     var lines = parseLines(j);
-    var debitKas = 0;
+    var debitKas = 0, kreditKas = 0;
     lines.forEach(function(l) {
-      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.debit)||0) > 0) debitKas += parseFloat(l.debit)||0;
+      if (kasAkuns.indexOf(l.akun) >= 0) {
+        debitKas += (parseFloat(l.debit) || 0);
+        kreditKas += (parseFloat(l.kredit) || 0);
+      }
     });
+    if (debitKas === 0 && kreditKas === 0) return;
+    saldo = saldo + debitKas - kreditKas;
     if (debitKas > 0) {
-      saldo += debitKas;
       html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(debitKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
       totalDebit += debitKas;
     }
@@ -9765,10 +9780,17 @@ async function exportJurnalKredit() {
   function parseLines(j) { var l=j.lines; if(!l)return[]; if(typeof l==='string'){try{l=JSON.parse(l);}catch(e){return[];}} if(!Array.isArray(l))return[]; return l; }
 
   var kasAkuns = ['1-1101-2','1-1101-3'];
+  list = list.filter(function(j){ return j.tipe !== 'penutup'; });
   list.sort(function(a,b){ return (a.tanggal||'').localeCompare(b.tanggal||''); });
 
   var saldo = 0;
-  try { var yr=new Date().getFullYear(); saldo=parseFloat(await KDB.getSetting('saldo_awal_'+yr,0))||0; } catch(e){}
+  try {
+    var yr = new Date().getFullYear();
+    var saldoAwalData = await KDB.getSetting('saldo_awal_' + yr, {});
+    if (typeof saldoAwalData === 'object' && saldoAwalData !== null) {
+      kasAkuns.forEach(function(k){ saldo += parseFloat(saldoAwalData[k]) || 0; });
+    }
+  } catch(e) {}
 
   var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>td,th{border:1px solid #ccc;padding:4px 8px;font-family:Arial;font-size:10pt} th{background:#C62828;color:#fff;font-weight:bold} .num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"} .date{mso-number-format:"yyyy\\-mm\\-dd"}</style></head><body><h3>Jurnal Kredit - Uang Keluar</h3><table>';
   html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Kredit (Keluar)</th><th>Saldo</th></tr>';
@@ -9776,12 +9798,16 @@ async function exportJurnalKredit() {
 
   list.forEach(function(j) {
     var lines = parseLines(j);
-    var kreditKas = 0;
+    var debitKas = 0, kreditKas = 0;
     lines.forEach(function(l) {
-      if (kasAkuns.indexOf(l.akun) >= 0 && (parseFloat(l.kredit)||0) > 0) kreditKas += parseFloat(l.kredit)||0;
+      if (kasAkuns.indexOf(l.akun) >= 0) {
+        debitKas += (parseFloat(l.debit) || 0);
+        kreditKas += (parseFloat(l.kredit) || 0);
+      }
     });
+    if (debitKas === 0 && kreditKas === 0) return;
+    saldo = saldo + debitKas - kreditKas;
     if (kreditKas > 0) {
-      saldo -= kreditKas;
       totalKredit += kreditKas;
       html += '<tr><td class="date">'+esc(j.tanggal)+'</td><td>'+esc(j.noRef)+'</td><td>'+esc(j.keterangan)+'</td><td class="num">'+fmtNum(kreditKas)+'</td><td class="num">'+fmtNum(saldo)+'</td></tr>';
     }
