@@ -6811,7 +6811,7 @@ async function rejectItem(col, id) {
 }
 
 async function undoApproval(col, id) {
-  if (!confirm('Undo approval item ini? Jurnal otomatis yang terkait akan dihapus dan status dikembalikan ke Draft.')) return;
+  if (!confirm('Undo approval item ini? Jurnal otomatis yang terkait akan dihapus dan status dikembalikan ke Pending Layer 1 untuk approval ulang.')) return;
   const list = await KDB.getAll(col);
   const item = list.find(function(x){ return x.id === id; });
   if (!item) { showAlert('Data tidak ditemukan!', 'warning'); return; }
@@ -6822,21 +6822,15 @@ async function undoApproval(col, id) {
     await KDB.delete('jurnal', item.jurnalId);
   }
   // Tambahkan log undo
-  var log = (item.approvalLog || []).concat([{ layer: 0, action: 'undo', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: 'Undo approval - dikembalikan ke Draft' }]);
-  // Reset status dan hapus jurnalId
-  var updated = Object.assign({}, item, { status: STATUS.DRAFT, jurnalId: null, approvalLog: log, lastUpdatedAt: new Date().toISOString() });
+  var log = (item.approvalLog || []).concat([{ layer: 0, action: 'undo', by: KU.username, nama: KU.nama, at: new Date().toISOString(), catatan: 'Undo approval - dikembalikan ke Pending Layer 1 untuk approval ulang' }]);
+  // Reset status ke Pending Layer 1 agar aktif kembali di approval queue dan hapus jurnalId
+  var updated = Object.assign({}, item, { status: STATUS.PENDING_L1, jurnalId: null, approvalLog: log, lastUpdatedAt: new Date().toISOString() });
   delete updated.jurnalId;
   await KDB.save(col, id, updated);
   showLoading(false);
-  showAlert('Approval berhasil di-undo! Item dikembalikan ke Draft dan jurnal dihapus.');
-  // Navigate back to the appropriate page
-  if (col === 'permohonan') {
-    navigate('dana-permohonan');
-  } else if (col === 'danamasuk') {
-    navigate('dana-masuk');
-  } else {
-    navigate('dana-approval');
-  }
+  showAlert('Approval berhasil di-undo! Item dikembalikan ke Pending Layer 1 untuk approval ulang dan jurnal dihapus.');
+  // Navigate to approval page so user can see the item back in queue
+  navigate('dana-approval');
 }
 
 async function approveSemuaItem(col) {
