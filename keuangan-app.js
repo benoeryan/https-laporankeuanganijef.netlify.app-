@@ -772,6 +772,26 @@ async function getFinancialData() {
   return { saldo: saldo, akun: allAkun };
 }
 
+// ===== SHARED: Petty Cash Saldo from Collection =====
+async function getPettyCashSaldo() {
+  var pcSaldoAwal = parseFloat(await KDB.getSetting('pettycash_saldo', 0)) || 0;
+  var pcTxList = await KDB.getAll('pettycash');
+  var saldo = pcSaldoAwal;
+  var tahunSkrg = new Date().getFullYear();
+  pcTxList.forEach(function(p) {
+    var tglTahun = p.tanggal ? parseInt(p.tanggal.substring(0, 4)) : 0;
+    if (tglTahun !== tahunSkrg) return;
+    var tipe = p.tipe || 'keluar';
+    if (!p.tipe) {
+      var ket2 = (p.keterangan || '').toLowerCase();
+      if (ket2.includes('top up') || ket2.includes('isi kas') || (p.kategori || '').toLowerCase().includes('masuk')) tipe = 'masuk';
+    }
+    if (tipe === 'masuk') saldo += Math.abs(parseFloat(p.jumlah) || 0);
+    else saldo -= Math.abs(parseFloat(p.jumlah) || 0);
+  });
+  return saldo;
+}
+
 // ===== DASHBOARD =====
 async function renderDashboard() {
   if (KU.role === 'nanda') return renderPortalAset();
@@ -830,21 +850,7 @@ async function renderDashboard() {
   if (!dashKasAkun.length) dashKasAkun = kasAkun.slice(0, 3);
 
   // Hitung saldo petty cash dari collection (bukan dari jurnal) agar konsisten
-  var pcSaldoAwal = parseFloat(await KDB.getSetting('pettycash_saldo', 0)) || 0;
-  var pcTxList = await KDB.getAll('pettycash');
-  var pcSaldoReal = pcSaldoAwal;
-  var tahunSkrg = new Date().getFullYear();
-  pcTxList.forEach(function(p) {
-    var tglTahun = p.tanggal ? parseInt(p.tanggal.substring(0,4)) : 0;
-    if (tglTahun !== tahunSkrg) return;
-    var tipe = p.tipe || 'keluar';
-    if (!p.tipe) {
-      var ket2 = (p.keterangan||'').toLowerCase();
-      if (ket2.includes('top up') || ket2.includes('isi kas') || (p.kategori||'').toLowerCase().includes('masuk')) tipe = 'masuk';
-    }
-    if (tipe === 'masuk') pcSaldoReal += Math.abs(parseFloat(p.jumlah)||0);
-    else pcSaldoReal -= Math.abs(parseFloat(p.jumlah)||0);
-  });
+  var pcSaldoReal = await getPettyCashSaldo();
 
   const saldoCards = dashKasAkun.map(function(a) {
     var net;
@@ -3592,20 +3598,21 @@ function buildLineChart(datasets, labels, chartId) {
   var pointCount = labels.length;
   var stepX = pointCount > 1 ? chartW / (pointCount - 1) : chartW;
 
-  // Vibrant modern color palette
+  // Vibrant modern color palette - use local array to avoid mutating caller data
   var vibrantColors = ['#6366f1', '#06b6d4', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
-  datasets.forEach(function(ds, i) {
-    if (!ds.color || ds.color === '#ff9800') ds.color = vibrantColors[i % vibrantColors.length];
-    else if (ds.color === '#1a237e') ds.color = '#3b82f6';
-    else if (ds.color === '#4caf50') ds.color = '#10b981';
+  var chartColors = datasets.map(function(ds, i) {
+    if (!ds.color || ds.color === '#ff9800') return vibrantColors[i % vibrantColors.length];
+    else if (ds.color === '#1a237e') return '#3b82f6';
+    else if (ds.color === '#4caf50') return '#10b981';
+    return ds.color;
   });
 
   // SVG Defs - gradients, filters, and glow effects
   var defs = '<defs>';
   datasets.forEach(function(ds, idx) {
     defs += '<linearGradient id="grad-' + chartId + '-' + idx + '" x1="0%" y1="0%" x2="0%" y2="100%">';
-    defs += '<stop offset="0%" stop-color="' + ds.color + '" stop-opacity="0.35"/>';
-    defs += '<stop offset="100%" stop-color="' + ds.color + '" stop-opacity="0.02"/>';
+    defs += '<stop offset="0%" stop-color="' + chartColors[idx] + '" stop-opacity="0.35"/>';
+    defs += '<stop offset="100%" stop-color="' + chartColors[idx] + '" stop-opacity="0.02"/>';
     defs += '</linearGradient>';
   });
   defs += '<filter id="shadow-' + chartId + '" x="-20%" y="-20%" width="140%" height="140%">';
@@ -3622,7 +3629,7 @@ function buildLineChart(datasets, labels, chartId) {
   for (var g = 0; g <= 4; g++) {
     var gy = padTop + (chartH / 4) * g;
     var gVal = maxVal - (maxVal / 4) * g;
-    gridLines += '<line x1="' + padLeft + '" y1="' + gy + '" x2="' + (padLeft + chartW) + '" y2="' + gy + '" stroke="#f0f0f0" stroke-width="1"/>';
+    gridLines += '<line x1="' + padLeft + '" y1="' + gy + '" x2="' + (padLeft + chartW) + '" y2="' + gy + '" stroke="#d8d8d8" stroke-width="1"/>';
     gridLines += '<text x="' + (padLeft - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="10" fill="#999" font-family="sans-serif">' + (gVal >= 1000000 ? (Math.round(gVal/1000000)) + 'jt' : gVal >= 1000 ? (Math.round(gVal/1000)) + 'rb' : Math.round(gVal)) + '</text>';
   }
 
@@ -3658,11 +3665,11 @@ function buildLineChart(datasets, labels, chartId) {
       var py = padTop + chartH - (ds.data[pi] / maxVal) * chartH;
       points.push(px + ',' + py);
     }
-    linesHtml += '<polyline points="' + points.join(' ') + '" fill="none" stroke="' + ds.color + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow-' + chartId + ')" class="fva-line"/>';
+    linesHtml += '<polyline points="' + points.join(' ') + '" fill="none" stroke="' + chartColors[dsIdx] + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow-' + chartId + ')" class="fva-line"/>';
     for (var ci = 0; ci < pointCount; ci++) {
       var cx = padLeft + ci * stepX;
       var cy = padTop + chartH - (ds.data[ci] / maxVal) * chartH;
-      circlesHtml += '<circle cx="' + cx + '" cy="' + cy + '" r="6" fill="' + ds.color + '" stroke="#fff" stroke-width="2.5" class="fva-dot" style="cursor:pointer" '
+      circlesHtml += '<circle cx="' + cx + '" cy="' + cy + '" r="6" fill="' + chartColors[dsIdx] + '" stroke="#fff" stroke-width="2.5" class="fva-dot" style="cursor:pointer" '
         + 'onmouseover="this.setAttribute(\'r\',\'9\');this.setAttribute(\'filter\',\'url(#glow-' + chartId + ')\');showLineChartTooltip(event,\'' + chartId + '\',\'' + ds.label + ': ' + fmtRp(ds.data[ci]).replace(/'/g, "\\'") + '\')" '
         + 'onmouseout="this.setAttribute(\'r\',\'6\');this.removeAttribute(\'filter\');hideLineChartTooltip(\'' + chartId + '\')" '
         + 'onclick="showLineChartTooltip(event,\'' + chartId + '\',\'' + ds.label + ': ' + fmtRp(ds.data[ci]).replace(/'/g, "\\'") + '\')"/>';
@@ -3819,21 +3826,7 @@ async function renderForecastVsActual() {
   if (!dashKasAkunFva.length) dashKasAkunFva = kasAkun.slice(0, 3);
 
   // Petty cash saldo from pettycash collection (same as dashboard)
-  var pcSaldoAwalFva = parseFloat(await KDB.getSetting('pettycash_saldo', 0)) || 0;
-  var pcTxListFva = await KDB.getAll('pettycash');
-  var pcSaldoRealFva = pcSaldoAwalFva;
-  var tahunSkrgFva = new Date().getFullYear();
-  pcTxListFva.forEach(function(p) {
-    var tglTahun = p.tanggal ? parseInt(p.tanggal.substring(0, 4)) : 0;
-    if (tglTahun !== tahunSkrgFva) return;
-    var tipe = p.tipe || 'keluar';
-    if (!p.tipe) {
-      var ket2 = (p.keterangan || '').toLowerCase();
-      if (ket2.includes('top up') || ket2.includes('isi kas') || (p.kategori || '').toLowerCase().includes('masuk')) tipe = 'masuk';
-    }
-    if (tipe === 'masuk') pcSaldoRealFva += Math.abs(parseFloat(p.jumlah) || 0);
-    else pcSaldoRealFva -= Math.abs(parseFloat(p.jumlah) || 0);
-  });
+  var pcSaldoRealFva = await getPettyCashSaldo();
 
   // saldoKasBank = only BNI + Mandiri + Petty Cash (petty from collection)
   var saldoKasBank = 0;
@@ -3845,8 +3838,13 @@ async function renderForecastVsActual() {
     }
   });
 
-  // totalAsetLancar = sum all Aset Lancar accounts
-  var totalAsetLancar = kasAkun.reduce(function(s, a) { return s + ((fd.saldo[a.kode] || {}).net || 0); }, 0);
+  // totalAsetLancar = sum all Aset Lancar accounts (petty cash uses collection-derived value)
+  var totalAsetLancar = kasAkun.reduce(function(s, a) {
+    if ((a.nama || '').toLowerCase().includes('petty') || a.kode === '1-1101-3') {
+      return s + pcSaldoRealFva;
+    }
+    return s + ((fd.saldo[a.kode] || {}).net || 0);
+  }, 0);
 
   // === Calculate totals using same 6-month comparison window ===
   var now = new Date();
