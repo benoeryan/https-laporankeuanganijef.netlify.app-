@@ -3579,6 +3579,88 @@ function renderActualWithChart(list, title, chartId) {
     + '</div>';
 }
 
+function buildLineChart(datasets, labels, chartId) {
+  var svgWidth = 600, svgHeight = 280;
+  var padLeft = 70, padRight = 30, padTop = 30, padBottom = 50;
+  var chartW = svgWidth - padLeft - padRight;
+  var chartH = svgHeight - padTop - padBottom;
+  var maxVal = 1;
+  datasets.forEach(function(ds) {
+    ds.data.forEach(function(v) { if (v > maxVal) maxVal = v; });
+  });
+  maxVal = maxVal * 1.1;
+  var pointCount = labels.length;
+  var stepX = pointCount > 1 ? chartW / (pointCount - 1) : chartW;
+
+  // Grid lines (5 horizontal)
+  var gridLines = '';
+  for (var g = 0; g <= 4; g++) {
+    var gy = padTop + (chartH / 4) * g;
+    var gVal = maxVal - (maxVal / 4) * g;
+    gridLines += '<line x1="' + padLeft + '" y1="' + gy + '" x2="' + (padLeft + chartW) + '" y2="' + gy + '" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,3"/>';
+    gridLines += '<text x="' + (padLeft - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="10" fill="#888">' + (gVal >= 1000000 ? (Math.round(gVal/1000000)) + 'jt' : gVal >= 1000 ? (Math.round(gVal/1000)) + 'rb' : Math.round(gVal)) + '</text>';
+  }
+
+  // X-axis labels
+  var xLabels = '';
+  for (var xi = 0; xi < pointCount; xi++) {
+    var lx = padLeft + xi * stepX;
+    xLabels += '<text x="' + lx + '" y="' + (svgHeight - 10) + '" text-anchor="middle" font-size="10" fill="#555">' + labels[xi] + '</text>';
+  }
+
+  // Lines and circles
+  var linesHtml = '';
+  var circlesHtml = '';
+  datasets.forEach(function(ds, dsIdx) {
+    var points = [];
+    for (var pi = 0; pi < pointCount; pi++) {
+      var px = padLeft + pi * stepX;
+      var py = padTop + chartH - (ds.data[pi] / maxVal) * chartH;
+      points.push(px + ',' + py);
+    }
+    linesHtml += '<polyline points="' + points.join(' ') + '" fill="none" stroke="' + ds.color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    for (var ci = 0; ci < pointCount; ci++) {
+      var cx = padLeft + ci * stepX;
+      var cy = padTop + chartH - (ds.data[ci] / maxVal) * chartH;
+      circlesHtml += '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="' + ds.color + '" stroke="#fff" stroke-width="2" style="cursor:pointer" '
+        + 'onmouseover="showLineChartTooltip(event,\'' + chartId + '\',\'' + ds.label + ': ' + fmtRp(ds.data[ci]).replace(/'/g, "\\'") + '\')" '
+        + 'onmouseout="hideLineChartTooltip(\'' + chartId + '\')" '
+        + 'onclick="showLineChartTooltip(event,\'' + chartId + '\',\'' + ds.label + ': ' + fmtRp(ds.data[ci]).replace(/'/g, "\\'") + '\')"/>';
+    }
+  });
+
+  // Axes
+  var axes = '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (padTop + chartH) + '" stroke="#bbb" stroke-width="1"/>';
+  axes += '<line x1="' + padLeft + '" y1="' + (padTop + chartH) + '" x2="' + (padLeft + chartW) + '" y2="' + (padTop + chartH) + '" stroke="#bbb" stroke-width="1"/>';
+
+  return '<div style="position:relative;width:100%">'
+    + '<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" style="width:100%;height:auto;display:block">'
+    + gridLines + axes + xLabels + linesHtml + circlesHtml
+    + '</svg>'
+    + '<div id="tooltip-' + chartId + '" style="display:none;position:absolute;background:#333;color:#fff;padding:6px 12px;border-radius:6px;font-size:0.78rem;pointer-events:none;white-space:nowrap;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.18)"></div>'
+    + '</div>';
+}
+
+function showLineChartTooltip(evt, chartId, text) {
+  var tooltip = document.getElementById('tooltip-' + chartId);
+  if (!tooltip) return;
+  tooltip.textContent = text;
+  tooltip.style.display = 'block';
+  var container = tooltip.parentElement;
+  var rect = container.getBoundingClientRect();
+  var x = evt.clientX - rect.left + 10;
+  var y = evt.clientY - rect.top - 30;
+  if (x + 150 > rect.width) x = x - 160;
+  if (y < 0) y = 10;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+function hideLineChartTooltip(chartId) {
+  var tooltip = document.getElementById('tooltip-' + chartId);
+  if (tooltip) tooltip.style.display = 'none';
+}
+
 async function renderForecastVsActual() {
   // === Gather Forecast Pembayaran data ===
   var cached = await autoJurnalJatuhTempo();
@@ -3733,55 +3815,23 @@ async function renderForecastVsActual() {
 
   // === Build Pembayaran comparison chart (current year months) ===
   var bayarMonthKeys = Object.keys(forecastBayarByMonth);
-  var bayarMaxVal = 1;
-  bayarMonthKeys.forEach(function(k) {
-    var mIdx = parseInt(k.split('-')[1]);
-    var fv = forecastBayarByMonth[k].total;
-    var av = actualBayarByMonth[mIdx] || 0;
-    if (fv > bayarMaxVal) bayarMaxVal = fv;
-    if (av > bayarMaxVal) bayarMaxVal = av;
-  });
-  var bayarChartBars = bayarMonthKeys.map(function(k) {
-    var mIdx = parseInt(k.split('-')[1]);
-    var fv = forecastBayarByMonth[k].total;
-    var av = actualBayarByMonth[mIdx] || 0;
-    var fh = Math.round((fv / bayarMaxVal) * 100);
-    var ah = Math.round((av / bayarMaxVal) * 100);
-    return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">'
-      + '<div style="font-size:0.55rem;color:#888">' + (fv > 0 ? fmtRp(fv).replace('Rp ','') : '') + '</div>'
-      + '<div style="display:flex;gap:2px;align-items:flex-end;width:100%;justify-content:center;height:100px">'
-      + '<div style="width:40%;height:' + Math.max(fh,2) + 'px;background:#ff9800;border-radius:3px 3px 0 0" title="Forecast: ' + fmtRp(fv) + '"></div>'
-      + '<div style="width:40%;height:' + Math.max(ah,2) + 'px;background:#1a237e;border-radius:3px 3px 0 0" title="Actual: ' + fmtRp(av) + '"></div>'
-      + '</div>'
-      + '<div style="font-size:0.55rem;color:#1a237e">' + (av > 0 ? fmtRp(av).replace('Rp ','') : '') + '</div>'
-      + '<div style="font-size:0.65rem;color:#555">' + forecastBayarByMonth[k].label + '</div></div>';
-  }).join('');
+  var bayarForecastData = bayarMonthKeys.map(function(k) { return forecastBayarByMonth[k].total; });
+  var bayarActualData = bayarMonthKeys.map(function(k) { var mIdx = parseInt(k.split('-')[1]); return actualBayarByMonth[mIdx] || 0; });
+  var bayarLabels = bayarMonthKeys.map(function(k) { return forecastBayarByMonth[k].label; });
+  var bayarLineChart = buildLineChart([
+    { data: bayarForecastData, color: '#ff9800', label: 'Forecast' },
+    { data: bayarActualData, color: '#1a237e', label: 'Actual' }
+  ], bayarLabels, 'bayar-chart');
 
   // === Build Penerimaan comparison chart (current year months) ===
   var terimaMonthKeys = Object.keys(forecastTerimaByMonth);
-  var terimaMaxVal = 1;
-  terimaMonthKeys.forEach(function(k) {
-    var mIdx = parseInt(k.split('-')[1]);
-    var fv = forecastTerimaByMonth[k].total;
-    var av = actualTerimaByMonth[mIdx] || 0;
-    if (fv > terimaMaxVal) terimaMaxVal = fv;
-    if (av > terimaMaxVal) terimaMaxVal = av;
-  });
-  var terimaChartBars = terimaMonthKeys.map(function(k) {
-    var mIdx = parseInt(k.split('-')[1]);
-    var fv = forecastTerimaByMonth[k].total;
-    var av = actualTerimaByMonth[mIdx] || 0;
-    var fh = Math.round((fv / terimaMaxVal) * 100);
-    var ah = Math.round((av / terimaMaxVal) * 100);
-    return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">'
-      + '<div style="font-size:0.55rem;color:#888">' + (fv > 0 ? fmtRp(fv).replace('Rp ','') : '') + '</div>'
-      + '<div style="display:flex;gap:2px;align-items:flex-end;width:100%;justify-content:center;height:100px">'
-      + '<div style="width:40%;height:' + Math.max(fh,2) + 'px;background:#ff9800;border-radius:3px 3px 0 0" title="Forecast: ' + fmtRp(fv) + '"></div>'
-      + '<div style="width:40%;height:' + Math.max(ah,2) + 'px;background:#4caf50;border-radius:3px 3px 0 0" title="Actual: ' + fmtRp(av) + '"></div>'
-      + '</div>'
-      + '<div style="font-size:0.55rem;color:#4caf50">' + (av > 0 ? fmtRp(av).replace('Rp ','') : '') + '</div>'
-      + '<div style="font-size:0.65rem;color:#555">' + forecastTerimaByMonth[k].label + '</div></div>';
-  }).join('');
+  var terimaForecastData = terimaMonthKeys.map(function(k) { return forecastTerimaByMonth[k].total; });
+  var terimaActualData = terimaMonthKeys.map(function(k) { var mIdx = parseInt(k.split('-')[1]); return actualTerimaByMonth[mIdx] || 0; });
+  var terimaLabels = terimaMonthKeys.map(function(k) { return forecastTerimaByMonth[k].label; });
+  var terimaLineChart = buildLineChart([
+    { data: terimaForecastData, color: '#ff9800', label: 'Forecast' },
+    { data: terimaActualData, color: '#4caf50', label: 'Actual' }
+  ], terimaLabels, 'terima-chart');
 
   // === Build summary table ===
   var allMonthKeys = Object.keys(forecastBayarByMonth);
@@ -3818,11 +3868,11 @@ async function renderForecastVsActual() {
     + '<div class="card"><div class="card-header"><h2>Pembayaran: Forecast vs Actual</h2>'
     + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
     + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#1a237e;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
-    + '<div style="display:flex;align-items:flex-end;gap:3px;height:160px;padding:10px 0">' + bayarChartBars + '</div></div>'
+    + '<div style="padding:10px 0">' + bayarLineChart + '</div></div>'
     + '<div class="card"><div class="card-header"><h2>Penerimaan: Forecast vs Actual</h2>'
     + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
     + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#4caf50;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
-    + '<div style="display:flex;align-items:flex-end;gap:3px;height:160px;padding:10px 0">' + terimaChartBars + '</div></div>'
+    + '<div style="padding:10px 0">' + terimaLineChart + '</div></div>'
     + '<div class="card"><div class="card-header"><h2>Ringkasan Per Bulan</h2><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Bulan</th><th>Forecast Bayar</th><th>Actual Bayar</th><th>Selisih Bayar</th><th>Forecast Terima</th><th>Actual Terima</th><th>Selisih Terima</th></tr></thead>'
     + '<tbody>' + tableRows + '</tbody></table></div></div>';
