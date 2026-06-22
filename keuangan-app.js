@@ -3864,8 +3864,15 @@ async function renderForecastVsActual() {
       + '</tr>';
   }).join('');
 
+  // === Separate forecast items into "remaining" (belum terjadi) vs "already actual" (sudah terjadi) ===
+  // forecastBayarList already excludes fully-journalized items, so these are all "remaining forecast"
+  var remainingForecastBayar = totalForecastBayar;
+  var remainingForecastTerima = totalForecastTerima;
+
+  // Proyeksi = Saldo Aktual - Remaining Forecast Pengeluaran + Remaining Forecast Penerimaan
+  var proyeksiSaldo = saldoKas - remainingForecastBayar + remainingForecastTerima;
+
   // === Store data globally for period switching ===
-  var proyeksiSaldo = saldoKas - totalForecastBayar + totalForecastTerima;
   window._fvaData = {
     forecastBayarList: forecastBayarList,
     forecastTerimaList: forecastTerimaList,
@@ -3875,27 +3882,37 @@ async function renderForecastVsActual() {
     totalForecastBayar: totalForecastBayar,
     totalForecastTerima: totalForecastTerima,
     totalActualBayar: totalActualBayar,
-    totalActualTerima: totalActualTerima
+    totalActualTerima: totalActualTerima,
+    remainingForecastBayar: remainingForecastBayar,
+    remainingForecastTerima: remainingForecastTerima,
+    proyeksiSaldo: proyeksiSaldo
   };
 
   // === Build final HTML ===
   var windowLabel = months[windowStart.getMonth()] + ' ' + windowStart.getFullYear() + ' - ' + months[windowEnd.getMonth()] + ' ' + windowEnd.getFullYear();
 
-  // Proyeksi Saldo card
+  // Proyeksi Saldo card - synchronized actual vs forecast
   var proyeksiSaldoHtml = '<div class="card" style="border-left:4px solid #1a237e;margin-bottom:16px">'
-    + '<div class="card-header"><h2>\uD83D\uDCB0 Proyeksi Saldo</h2></div>'
+    + '<div class="card-header"><h2>\uD83D\uDCB0 Proyeksi Saldo (Sinkronisasi Aktual & Forecast)</h2></div>'
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:4px 0">'
     + '<div style="background:#e3f2fd;border-radius:10px;padding:14px;text-align:center">'
-    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Saldo Kas/Bank Saat Ini</div>'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Saldo Aktual Sistem (dari Jurnal)</div>'
     + '<div style="font-size:1.1rem;font-weight:700;color:#1a237e">' + fmtRp(saldoKas) + '</div></div>'
+    + '<div style="background:#fff3e0;border-radius:10px;padding:14px;text-align:center">'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Actual Pengeluaran (Sudah Terjadi)</div>'
+    + '<div style="font-size:1rem;font-weight:700;color:#e65100">' + fmtRp(totalActualBayar) + '</div></div>'
+    + '<div style="background:#e0f2f1;border-radius:10px;padding:14px;text-align:center">'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Actual Penerimaan (Sudah Terjadi)</div>'
+    + '<div style="font-size:1rem;font-weight:700;color:#00695c">' + fmtRp(totalActualTerima) + '</div></div>'
     + '<div style="background:#ffebee;border-radius:10px;padding:14px;text-align:center">'
-    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Total Forecast Pengeluaran</div>'
-    + '<div style="font-size:1.1rem;font-weight:700;color:#c62828">' + fmtRp(totalForecastBayar) + '</div></div>'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Forecast Pengeluaran (Belum Terjadi)</div>'
+    + '<div style="font-size:1rem;font-weight:700;color:#c62828">' + fmtRp(remainingForecastBayar) + '</div></div>'
     + '<div style="background:#e8f5e9;border-radius:10px;padding:14px;text-align:center">'
-    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Total Forecast Pemasukan</div>'
-    + '<div style="font-size:1.1rem;font-weight:700;color:#2e7d32">' + fmtRp(totalForecastTerima) + '</div></div>'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Forecast Penerimaan (Belum Terjadi)</div>'
+    + '<div style="font-size:1rem;font-weight:700;color:#2e7d32">' + fmtRp(remainingForecastTerima) + '</div></div>'
     + '<div style="background:' + (proyeksiSaldo >= 0 ? '#e8f5e9' : '#ffebee') + ';border-radius:10px;padding:14px;text-align:center;border:2px solid ' + (proyeksiSaldo >= 0 ? '#4caf50' : '#ef5350') + '">'
-    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Proyeksi Saldo Setelah Forecast</div>'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Proyeksi Saldo Final</div>'
+    + '<div style="font-size:0.7rem;color:#888;margin-bottom:2px">(Saldo Aktual - Forecast Pengeluaran + Forecast Penerimaan)</div>'
     + '<div style="font-size:1.2rem;font-weight:700;color:' + (proyeksiSaldo >= 0 ? '#2e7d32' : '#c62828') + '">' + fmtRp(proyeksiSaldo) + '</div></div>'
     + '</div></div>';
 
