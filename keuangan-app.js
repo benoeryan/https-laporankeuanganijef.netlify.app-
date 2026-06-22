@@ -3166,15 +3166,21 @@ async function renderForecastBayar() {
     }
     return false;
   });
-  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Utang' : 'Utang (tanpa jatuh tempo)' }; })
+  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Utang' : 'Utang (tanpa jatuh tempo)', itemId: x.id||'' }; })
     .concat(pdForecast.map(function(x){
       var label = 'Permohonan - ' + (x.status||'Draft');
       if (x.jatuhTempo && x.jatuhTempo <= todayStr && x.status !== STATUS.APPROVED) {
         label = 'Permohonan - OVERDUE (' + (x.status||'Draft') + ')';
       }
-      return { jatuhTempo: x.jatuhTempo || '', nama: x.namaPemohon, ref: x.noPOInvoice||x.id, sisa: parseFloat(x.nominal)||0, sumber: label };
+      return { jatuhTempo: x.jatuhTempo || '', nama: x.namaPemohon, ref: x.noPOInvoice||x.id, sisa: parseFloat(x.nominal)||0, sumber: label, itemId: x.id||'' };
     }));
-  return renderForecastWithChart(combined, 'Forecast Pembayaran', 'bayar');
+  // Fetch saldo data for projection
+  var fd = await getFinancialData();
+  var saldoKas = 0;
+  fd.akun.filter(function(a){ return a.kategori === 'Aset Lancar'; }).forEach(function(a){
+    if (fd.saldo[a.kode]) saldoKas += fd.saldo[a.kode].net;
+  });
+  return renderForecastWithChart(combined, 'Forecast Pembayaran', 'bayar', { saldoKas: saldoKas });
 }
 async function renderForecastTerima() {
   var cached = await autoJurnalJatuhTempo();
@@ -3203,18 +3209,26 @@ async function renderForecastTerima() {
     }
     return false;
   });
-  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Piutang' : 'Piutang (tanpa jatuh tempo)' }; })
+  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Piutang' : 'Piutang (tanpa jatuh tempo)', itemId: x.id||'' }; })
     .concat(dmForecast.map(function(x){
       var jt = x.tanggal || '';
       var label = 'Dana Masuk - ' + (x.status||'Draft');
       if (jt && jt <= todayStr && x.status !== STATUS.APPROVED) {
         label = 'Dana Masuk - OVERDUE (' + (x.status||'Draft') + ')';
       }
-      return { jatuhTempo: jt, nama: x.sumber, ref: x.noRef||x.id, sisa: parseFloat(x.nominal)||0, sumber: label };
+      return { jatuhTempo: jt, nama: x.sumber, ref: x.noRef||x.id, sisa: parseFloat(x.nominal)||0, sumber: label, itemId: x.id||'' };
     }));
-  return renderForecastWithChart(combined, 'Forecast Penerimaan', 'terima');
+  // Fetch saldo data for projection
+  var fd = await getFinancialData();
+  var saldoKas = 0;
+  fd.akun.filter(function(a){ return a.kategori === 'Aset Lancar'; }).forEach(function(a){
+    if (fd.saldo[a.kode]) saldoKas += fd.saldo[a.kode].net;
+  });
+  return renderForecastWithChart(combined, 'Forecast Penerimaan', 'terima', { saldoKas: saldoKas });
 }
-function renderForecastWithChart(list, title, chartId) {
+function renderForecastWithChart(list, title, chartId, saldoData) {
+  saldoData = saldoData || {};
+  var saldoKas = saldoData.saldoKas || 0;
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   const byMonth = {};
@@ -3277,15 +3291,54 @@ function renderForecastWithChart(list, title, chartId) {
         aksiBtn = '<button class="btn btn-xs btn-success" data-forecast-action="danamasuk" data-nama="' + safeNama + '" data-ref="' + safeRef + '" data-sisa="' + safeSisa + '" data-jt="' + safeJT + '" title="Catat Dana Masuk">📥 Catat</button>';
       }
     }
-    return '<tr><td class="fw-bold">' + (x.nama||'-') + '</td><td>' + (x.ref||'-') + '</td><td class="' + (od?'text-red fw-bold':'') + '">' + fmtDate(x.jatuhTempo) + '</td><td class="fw-bold">' + fmtRp(x.sisa) + '</td><td><span class="chip">' + (x.sumber||'-') + '</span></td><td><span class="badge ' + (od?'badge-danger':'badge-warning') + '">' + (od?'Overdue':'Upcoming') + '</span></td><td>' + aksiBtn + '</td></tr>';
+    // View/Detail button
+    var viewBtn = '';
+    var safeItemId = (x.itemId||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if (safeItemId) {
+      var sumberLower = (x.sumber||'').toLowerCase();
+      if (sumberLower.indexOf('permohonan') !== -1) {
+        viewBtn = '<button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + safeItemId + '\')" title="Lihat Detail">👁 View</button>';
+      } else if (sumberLower.indexOf('dana masuk') !== -1) {
+        viewBtn = '<button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + safeItemId + '\')" title="Lihat Detail">👁 View</button>';
+      }
+    }
+    return '<tr><td class="fw-bold">' + (x.nama||'-') + '</td><td>' + (x.ref||'-') + '</td><td class="' + (od?'text-red fw-bold':'') + '">' + fmtDate(x.jatuhTempo) + '</td><td class="fw-bold">' + fmtRp(x.sisa) + '</td><td><span class="chip">' + (x.sumber||'-') + '</span></td><td><span class="badge ' + (od?'badge-danger':'badge-warning') + '">' + (od?'Overdue':'Upcoming') + '</span></td><td>' + viewBtn + ' ' + aksiBtn + '</td></tr>';
   }).join('');
   var navBtn = chartId === 'bayar'
     ? '<button class="btn btn-sm btn-primary no-print" onclick="navigate(\'dana-permohonan\')" style="margin-left:auto">📤 Buka Permohonan Dana</button>'
     : '<button class="btn btn-sm btn-success no-print" onclick="navigate(\'dana-masuk\')" style="margin-left:auto">📥 Buka Dana Masuk</button>';
+
+  // Saldo projection calculation
+  // For the cross-forecast totals, we need to show both pembayaran and penerimaan context
+  // totalOutstanding = total from this forecast page's items
+  var proyeksiPengurangan = chartId === 'bayar' ? totalOutstanding : 0;
+  var estimasiPenerimaan = chartId === 'terima' ? totalOutstanding : 0;
+  var proyeksiSaldoAkhir = saldoKas - proyeksiPengurangan + estimasiPenerimaan;
+
+  var saldoProjectionHtml = '';
+  if (chartId === 'bayar') {
+    saldoProjectionHtml = '<div class="card" style="margin-bottom:12px;border-left:4px solid #1976d2">'
+      + '<div class="card-header"><h2>Proyeksi Pengurangan Saldo</h2></div>'
+      + '<div class="stats-row">'
+      + '<div class="stat-box" style="border-left:3px solid #1976d2"><div class="val">' + fmtRp(saldoKas) + '</div><div class="lbl">Saldo Kas/Bank Saat Ini</div></div>'
+      + '<div class="stat-box" style="border-left:3px solid #e53935"><div class="val text-red">' + fmtRp(proyeksiPengurangan) + '</div><div class="lbl">Proyeksi Pengurangan</div></div>'
+      + '<div class="stat-box" style="border-left:3px solid ' + (proyeksiSaldoAkhir >= 0 ? '#43a047' : '#e53935') + '"><div class="val ' + (proyeksiSaldoAkhir >= 0 ? '' : 'text-red') + '">' + fmtRp(proyeksiSaldoAkhir) + '</div><div class="lbl">Proyeksi Saldo Setelah Forecast</div></div>'
+      + '</div></div>';
+  } else {
+    saldoProjectionHtml = '<div class="card" style="margin-bottom:12px;border-left:4px solid #43a047">'
+      + '<div class="card-header"><h2>Estimasi Penerimaan Saldo</h2></div>'
+      + '<div class="stats-row">'
+      + '<div class="stat-box" style="border-left:3px solid #1976d2"><div class="val">' + fmtRp(saldoKas) + '</div><div class="lbl">Saldo Kas/Bank Saat Ini</div></div>'
+      + '<div class="stat-box" style="border-left:3px solid #43a047"><div class="val">' + fmtRp(estimasiPenerimaan) + '</div><div class="lbl">Estimasi Penerimaan</div></div>'
+      + '<div class="stat-box" style="border-left:3px solid ' + ((saldoKas + estimasiPenerimaan) >= 0 ? '#43a047' : '#e53935') + '"><div class="val">' + fmtRp(saldoKas + estimasiPenerimaan) + '</div><div class="lbl">Proyeksi Saldo Setelah Forecast</div></div>'
+      + '</div></div>';
+  }
+
   return '<div class="page-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' + (chartId==='terima'?'📈':'📉') + ' ' + title + navBtn + '</div>'
     + '<div class="stats-row"><div class="stat-box red"><div class="val">' + fmtRp(overdue.reduce(function(s,x){ return s+(x.sisa||0); },0)) + '</div><div class="lbl">Overdue</div></div>'
     + '<div class="stat-box orange"><div class="val">' + fmtRp(totalOutstanding) + '</div><div class="lbl">Total Outstanding</div></div>'
     + '<div class="stat-box"><div class="val">' + list.length + '</div><div class="lbl">Jumlah Item</div></div></div>'
+    + saldoProjectionHtml
     + '<div class="card"><div class="card-header"><h2>Grafik Forecast Per Bulan (6 Bulan ke Depan)</h2></div>'
     + '<div style="display:flex;align-items:flex-end;gap:3px;height:140px;padding:10px 0">' + bars + '</div></div>'
     + '<div class="card"><div class="card-header"><h2>Grafik Forecast Per Minggu (8 Minggu ke Depan)</h2></div>'
