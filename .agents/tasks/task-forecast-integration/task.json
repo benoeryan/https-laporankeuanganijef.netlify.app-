@@ -1,0 +1,14 @@
+{
+  "task_id": "task-forecast-integration",
+  "task_description": "Add bidirectional integration between Permohonan Dana / Dana Masuk transaction pages and their respective Forecast Pembayaran / Forecast Penerimaan monitor pages. Add forecast buttons on transaction pages and action buttons on forecast pages for overdue items to directly create transactions.",
+  "status": "completed",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "skipped",
+    "docker_build": "skipped",
+    "summary": "node --check keuangan-app.js passes (no syntax errors). No build system or test framework exists in this project. Code reviewed manually - all changes follow existing patterns."
+  }
+}

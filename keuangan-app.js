@@ -3072,14 +3072,14 @@ function renderForecastWithChart(list, title, chartId) {
     var od = x.jatuhTempo && new Date(x.jatuhTempo) < now;
     var aksiBtn = '';
     if (od) {
-      var escapedNama = (x.nama||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      var escapedRef = (x.ref||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      var escapedSisa = x.sisa||0;
-      var escapedJT = (x.jatuhTempo||'').replace(/'/g, "\\'");
+      var safeNama = (x.nama||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      var safeRef = (x.ref||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      var safeSisa = parseFloat(x.sisa)||0;
+      var safeJT = (x.jatuhTempo||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       if (chartId === 'bayar') {
-        aksiBtn = '<button class="btn btn-xs btn-primary" onclick="prefillPermohonanFromForecast(\'' + escapedNama + '\',\'' + escapedRef + '\',' + escapedSisa + ',\'' + escapedJT + '\')" title="Ajukan Permohonan Dana">📤 Ajukan</button>';
+        aksiBtn = '<button class="btn btn-xs btn-primary" data-forecast-action="permohonan" data-nama="' + safeNama + '" data-ref="' + safeRef + '" data-sisa="' + safeSisa + '" data-jt="' + safeJT + '" title="Ajukan Permohonan Dana">📤 Ajukan</button>';
       } else {
-        aksiBtn = '<button class="btn btn-xs btn-success" onclick="prefillDanaMasukFromForecast(\'' + escapedNama + '\',\'' + escapedRef + '\',' + escapedSisa + ',\'' + escapedJT + '\')" title="Catat Dana Masuk">📥 Catat</button>';
+        aksiBtn = '<button class="btn btn-xs btn-success" data-forecast-action="danamasuk" data-nama="' + safeNama + '" data-ref="' + safeRef + '" data-sisa="' + safeSisa + '" data-jt="' + safeJT + '" title="Catat Dana Masuk">📥 Catat</button>';
       }
     }
     return '<tr><td class="fw-bold">' + (x.nama||'-') + '</td><td>' + (x.ref||'-') + '</td><td class="' + (od?'text-red fw-bold':'') + '">' + fmtDate(x.jatuhTempo) + '</td><td class="fw-bold">' + fmtRp(x.sisa) + '</td><td><span class="chip">' + (x.sumber||'-') + '</span></td><td><span class="badge ' + (od?'badge-danger':'badge-warning') + '">' + (od?'Overdue':'Upcoming') + '</span></td><td>' + aksiBtn + '</td></tr>';
@@ -3101,37 +3101,81 @@ function renderForecastWithChart(list, title, chartId) {
 }
 
 // ===== PREFILL FUNCTIONS FOR FORECAST INTEGRATION =====
+
+// Helper: poll for element existence instead of fixed setTimeout
+function waitForElement(id, callback, maxWait) {
+  maxWait = maxWait || 3000;
+  var interval = 50;
+  var elapsed = 0;
+  var timer = setInterval(function() {
+    var el = document.getElementById(id);
+    if (el) {
+      clearInterval(timer);
+      callback();
+    } else {
+      elapsed += interval;
+      if (elapsed >= maxWait) {
+        clearInterval(timer);
+        console.warn('waitForElement: timeout waiting for #' + id);
+      }
+    }
+  }, interval);
+}
+
+// Helper: set value and dispatch input event to trigger formatting/validation
+function setInputValue(el, value) {
+  if (!el) return;
+  el.value = value;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function prefillPermohonanFromForecast(nama, ref, sisa, jatuhTempo) {
   navigate('dana-permohonan');
-  setTimeout(function() {
+  waitForElement('pd-pemohon', function() {
     var elPemohon = document.getElementById('pd-pemohon');
     var elNopo = document.getElementById('pd-nopo');
     var elNominal = document.getElementById('pd-nominal');
     var elJt = document.getElementById('pd-jt');
     var elKet = document.getElementById('pd-ket');
-    if (elPemohon) elPemohon.value = nama || '';
-    if (elNopo) elNopo.value = ref || '';
-    if (elNominal) { elNominal.value = formatNominalValue(sisa); }
-    if (elJt) elJt.value = jatuhTempo || '';
-    if (elKet) elKet.value = 'Dari Forecast Pembayaran - Ref: ' + (ref||'-') + ', Jatuh Tempo: ' + (jatuhTempo||'-');
-  }, 300);
+    setInputValue(elPemohon, nama || '');
+    setInputValue(elNopo, ref || '');
+    if (elNominal) { setInputValue(elNominal, formatNominalValue(sisa)); }
+    setInputValue(elJt, jatuhTempo || '');
+    setInputValue(elKet, 'Dari Forecast Pembayaran - Ref: ' + (ref||'-') + ', Jatuh Tempo: ' + (jatuhTempo||'-'));
+  });
 }
 
 function prefillDanaMasukFromForecast(nama, ref, sisa, jatuhTempo) {
   navigate('dana-masuk');
-  setTimeout(function() {
+  waitForElement('dm-sumber', function() {
     var elSumber = document.getElementById('dm-sumber');
     var elRef = document.getElementById('dm-ref');
     var elNominal = document.getElementById('dm-nominal');
     var elTgl = document.getElementById('dm-tgl');
     var elKet = document.getElementById('dm-ket');
-    if (elSumber) elSumber.value = nama || '';
-    if (elRef) elRef.value = ref || '';
-    if (elNominal) { elNominal.value = formatNominalValue(sisa); }
-    if (elTgl) elTgl.value = jatuhTempo || today();
-    if (elKet) elKet.value = 'Dari Forecast Penerimaan - Ref: ' + (ref||'-') + ', Jatuh Tempo: ' + (jatuhTempo||'-');
-  }, 300);
+    setInputValue(elSumber, nama || '');
+    setInputValue(elRef, ref || '');
+    if (elNominal) { setInputValue(elNominal, formatNominalValue(sisa)); }
+    setInputValue(elTgl, jatuhTempo || today());
+    setInputValue(elKet, 'Dari Forecast Penerimaan - Ref: ' + (ref||'-') + ', Jatuh Tempo: ' + (jatuhTempo||'-'));
+  });
 }
+
+// Event delegation for forecast action buttons (avoids inline onclick XSS risk)
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-forecast-action]');
+  if (!btn) return;
+  var action = btn.getAttribute('data-forecast-action');
+  var nama = btn.getAttribute('data-nama') || '';
+  var ref = btn.getAttribute('data-ref') || '';
+  var sisa = parseFloat(btn.getAttribute('data-sisa')) || 0;
+  var jt = btn.getAttribute('data-jt') || '';
+  if (action === 'permohonan') {
+    prefillPermohonanFromForecast(nama, ref, sisa, jt);
+  } else if (action === 'danamasuk') {
+    prefillDanaMasukFromForecast(nama, ref, sisa, jt);
+  }
+});
 
 // [REMOVED] Old renderActualBayar/renderActualTerima — replaced by improved version below
 async function renderActualBayar() {
@@ -6184,9 +6228,9 @@ async function renderPermohonanDana() {
   const myLayer = (approvers.find(function(a){ return a.email === KU.email || a.role === KU.role; }) || {}).layer;
   const pendingForMe = list.filter(function(x){ return x.status === 'Pending Layer ' + myLayer; }).length;
 
-  // Forecast pembayaran - hitung overdue
+  // Forecast pembayaran - hitung overdue (reuse already-fetched permohonan list)
   const upListForecast = (await KDB.getAll('utangpiutang')).filter(function(x){ return x.tipe === 'Utang' && parseFloat(x.sisa) > 0; });
-  const pdPendingForecast = (await KDB.getAll('permohonan')).filter(function(x){ return x.sumber !== 'import-sheets' && x.status && (x.status === STATUS.DRAFT || x.status === STATUS.PENDING_L1); });
+  const pdPendingForecast = list.filter(function(x){ return x.sumber !== 'import-sheets' && x.status && (x.status === STATUS.DRAFT || x.status === STATUS.PENDING_L1); });
   const forecastBayarList = upListForecast.map(function(x){ return { jatuhTempo: x.jatuhTempo, sisa: parseFloat(x.sisa)||0 }; })
     .concat(pdPendingForecast.map(function(x){ return { jatuhTempo: x.jatuhTempo, sisa: parseFloat(x.nominal)||0 }; }));
   const nowPD = new Date();
@@ -6478,9 +6522,9 @@ async function renderDanaMasuk() {
   const akunTerimaOpts = await getAkunOptions('Aset Lancar');
   const akunKreditOpts = await getAkunOptions('Pendapatan');
 
-  // Forecast penerimaan - hitung overdue
+  // Forecast penerimaan - hitung overdue (reuse already-fetched danamasuk list)
   const upListForecastDM = (await KDB.getAll('utangpiutang')).filter(function(x){ return x.tipe === 'Piutang' && parseFloat(x.sisa) > 0; });
-  const dmPendingForecast = (await KDB.getAll('danamasuk')).filter(function(x){ return x.sumber !== 'import-sheets' && x.status && (x.status === STATUS.DRAFT || x.status === STATUS.PENDING_L1); });
+  const dmPendingForecast = list.filter(function(x){ return x.sumber !== 'import-sheets' && x.status && (x.status === STATUS.DRAFT || x.status === STATUS.PENDING_L1); });
   const forecastTerimaList = upListForecastDM.map(function(x){ return { jatuhTempo: x.jatuhTempo, sisa: parseFloat(x.sisa)||0 }; })
     .concat(dmPendingForecast.map(function(x){ return { jatuhTempo: x.tanggal, sisa: parseFloat(x.nominal)||0 }; }));
   const nowDM = new Date();
