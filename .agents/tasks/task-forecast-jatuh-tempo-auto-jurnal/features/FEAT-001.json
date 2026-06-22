@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Change forecast logic to use jatuh tempo date as the criteria and add auto-journal when jatuh tempo arrives for Approved Final items",
-  "status": "completed",
+  "status": "in_progress",
   "steps": [
     "1. Modify renderForecastBayar() at line ~3006 in keuangan-app.js: Remove the status-based filter (STATUS.DRAFT || STATUS.PENDING_L1). Instead, include ALL permohonan items (from system input, not import-sheets) whose jatuh tempo date has NOT yet arrived (jatuhTempo > today). Also include items that are Approved Final but jatuhTempo > today. Keep the utangpiutang (Utang with sisa>0) filter unchanged but also apply jatuhTempo > today filter to those entries.",
     "2. Modify renderForecastTerima() at line ~3014 in keuangan-app.js: Same logic change - include ALL danamasuk items (from system input, not import-sheets) whose jatuh tempo has NOT yet arrived. Use x.tanggal as jatuh tempo field for dana masuk (same as current code). Keep utangpiutang (Piutang with sisa>0) with jatuhTempo > today.",

@@ -2085,9 +2085,14 @@ async function integrasiPermohonanDanaMasukKeJurnal() {
 }
 
 // ===== AUTO-JURNAL JATUH TEMPO =====
+// NOTE: _autoJurnalRunning is an in-memory lock that prevents duplicate execution
+// within a single browser tab/session only. It does NOT prevent cross-tab or
+// cross-device concurrency. For a shared financial app, a Firebase transaction or
+// per-record lock field would be needed to fully prevent duplicate journals across
+// multiple concurrent sessions. This is an accepted limitation for now.
 var _autoJurnalRunning = false;
 async function autoJurnalJatuhTempo() {
-  if (_autoJurnalRunning) return;
+  if (_autoJurnalRunning) return { allPD: [], allDM: [], allJurnal: [] };
   _autoJurnalRunning = true;
   try {
     var todayStr = today();
@@ -2116,62 +2121,81 @@ async function autoJurnalJatuhTempo() {
     });
 
     if (pdReady.length === 0 && dmReady.length === 0) {
-      return;
+      return { allPD: allPD, allDM: allDM, allJurnal: allJurnal };
     }
 
     var count = 0;
+    var errors = [];
 
     // Proses Permohonan Dana -> Jurnal (Debit Beban, Kredit Kas/Bank)
     for (var i = 0; i < pdReady.length; i++) {
       var p = pdReady[i];
-      var akunDebit = p.akunDebit || '5-2200';
-      var akunKredit = p.akunKredit || await getAkunKasBank();
-      var jurnalId = genId('JU');
-      await KDB.save('jurnal', jurnalId, {
-        id: jurnalId,
-        tanggal: p.jatuhTempo || today(),
-        keterangan: p.keterangan || ('Pembayaran - ' + p.namaPemohon),
-        noRef: p.noPOInvoice || p.id,
-        tipe: 'umum', sumber: 'auto-jatuh-tempo',
-        meta: { permohonanId: p.id, pemohon: p.namaPemohon },
-        lines: [
-          { akun: akunDebit, ket: p.keterangan || ('Pembayaran ' + p.namaPemohon), debit: p.nominal, kredit: 0 },
-          { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank||'Bank'), debit: 0, kredit: p.nominal }
-        ],
-        totalDebit: p.nominal, totalKredit: p.nominal,
-        createdBy: 'system-auto-jatuh-tempo', createdAt: new Date().toISOString()
-      });
-      await KDB.save('permohonan', p.id, Object.assign({}, p, { jurnalId: jurnalId, jurnalCreatedAt: new Date().toISOString() }));
-      count++;
+      try {
+        var akunDebit = p.akunDebit || '5-2200';
+        var akunKredit = p.akunKredit || await getAkunKasBank();
+        var jurnalId = genId('JU');
+        await KDB.save('jurnal', jurnalId, {
+          id: jurnalId,
+          tanggal: p.jatuhTempo || today(),
+          keterangan: p.keterangan || ('Pembayaran - ' + p.namaPemohon),
+          noRef: p.noPOInvoice || p.id,
+          tipe: 'umum', sumber: 'auto-jatuh-tempo',
+          meta: { permohonanId: p.id, pemohon: p.namaPemohon },
+          lines: [
+            { akun: akunDebit, ket: p.keterangan || ('Pembayaran ' + p.namaPemohon), debit: p.nominal, kredit: 0 },
+            { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank||'Bank'), debit: 0, kredit: p.nominal }
+          ],
+          totalDebit: p.nominal, totalKredit: p.nominal,
+          createdBy: 'system-auto-jatuh-tempo', createdAt: new Date().toISOString()
+        });
+        await KDB.save('permohonan', p.id, Object.assign({}, p, { jurnalId: jurnalId, jurnalCreatedAt: new Date().toISOString() }));
+        count++;
+      } catch (e) {
+        errors.push('Permohonan ' + p.id + ': ' + (e.message || e));
+      }
     }
 
     // Proses Dana Masuk -> Jurnal (Debit Kas/Bank, Kredit Pendapatan)
     for (var i = 0; i < dmReady.length; i++) {
       var d = dmReady[i];
-      var akunDebitDM = d.akunTerima || await getAkunKasBank();
-      var akunKreditDM = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-')) ? d.kategori : '4-1000';
-      var jurnalIdDM = genId('JU');
-      await KDB.save('jurnal', jurnalIdDM, {
-        id: jurnalIdDM,
-        tanggal: d.tanggal || today(),
-        keterangan: d.keterangan || ('Dana masuk dari ' + d.sumber),
-        noRef: d.noRef || d.id,
-        tipe: 'umum', sumber: 'auto-jatuh-tempo',
-        meta: { danaMasukId: d.id, sumber: d.sumber },
-        lines: [
-          { akun: akunDebitDM, ket: 'Dana masuk dari ' + d.sumber, debit: d.nominal, kredit: 0 },
-          { akun: akunKreditDM, ket: d.keterangan || d.sumber, debit: 0, kredit: d.nominal }
-        ],
-        totalDebit: d.nominal, totalKredit: d.nominal,
-        createdBy: 'system-auto-jatuh-tempo', createdAt: new Date().toISOString()
-      });
-      await KDB.save('danamasuk', d.id, Object.assign({}, d, { jurnalId: jurnalIdDM, jurnalCreatedAt: new Date().toISOString() }));
-      count++;
+      try {
+        var akunDebitDM = d.akunTerima || await getAkunKasBank();
+        var akunKreditDM = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-')) ? d.kategori : '4-1000';
+        var jurnalIdDM = genId('JU');
+        await KDB.save('jurnal', jurnalIdDM, {
+          id: jurnalIdDM,
+          tanggal: d.tanggal || today(),
+          keterangan: d.keterangan || ('Dana masuk dari ' + d.sumber),
+          noRef: d.noRef || d.id,
+          tipe: 'umum', sumber: 'auto-jatuh-tempo',
+          meta: { danaMasukId: d.id, sumber: d.sumber },
+          lines: [
+            { akun: akunDebitDM, ket: 'Dana masuk dari ' + d.sumber, debit: d.nominal, kredit: 0 },
+            { akun: akunKreditDM, ket: d.keterangan || d.sumber, debit: 0, kredit: d.nominal }
+          ],
+          totalDebit: d.nominal, totalKredit: d.nominal,
+          createdBy: 'system-auto-jatuh-tempo', createdAt: new Date().toISOString()
+        });
+        await KDB.save('danamasuk', d.id, Object.assign({}, d, { jurnalId: jurnalIdDM, jurnalCreatedAt: new Date().toISOString() }));
+        count++;
+      } catch (e) {
+        errors.push('DanaMasuk ' + d.id + ': ' + (e.message || e));
+      }
     }
 
     if (count > 0) {
       showAlert('Auto-jurnal: ' + count + ' transaksi telah dijurnalkan (jatuh tempo tercapai)', 'info');
     }
+    if (errors.length > 0) {
+      showAlert('Auto-jurnal gagal untuk ' + errors.length + ' item: ' + errors.join('; '), 'warning');
+    }
+
+    // Reload data after modifications so callers get fresh state
+    allPD = await KDB.getAll('permohonan');
+    allDM = await KDB.getAll('danamasuk');
+    allJurnal = await KDB.getAll('jurnal');
+
+    return { allPD: allPD, allDM: allDM, allJurnal: allJurnal };
   } finally {
     _autoJurnalRunning = false;
   }
@@ -3097,38 +3121,69 @@ async function hapusUP(id) {
 }
 
 async function renderForecastBayar() {
-  await autoJurnalJatuhTempo();
+  var cached = await autoJurnalJatuhTempo();
   var todayStr = today();
-  var allJurnal = await KDB.getAll('jurnal');
+  var allJurnal = cached.allJurnal && cached.allJurnal.length ? cached.allJurnal : await KDB.getAll('jurnal');
   var jurnalIds = allJurnal.map(function(j){ return j.id; });
-  const upList = (await KDB.getAll('utangpiutang')).filter(function(x){ return x.tipe === 'Utang' && parseFloat(x.sisa) > 0 && x.jatuhTempo && x.jatuhTempo > todayStr; });
+  // Include utangpiutang with jatuhTempo > today, AND those without jatuhTempo (legacy/unknown due date)
+  var allUP = await KDB.getAll('utangpiutang');
+  const upList = allUP.filter(function(x){ return x.tipe === 'Utang' && parseFloat(x.sisa) > 0 && (!x.jatuhTempo || x.jatuhTempo > todayStr); });
   // Forecast: semua permohonan yang jatuh tempo belum tiba, belum dijurnal
-  const pdForecast = (await KDB.getAll('permohonan')).filter(function(x){
+  var allPD = cached.allPD && cached.allPD.length ? cached.allPD : await KDB.getAll('permohonan');
+  const pdForecast = allPD.filter(function(x){
     if (x.sumber === 'import-sheets') return false;
-    if (!x.jatuhTempo || x.jatuhTempo <= todayStr) return false;
     if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1) return false;
-    return true;
+    // Include items with jatuhTempo > today (future due date)
+    if (x.jatuhTempo && x.jatuhTempo > todayStr) return true;
+    // Also include overdue items (jatuhTempo <= today) that are NOT Approved Final
+    // These need visibility so users know they are overdue and pending approval
+    if (x.jatuhTempo && x.jatuhTempo <= todayStr && x.status !== STATUS.APPROVED) return true;
+    // Items without jatuhTempo: include if not yet journalized
+    if (!x.jatuhTempo) return true;
+    return false;
   });
-  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo, nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: 'Utang' }; })
-    .concat(pdForecast.map(function(x){ return { jatuhTempo: x.jatuhTempo, nama: x.namaPemohon, ref: x.noPOInvoice||x.id, sisa: parseFloat(x.nominal)||0, sumber: 'Permohonan - ' + (x.status||'Draft') }; }));
+  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Utang' : 'Utang (tanpa jatuh tempo)' }; })
+    .concat(pdForecast.map(function(x){
+      var label = 'Permohonan - ' + (x.status||'Draft');
+      if (x.jatuhTempo && x.jatuhTempo <= todayStr && x.status !== STATUS.APPROVED) {
+        label = 'Permohonan - OVERDUE (' + (x.status||'Draft') + ')';
+      }
+      return { jatuhTempo: x.jatuhTempo || '', nama: x.namaPemohon, ref: x.noPOInvoice||x.id, sisa: parseFloat(x.nominal)||0, sumber: label };
+    }));
   return renderForecastWithChart(combined, 'Forecast Pembayaran', 'bayar');
 }
 async function renderForecastTerima() {
-  await autoJurnalJatuhTempo();
+  var cached = await autoJurnalJatuhTempo();
   var todayStr = today();
-  var allJurnal = await KDB.getAll('jurnal');
+  var allJurnal = cached.allJurnal && cached.allJurnal.length ? cached.allJurnal : await KDB.getAll('jurnal');
   var jurnalIds = allJurnal.map(function(j){ return j.id; });
-  const upList = (await KDB.getAll('utangpiutang')).filter(function(x){ return x.tipe === 'Piutang' && parseFloat(x.sisa) > 0 && x.jatuhTempo && x.jatuhTempo > todayStr; });
+  // Include utangpiutang with jatuhTempo > today, AND those without jatuhTempo (legacy/unknown due date)
+  var allUP = await KDB.getAll('utangpiutang');
+  const upList = allUP.filter(function(x){ return x.tipe === 'Piutang' && parseFloat(x.sisa) > 0 && (!x.jatuhTempo || x.jatuhTempo > todayStr); });
   // Forecast: semua dana masuk yang jatuh tempo belum tiba, belum dijurnal
-  const dmForecast = (await KDB.getAll('danamasuk')).filter(function(x){
+  var allDM = cached.allDM && cached.allDM.length ? cached.allDM : await KDB.getAll('danamasuk');
+  const dmForecast = allDM.filter(function(x){
     if (x.sumber === 'import-sheets') return false;
-    var jt = x.tanggal || '';
-    if (!jt || jt <= todayStr) return false;
     if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1) return false;
-    return true;
+    var jt = x.tanggal || '';
+    // Include items with tanggal > today (future due date)
+    if (jt && jt > todayStr) return true;
+    // Also include overdue items (tanggal <= today) that are NOT Approved Final
+    // These need visibility so users know they are overdue and pending approval
+    if (jt && jt <= todayStr && x.status !== STATUS.APPROVED) return true;
+    // Items without tanggal: include if not yet journalized
+    if (!jt) return true;
+    return false;
   });
-  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo, nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: 'Piutang' }; })
-    .concat(dmForecast.map(function(x){ return { jatuhTempo: x.tanggal, nama: x.sumber, ref: x.noRef||x.id, sisa: parseFloat(x.nominal)||0, sumber: 'Dana Masuk - ' + (x.status||'Draft') }; }));
+  const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Piutang' : 'Piutang (tanpa jatuh tempo)' }; })
+    .concat(dmForecast.map(function(x){
+      var jt = x.tanggal || '';
+      var label = 'Dana Masuk - ' + (x.status||'Draft');
+      if (jt && jt <= todayStr && x.status !== STATUS.APPROVED) {
+        label = 'Dana Masuk - OVERDUE (' + (x.status||'Draft') + ')';
+      }
+      return { jatuhTempo: jt, nama: x.sumber, ref: x.noRef||x.id, sisa: parseFloat(x.nominal)||0, sumber: label };
+    }));
   return renderForecastWithChart(combined, 'Forecast Penerimaan', 'terima');
 }
 function renderForecastWithChart(list, title, chartId) {
