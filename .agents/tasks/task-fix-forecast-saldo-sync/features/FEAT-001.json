@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Fix forecast showing empty (0 items) and fix saldo sync issues caused by incorrect journal creation and nominal string handling",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1: Fix renderForecastBayar() filter in keuangan-app.js (around line 3133). The current filter at line `if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1) return false;` MUST be changed so that items with jatuhTempo > todayStr are ALWAYS included in forecast regardless of jurnalId. The new logic should be: (a) if sumber is import-sheets, exclude; (b) if jatuhTempo > today, ALWAYS include (this is the main forecast purpose - show future payments regardless of status or jurnalId); (c) if jatuhTempo <= today OR no jatuhTempo: exclude only if already properly journalized (has valid jurnalId AND status is Approved Final); otherwise include (pending items, items without journal, etc).",
     "Step 2: Fix renderForecastTerima() filter in keuangan-app.js (around line 3165). Same logic as Step 1 but for dana masuk. The current filter excludes items with valid jurnalId. Fix: if tanggal > today, ALWAYS include. If tanggal <= today or no tanggal: exclude only if properly journalized AND Approved Final.",
@@ -26,5 +26,5 @@
     "Run: cd /projects/sandbox/https-laporankeuanganijef.netlify.app- && node --check keuangan-app.js"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 6 bugs fixed successfully. node --check passes. Key changes: (1) Forecast filters now use priority logic - future items always included first, past-due items only excluded if both Approved Final AND journalized. (2) Manual integration function now respects jatuhTempo boundary. (3) All nominal values wrapped in parseFloat()||0 for journal creation. (4) viewBankRecDetail uses parseFloat for saldo totals."
 }
