@@ -238,6 +238,21 @@ textarea{resize:vertical;min-height:70px}
 /* SIDEBAR TOGGLE BTN */
 .sidebar-toggle{position:fixed;bottom:20px;right:20px;background:#1a237e;color:white;border:none;border-radius:50%;width:44px;height:44px;font-size:1.2rem;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:100;display:none}
 @media(max-width:768px){.sidebar-toggle{display:flex;align-items:center;justify-content:center}}
+
+/* FVA CHART STYLES */
+@keyframes fvaFadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fvaDrawLine{from{stroke-dashoffset:2000}to{stroke-dashoffset:0}}
+@keyframes fvaPulse{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
+
+.fva-chart-svg{animation:fvaFadeIn 0.6s ease-out both}
+.fva-chart-svg .fva-line{stroke-dasharray:2000;stroke-dashoffset:2000;animation:fvaDrawLine 1.5s ease-out 0.3s forwards}
+.fva-chart-svg .fva-area{opacity:0;animation:fvaFadeIn 0.8s ease-out 0.5s forwards}
+.fva-chart-svg .fva-dot{transition:r 0.2s ease, filter 0.2s ease;transform-origin:center}
+
+.fva-tooltip{position:absolute;background:linear-gradient(135deg,#1e293b,#334155);color:#fff;padding:8px 14px;border-radius:8px;font-size:0.78rem;pointer-events:none;white-space:nowrap;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,0.25);opacity:0;visibility:hidden;transition:opacity 0.2s ease,visibility 0.2s ease;font-weight:500}
+.fva-tooltip::after{content:'';position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid #334155}
+
+#fva-charts-container{transition:opacity 0.25s ease,transform 0.25s ease}
 </style>
 </head>
 <body>

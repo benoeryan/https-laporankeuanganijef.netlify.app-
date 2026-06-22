@@ -3592,23 +3592,63 @@ function buildLineChart(datasets, labels, chartId) {
   var pointCount = labels.length;
   var stepX = pointCount > 1 ? chartW / (pointCount - 1) : chartW;
 
-  // Grid lines (5 horizontal)
+  // Vibrant modern color palette
+  var vibrantColors = ['#6366f1', '#06b6d4', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
+  datasets.forEach(function(ds, i) {
+    if (!ds.color || ds.color === '#ff9800') ds.color = vibrantColors[i % vibrantColors.length];
+    else if (ds.color === '#1a237e') ds.color = '#3b82f6';
+    else if (ds.color === '#4caf50') ds.color = '#10b981';
+  });
+
+  // SVG Defs - gradients, filters, and glow effects
+  var defs = '<defs>';
+  datasets.forEach(function(ds, idx) {
+    defs += '<linearGradient id="grad-' + chartId + '-' + idx + '" x1="0%" y1="0%" x2="0%" y2="100%">';
+    defs += '<stop offset="0%" stop-color="' + ds.color + '" stop-opacity="0.35"/>';
+    defs += '<stop offset="100%" stop-color="' + ds.color + '" stop-opacity="0.02"/>';
+    defs += '</linearGradient>';
+  });
+  defs += '<filter id="shadow-' + chartId + '" x="-20%" y="-20%" width="140%" height="140%">';
+  defs += '<feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.15)"/>';
+  defs += '</filter>';
+  defs += '<filter id="glow-' + chartId + '" x="-50%" y="-50%" width="200%" height="200%">';
+  defs += '<feGaussianBlur stdDeviation="3" result="blur"/>';
+  defs += '<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>';
+  defs += '</filter>';
+  defs += '</defs>';
+
+  // Grid lines (5 horizontal) - softer
   var gridLines = '';
   for (var g = 0; g <= 4; g++) {
     var gy = padTop + (chartH / 4) * g;
     var gVal = maxVal - (maxVal / 4) * g;
-    gridLines += '<line x1="' + padLeft + '" y1="' + gy + '" x2="' + (padLeft + chartW) + '" y2="' + gy + '" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,3"/>';
-    gridLines += '<text x="' + (padLeft - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="10" fill="#888">' + (gVal >= 1000000 ? (Math.round(gVal/1000000)) + 'jt' : gVal >= 1000 ? (Math.round(gVal/1000)) + 'rb' : Math.round(gVal)) + '</text>';
+    gridLines += '<line x1="' + padLeft + '" y1="' + gy + '" x2="' + (padLeft + chartW) + '" y2="' + gy + '" stroke="#f0f0f0" stroke-width="1"/>';
+    gridLines += '<text x="' + (padLeft - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="10" fill="#999" font-family="sans-serif">' + (gVal >= 1000000 ? (Math.round(gVal/1000000)) + 'jt' : gVal >= 1000 ? (Math.round(gVal/1000)) + 'rb' : Math.round(gVal)) + '</text>';
   }
 
   // X-axis labels
   var xLabels = '';
   for (var xi = 0; xi < pointCount; xi++) {
     var lx = padLeft + xi * stepX;
-    xLabels += '<text x="' + lx + '" y="' + (svgHeight - 10) + '" text-anchor="middle" font-size="10" fill="#555">' + labels[xi] + '</text>';
+    xLabels += '<text x="' + lx + '" y="' + (svgHeight - 10) + '" text-anchor="middle" font-size="10" fill="#666" font-family="sans-serif">' + labels[xi] + '</text>';
   }
 
-  // Lines and circles
+  // Area fills (gradient polygons below each line)
+  var areaHtml = '';
+  datasets.forEach(function(ds, dsIdx) {
+    var areaPoints = '';
+    for (var pi = 0; pi < pointCount; pi++) {
+      var px = padLeft + pi * stepX;
+      var py = padTop + chartH - (ds.data[pi] / maxVal) * chartH;
+      areaPoints += px + ',' + py + ' ';
+    }
+    // Close the polygon at the bottom
+    areaPoints += (padLeft + (pointCount - 1) * stepX) + ',' + (padTop + chartH) + ' ';
+    areaPoints += padLeft + ',' + (padTop + chartH);
+    areaHtml += '<polygon points="' + areaPoints + '" fill="url(#grad-' + chartId + '-' + dsIdx + ')" class="fva-area"/>';
+  });
+
+  // Lines with shadow and smooth joins
   var linesHtml = '';
   var circlesHtml = '';
   datasets.forEach(function(ds, dsIdx) {
@@ -3618,26 +3658,26 @@ function buildLineChart(datasets, labels, chartId) {
       var py = padTop + chartH - (ds.data[pi] / maxVal) * chartH;
       points.push(px + ',' + py);
     }
-    linesHtml += '<polyline points="' + points.join(' ') + '" fill="none" stroke="' + ds.color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    linesHtml += '<polyline points="' + points.join(' ') + '" fill="none" stroke="' + ds.color + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow-' + chartId + ')" class="fva-line"/>';
     for (var ci = 0; ci < pointCount; ci++) {
       var cx = padLeft + ci * stepX;
       var cy = padTop + chartH - (ds.data[ci] / maxVal) * chartH;
-      circlesHtml += '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="' + ds.color + '" stroke="#fff" stroke-width="2" style="cursor:pointer" '
-        + 'onmouseover="showLineChartTooltip(event,\'' + chartId + '\',\'' + ds.label + ': ' + fmtRp(ds.data[ci]).replace(/'/g, "\\'") + '\')" '
-        + 'onmouseout="hideLineChartTooltip(\'' + chartId + '\')" '
+      circlesHtml += '<circle cx="' + cx + '" cy="' + cy + '" r="6" fill="' + ds.color + '" stroke="#fff" stroke-width="2.5" class="fva-dot" style="cursor:pointer" '
+        + 'onmouseover="this.setAttribute(\'r\',\'9\');this.setAttribute(\'filter\',\'url(#glow-' + chartId + ')\');showLineChartTooltip(event,\'' + chartId + '\',\'' + ds.label + ': ' + fmtRp(ds.data[ci]).replace(/'/g, "\\'") + '\')" '
+        + 'onmouseout="this.setAttribute(\'r\',\'6\');this.removeAttribute(\'filter\');hideLineChartTooltip(\'' + chartId + '\')" '
         + 'onclick="showLineChartTooltip(event,\'' + chartId + '\',\'' + ds.label + ': ' + fmtRp(ds.data[ci]).replace(/'/g, "\\'") + '\')"/>';
     }
   });
 
-  // Axes
-  var axes = '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (padTop + chartH) + '" stroke="#bbb" stroke-width="1"/>';
-  axes += '<line x1="' + padLeft + '" y1="' + (padTop + chartH) + '" x2="' + (padLeft + chartW) + '" y2="' + (padTop + chartH) + '" stroke="#bbb" stroke-width="1"/>';
+  // Axes - subtle
+  var axes = '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (padTop + chartH) + '" stroke="#e0e0e0" stroke-width="1"/>';
+  axes += '<line x1="' + padLeft + '" y1="' + (padTop + chartH) + '" x2="' + (padLeft + chartW) + '" y2="' + (padTop + chartH) + '" stroke="#e0e0e0" stroke-width="1"/>';
 
-  return '<div style="position:relative;width:100%">'
-    + '<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" style="width:100%;height:auto;display:block">'
-    + gridLines + axes + xLabels + linesHtml + circlesHtml
+  return '<div class="fva-chart-wrap" style="position:relative;width:100%">'
+    + '<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" class="fva-chart-svg" style="width:100%;height:auto;display:block">'
+    + defs + gridLines + axes + xLabels + areaHtml + linesHtml + circlesHtml
     + '</svg>'
-    + '<div id="tooltip-' + chartId + '" style="display:none;position:absolute;background:#333;color:#fff;padding:6px 12px;border-radius:6px;font-size:0.78rem;pointer-events:none;white-space:nowrap;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.18)"></div>'
+    + '<div id="tooltip-' + chartId + '" class="fva-tooltip"></div>'
     + '</div>';
 }
 
@@ -3645,20 +3685,24 @@ function showLineChartTooltip(evt, chartId, text) {
   var tooltip = document.getElementById('tooltip-' + chartId);
   if (!tooltip) return;
   tooltip.textContent = text;
-  tooltip.style.display = 'block';
+  tooltip.style.opacity = '1';
+  tooltip.style.visibility = 'visible';
   var container = tooltip.parentElement;
   var rect = container.getBoundingClientRect();
-  var x = evt.clientX - rect.left + 10;
-  var y = evt.clientY - rect.top - 30;
-  if (x + 150 > rect.width) x = x - 160;
-  if (y < 0) y = 10;
+  var x = evt.clientX - rect.left + 12;
+  var y = evt.clientY - rect.top - 40;
+  if (x + 160 > rect.width) x = x - 170;
+  if (y < 0) y = 12;
   tooltip.style.left = x + 'px';
   tooltip.style.top = y + 'px';
 }
 
 function hideLineChartTooltip(chartId) {
   var tooltip = document.getElementById('tooltip-' + chartId);
-  if (tooltip) tooltip.style.display = 'none';
+  if (tooltip) {
+    tooltip.style.opacity = '0';
+    tooltip.style.visibility = 'hidden';
+  }
 }
 
 async function renderForecastVsActual() {
@@ -3763,15 +3807,46 @@ async function renderForecastVsActual() {
     .concat(dmActual.map(function(x){ return { tanggal: x.tanggal, jumlah: parseFloat(x.nominal)||0 }; }))
     .concat(filteredJurnalPend);
 
-  // === Calculate Saldo Kas/Bank (Aset Lancar) ===
-  var saldoKas = 0;
-  Object.keys(fd.saldo).forEach(function(kode) {
-    var s = fd.saldo[kode];
-    var kat = (s.akun.kategori || '').toLowerCase();
-    if (kat === 'aset lancar' || (kat.includes('aset') && kat.includes('lancar'))) {
-      saldoKas += s.net || 0;
+  // === Calculate Saldo Kas/Bank (BNI + Mandiri + Petty Cash only — matching dashboard) ===
+  var kasAkun = fd.akun.filter(function(a) {
+    var kat = (a.kategori || '').toLowerCase();
+    return kat === 'aset lancar' || (kat.includes('aset') && kat.includes('lancar'));
+  });
+  var dashKasAkunFva = kasAkun.filter(function(a) {
+    var n = (a.nama || '').toLowerCase();
+    return n.includes('bni') || n.includes('mandiri') || n.includes('petty');
+  });
+  if (!dashKasAkunFva.length) dashKasAkunFva = kasAkun.slice(0, 3);
+
+  // Petty cash saldo from pettycash collection (same as dashboard)
+  var pcSaldoAwalFva = parseFloat(await KDB.getSetting('pettycash_saldo', 0)) || 0;
+  var pcTxListFva = await KDB.getAll('pettycash');
+  var pcSaldoRealFva = pcSaldoAwalFva;
+  var tahunSkrgFva = new Date().getFullYear();
+  pcTxListFva.forEach(function(p) {
+    var tglTahun = p.tanggal ? parseInt(p.tanggal.substring(0, 4)) : 0;
+    if (tglTahun !== tahunSkrgFva) return;
+    var tipe = p.tipe || 'keluar';
+    if (!p.tipe) {
+      var ket2 = (p.keterangan || '').toLowerCase();
+      if (ket2.includes('top up') || ket2.includes('isi kas') || (p.kategori || '').toLowerCase().includes('masuk')) tipe = 'masuk';
+    }
+    if (tipe === 'masuk') pcSaldoRealFva += Math.abs(parseFloat(p.jumlah) || 0);
+    else pcSaldoRealFva -= Math.abs(parseFloat(p.jumlah) || 0);
+  });
+
+  // saldoKasBank = only BNI + Mandiri + Petty Cash (petty from collection)
+  var saldoKasBank = 0;
+  dashKasAkunFva.forEach(function(a) {
+    if ((a.nama || '').toLowerCase().includes('petty') || a.kode === '1-1101-3') {
+      saldoKasBank += pcSaldoRealFva;
+    } else {
+      saldoKasBank += (fd.saldo[a.kode] || {}).net || 0;
     }
   });
+
+  // totalAsetLancar = sum all Aset Lancar accounts
+  var totalAsetLancar = kasAkun.reduce(function(s, a) { return s + ((fd.saldo[a.kode] || {}).net || 0); }, 0);
 
   // === Calculate totals using same 6-month comparison window ===
   var now = new Date();
@@ -3869,8 +3944,8 @@ async function renderForecastVsActual() {
   var remainingForecastBayar = totalForecastBayar;
   var remainingForecastTerima = totalForecastTerima;
 
-  // Proyeksi = Saldo Aktual - Remaining Forecast Pengeluaran + Remaining Forecast Penerimaan
-  var proyeksiSaldo = saldoKas - remainingForecastBayar + remainingForecastTerima;
+  // Proyeksi = Saldo Kas/Bank - Remaining Forecast Pengeluaran + Remaining Forecast Penerimaan
+  var proyeksiSaldo = saldoKasBank - remainingForecastBayar + remainingForecastTerima;
 
   // === Store data globally for period switching ===
   window._fvaData = {
@@ -3878,7 +3953,8 @@ async function renderForecastVsActual() {
     forecastTerimaList: forecastTerimaList,
     actualBayarList: actualBayarList,
     actualTerimaList: actualTerimaList,
-    saldoKas: saldoKas,
+    saldoKasBank: saldoKasBank,
+    totalAsetLancar: totalAsetLancar,
     totalForecastBayar: totalForecastBayar,
     totalForecastTerima: totalForecastTerima,
     totalActualBayar: totalActualBayar,
@@ -3896,8 +3972,11 @@ async function renderForecastVsActual() {
     + '<div class="card-header"><h2>\uD83D\uDCB0 Proyeksi Saldo (Sinkronisasi Aktual & Forecast)</h2></div>'
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:4px 0">'
     + '<div style="background:#e3f2fd;border-radius:10px;padding:14px;text-align:center">'
-    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Saldo Aktual Sistem (dari Jurnal)</div>'
-    + '<div style="font-size:1.1rem;font-weight:700;color:#1a237e">' + fmtRp(saldoKas) + '</div></div>'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Saldo Kas/Bank (BNI + Mandiri + Petty Cash)</div>'
+    + '<div style="font-size:1.1rem;font-weight:700;color:#1a237e">' + fmtRp(saldoKasBank) + '</div></div>'
+    + '<div style="background:#f3e5f5;border-radius:10px;padding:14px;text-align:center">'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Total Aset Lancar</div>'
+    + '<div style="font-size:1.1rem;font-weight:700;color:#6a1b9a">' + fmtRp(totalAsetLancar) + '</div></div>'
     + '<div style="background:#fff3e0;border-radius:10px;padding:14px;text-align:center">'
     + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Actual Pengeluaran (Sudah Terjadi)</div>'
     + '<div style="font-size:1rem;font-weight:700;color:#e65100">' + fmtRp(totalActualBayar) + '</div></div>'
@@ -3912,7 +3991,7 @@ async function renderForecastVsActual() {
     + '<div style="font-size:1rem;font-weight:700;color:#2e7d32">' + fmtRp(remainingForecastTerima) + '</div></div>'
     + '<div style="background:' + (proyeksiSaldo >= 0 ? '#e8f5e9' : '#ffebee') + ';border-radius:10px;padding:14px;text-align:center;border:2px solid ' + (proyeksiSaldo >= 0 ? '#4caf50' : '#ef5350') + '">'
     + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Proyeksi Saldo Final</div>'
-    + '<div style="font-size:0.7rem;color:#888;margin-bottom:2px">(Saldo Aktual - Forecast Pengeluaran + Forecast Penerimaan)</div>'
+    + '<div style="font-size:0.7rem;color:#888;margin-bottom:2px">(Saldo Kas/Bank - Forecast Pengeluaran + Forecast Penerimaan)</div>'
     + '<div style="font-size:1.2rem;font-weight:700;color:' + (proyeksiSaldo >= 0 ? '#2e7d32' : '#c62828') + '">' + fmtRp(proyeksiSaldo) + '</div></div>'
     + '</div></div>';
 
@@ -3937,12 +4016,12 @@ async function renderForecastVsActual() {
     + tabBtnsHtml
     + '<div id="fva-charts-container">'
     + '<div class="card"><div class="card-header"><h2>Pembayaran: Forecast vs Actual</h2>'
-    + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
-    + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#1a237e;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
+    + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#6366f1;border-radius:2px;display:inline-block"></span>Forecast</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#3b82f6;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
     + '<div style="padding:10px 0">' + bayarLineChart + '</div></div>'
     + '<div class="card"><div class="card-header"><h2>Penerimaan: Forecast vs Actual</h2>'
-    + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
-    + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#4caf50;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
+    + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#6366f1;border-radius:2px;display:inline-block"></span>Forecast</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#10b981;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
     + '<div style="padding:10px 0">' + terimaLineChart + '</div></div>'
     + '<div class="card"><div class="card-header"><h2>Ringkasan Per Bulan</h2><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Bulan</th><th>Forecast Bayar</th><th>Actual Bayar</th><th>Selisih Bayar</th><th>Forecast Terima</th><th>Actual Terima</th><th>Selisih Terima</th></tr></thead>'
@@ -4117,20 +4196,26 @@ function switchForecastVsActualPeriod(period) {
       + '</tr>';
   }
 
-  // Update container
+  // Update container with smooth transition
   var container = document.getElementById('fva-charts-container');
   if (container) {
-    container.innerHTML = '<div class="card"><div class="card-header"><h2>Pembayaran: Forecast vs Actual <span style="font-size:0.75rem;color:#888;font-weight:400">(' + periodTitle + ')</span></h2>'
-      + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
-      + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#1a237e;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
-      + '<div style="padding:10px 0">' + bayarChart + '</div></div>'
-      + '<div class="card"><div class="card-header"><h2>Penerimaan: Forecast vs Actual <span style="font-size:0.75rem;color:#888;font-weight:400">(' + periodTitle + ')</span></h2>'
-      + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
-      + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#4caf50;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
-      + '<div style="padding:10px 0">' + terimaChart + '</div></div>'
-      + '<div class="card"><div class="card-header"><h2>Ringkasan (' + periodTitle + ')</h2><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
-      + '<div class="table-wrap"><table><thead><tr><th>Periode</th><th>Forecast Bayar</th><th>Actual Bayar</th><th>Selisih Bayar</th><th>Forecast Terima</th><th>Actual Terima</th><th>Selisih Terima</th></tr></thead>'
-      + '<tbody>' + tableRows + '</tbody></table></div></div>';
+    container.style.opacity = '0';
+    container.style.transform = 'translateY(8px)';
+    setTimeout(function() {
+      container.innerHTML = '<div class="card"><div class="card-header"><h2>Pembayaran: Forecast vs Actual <span style="font-size:0.75rem;color:#888;font-weight:400">(' + periodTitle + ')</span></h2>'
+        + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#6366f1;border-radius:2px;display:inline-block"></span>Forecast</span>'
+        + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#3b82f6;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
+        + '<div style="padding:10px 0">' + bayarChart + '</div></div>'
+        + '<div class="card"><div class="card-header"><h2>Penerimaan: Forecast vs Actual <span style="font-size:0.75rem;color:#888;font-weight:400">(' + periodTitle + ')</span></h2>'
+        + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#6366f1;border-radius:2px;display:inline-block"></span>Forecast</span>'
+        + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#10b981;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
+        + '<div style="padding:10px 0">' + terimaChart + '</div></div>'
+        + '<div class="card"><div class="card-header"><h2>Ringkasan (' + periodTitle + ')</h2><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
+        + '<div class="table-wrap"><table><thead><tr><th>Periode</th><th>Forecast Bayar</th><th>Actual Bayar</th><th>Selisih Bayar</th><th>Forecast Terima</th><th>Actual Terima</th><th>Selisih Terima</th></tr></thead>'
+        + '<tbody>' + tableRows + '</tbody></table></div></div>';
+      container.style.opacity = '1';
+      container.style.transform = 'translateY(0)';
+    }, 200);
   }
 }
 
