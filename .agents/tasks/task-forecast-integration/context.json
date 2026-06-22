@@ -1,0 +1,18 @@
+{
+  "project_type": "Vanilla JavaScript single-page application (financial management system)",
+  "language": "JavaScript (ES6+ with async/await)",
+  "build_system": "None - static files served by Netlify",
+  "test_framework": "None - no test framework present",
+  "build_command": "N/A - static site, no build step",
+  "test_command": "N/A - no tests present",
+  "verification_instructions": "Open index.html in a browser, login with superadmin/admin2026, navigate to Permohonan Dana and Dana Masuk pages and verify the new forecast buttons appear. Navigate to Forecast Pembayaran and Forecast Penerimaan pages and verify the action buttons for overdue items appear.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - pure static HTML/JS app with Firebase backend",
+  "environment_constraints": "No build system, no tests. Validation is done by reading the code for correctness. The app uses Firebase Firestore as backend via CDN imports.",
+  "contribution_requirements": "Push to feature branch, create PR to main",
+  "key_patterns": "All UI is rendered via JS functions returning HTML strings. Navigation uses navigate('section-id') which calls renderSection(id). Data is stored/retrieved via KDB.save/KDB.getAll with collection names like 'permohonan', 'danamasuk'. Forecast pages use renderForecastWithChart() helper. Forms use formatNominalInput for currency formatting. Status flow uses STATUS constants (DRAFT, PENDING_L1, etc.).",
+  "relevant_files": [
+    "keuangan-app.js"
+  ],
+  "directory_structure": "Single-level project: index.html (UI shell + CSS), keuangan-app.js (all app logic ~12000 lines), keuangan-firebase.js (Firebase/KDB layer), netlify/ (serverless functions)"
+}

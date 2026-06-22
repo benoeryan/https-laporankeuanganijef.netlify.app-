@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add bidirectional integration between Permohonan Dana / Dana Masuk pages and their respective Forecast pages. On Permohonan Dana, add a 'Forecast Pembayaran' button. On Dana Masuk, add a 'Forecast Penerimaan' button. On Forecast pages, add action buttons for overdue/due items that allow admin to directly create a Permohonan Dana or Dana Masuk entry pre-filled with the forecast item data.",
+  "status": "completed",
+  "steps": [
+    "In renderPermohonanDana() (line ~6131 in keuangan-app.js), add a 'Lihat Forecast Pembayaran' button in the page header area (after the page-title div). The button should call navigate('monitor-forecast-bayar'). Also add a small summary showing count of overdue forecast items.",
+    "In renderDanaMasuk() (line ~6410 in keuangan-app.js), add a 'Lihat Forecast Penerimaan' button in the page header area (after the page-title div). The button should call navigate('monitor-forecast-terima'). Also add a small summary showing count of overdue forecast items.",
+    "In renderForecastWithChart() (line ~3023 in keuangan-app.js), modify the table rows to add an action column. For items that are overdue (jatuhTempo < today), add a button: 'Ajukan Permohonan Dana' (for forecast bayar) or 'Catat Dana Masuk' (for forecast terima). The button should call a new function that navigates to the respective page and pre-fills form data.",
+    "Create a new function prefillPermohonanFromForecast(nama, ref, sisa, jatuhTempo) that navigates to 'dana-permohonan' and after a short delay fills in the form fields (pd-pemohon, pd-nopo, pd-nominal, pd-jt, pd-ket) with the forecast item data.",
+    "Create a new function prefillDanaMasukFromForecast(nama, ref, sisa, jatuhTempo) that navigates to 'dana-masuk' and after a short delay fills in the form fields (dm-sumber, dm-ref, dm-nominal, dm-tgl, dm-ket) with the forecast item data.",
+    "In the Forecast Pembayaran page, add a 'Buka Permohonan Dana' navigation button in the page header. In the Forecast Penerimaan page, add a 'Buka Dana Masuk' navigation button in the page header.",
+    "Pass the chartId ('bayar' or 'terima') context through to the table row rendering so that the correct prefill function is called based on which forecast page is being viewed."
+  ],
+  "acceptance_criteria": [
+    "Permohonan Dana page shows a 'Forecast Pembayaran' button that navigates to the forecast page",
+    "Dana Masuk page shows a 'Forecast Penerimaan' button that navigates to the forecast page",
+    "Forecast Pembayaran page shows action buttons on overdue items to create Permohonan Dana",
+    "Forecast Penerimaan page shows action buttons on overdue items to create Dana Masuk",
+    "Clicking an action button on an overdue forecast item navigates to the correct page and pre-fills the form with the item data",
+    "Forecast pages have navigation buttons back to Permohonan Dana / Dana Masuk respectively",
+    "The integration is bidirectional - users can navigate between forecast and transaction pages seamlessly"
+  ],
+  "verification": [
+    "Read the modified keuangan-app.js and verify: (1) renderPermohonanDana returns HTML with a forecast button, (2) renderDanaMasuk returns HTML with a forecast button, (3) renderForecastWithChart includes action buttons for overdue items, (4) prefillPermohonanFromForecast and prefillDanaMasukFromForecast functions exist and correctly populate form fields"
+  ],
+  "blocked_reason": null,
+  "findings": "Review fixes applied: (1) XSS - replaced inline onclick handlers with data-* attributes and document-level event delegation, with proper HTML entity escaping for all special characters. (2) setTimeout race - replaced 300ms fixed delay with polling via waitForElement helper (50ms interval, 3s max). (3) Duplicate DB reads - reused already-fetched 'list' variable in both renderPermohonanDana and renderDanaMasuk instead of re-fetching from KDB. (4) Input events - added setInputValue helper that dispatches 'input' event after setting .value, triggering formatNominalInput and any validation. node --check passes."
+}
