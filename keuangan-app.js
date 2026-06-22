@@ -3763,6 +3763,16 @@ async function renderForecastVsActual() {
     .concat(dmActual.map(function(x){ return { tanggal: x.tanggal, jumlah: parseFloat(x.nominal)||0 }; }))
     .concat(filteredJurnalPend);
 
+  // === Calculate Saldo Kas/Bank (Aset Lancar) ===
+  var saldoKas = 0;
+  Object.keys(fd.saldo).forEach(function(kode) {
+    var s = fd.saldo[kode];
+    var kat = (s.akun.kategori || '').toLowerCase();
+    if (kat === 'aset lancar' || (kat.includes('aset') && kat.includes('lancar'))) {
+      saldoKas += s.net || 0;
+    }
+  });
+
   // === Calculate totals using same 6-month comparison window ===
   var now = new Date();
   var windowStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -3854,10 +3864,52 @@ async function renderForecastVsActual() {
       + '</tr>';
   }).join('');
 
+  // === Store data globally for period switching ===
+  var proyeksiSaldo = saldoKas - totalForecastBayar + totalForecastTerima;
+  window._fvaData = {
+    forecastBayarList: forecastBayarList,
+    forecastTerimaList: forecastTerimaList,
+    actualBayarList: actualBayarList,
+    actualTerimaList: actualTerimaList,
+    saldoKas: saldoKas,
+    totalForecastBayar: totalForecastBayar,
+    totalForecastTerima: totalForecastTerima,
+    totalActualBayar: totalActualBayar,
+    totalActualTerima: totalActualTerima
+  };
+
   // === Build final HTML ===
   var windowLabel = months[windowStart.getMonth()] + ' ' + windowStart.getFullYear() + ' - ' + months[windowEnd.getMonth()] + ' ' + windowEnd.getFullYear();
+
+  // Proyeksi Saldo card
+  var proyeksiSaldoHtml = '<div class="card" style="border-left:4px solid #1a237e;margin-bottom:16px">'
+    + '<div class="card-header"><h2>\uD83D\uDCB0 Proyeksi Saldo</h2></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:4px 0">'
+    + '<div style="background:#e3f2fd;border-radius:10px;padding:14px;text-align:center">'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Saldo Kas/Bank Saat Ini</div>'
+    + '<div style="font-size:1.1rem;font-weight:700;color:#1a237e">' + fmtRp(saldoKas) + '</div></div>'
+    + '<div style="background:#ffebee;border-radius:10px;padding:14px;text-align:center">'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Total Forecast Pengeluaran</div>'
+    + '<div style="font-size:1.1rem;font-weight:700;color:#c62828">' + fmtRp(totalForecastBayar) + '</div></div>'
+    + '<div style="background:#e8f5e9;border-radius:10px;padding:14px;text-align:center">'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Total Forecast Pemasukan</div>'
+    + '<div style="font-size:1.1rem;font-weight:700;color:#2e7d32">' + fmtRp(totalForecastTerima) + '</div></div>'
+    + '<div style="background:' + (proyeksiSaldo >= 0 ? '#e8f5e9' : '#ffebee') + ';border-radius:10px;padding:14px;text-align:center;border:2px solid ' + (proyeksiSaldo >= 0 ? '#4caf50' : '#ef5350') + '">'
+    + '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">Proyeksi Saldo Setelah Forecast</div>'
+    + '<div style="font-size:1.2rem;font-weight:700;color:' + (proyeksiSaldo >= 0 ? '#2e7d32' : '#c62828') + '">' + fmtRp(proyeksiSaldo) + '</div></div>'
+    + '</div></div>';
+
+  // Tab buttons for period switching
+  var tabBtnStyle = 'padding:8px 18px;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600;transition:all 0.2s';
+  var tabBtnsHtml = '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+    + '<button id="fva-tab-weekly" style="' + tabBtnStyle + ';background:#e0e0e0;color:#333" onclick="switchForecastVsActualPeriod(\'weekly\')">Mingguan</button>'
+    + '<button id="fva-tab-monthly" style="' + tabBtnStyle + ';background:#1a237e;color:#fff" onclick="switchForecastVsActualPeriod(\'monthly\')">Bulanan</button>'
+    + '<button id="fva-tab-yearly" style="' + tabBtnStyle + ';background:#e0e0e0;color:#333" onclick="switchForecastVsActualPeriod(\'yearly\')">Tahunan</button>'
+    + '</div>';
+
   return '<div class="page-title">\u2696\uFE0F Forecast vs Actual</div>'
     + '<div style="font-size:0.82rem;color:#555;margin:-8px 0 12px 0">Periode perbandingan: <b>' + windowLabel + '</b> (6 bulan ke depan)</div>'
+    + proyeksiSaldoHtml
     + '<div class="stats-row">'
     + '<div class="stat-box red"><div class="val">' + fmtRp(totalForecastBayar) + '</div><div class="lbl">Forecast Pembayaran</div></div>'
     + '<div class="stat-box"><div class="val">' + fmtRp(totalActualBayar) + '</div><div class="lbl">Actual Pembayaran</div></div>'
@@ -3865,6 +3917,8 @@ async function renderForecastVsActual() {
     + '<div class="stat-box"><div class="val">' + fmtRp(totalActualTerima) + '</div><div class="lbl">Actual Penerimaan</div></div>'
     + '<div class="stat-box ' + (netActual >= netForecast ? 'green' : 'red') + '"><div class="val">' + fmtRp(netActual - netForecast) + '</div><div class="lbl">Selisih Bersih (Actual\u2212Forecast)</div></div>'
     + '</div>'
+    + tabBtnsHtml
+    + '<div id="fva-charts-container">'
     + '<div class="card"><div class="card-header"><h2>Pembayaran: Forecast vs Actual</h2>'
     + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
     + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#1a237e;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
@@ -3875,7 +3929,192 @@ async function renderForecastVsActual() {
     + '<div style="padding:10px 0">' + terimaLineChart + '</div></div>'
     + '<div class="card"><div class="card-header"><h2>Ringkasan Per Bulan</h2><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Bulan</th><th>Forecast Bayar</th><th>Actual Bayar</th><th>Selisih Bayar</th><th>Forecast Terima</th><th>Actual Terima</th><th>Selisih Terima</th></tr></thead>'
-    + '<tbody>' + tableRows + '</tbody></table></div></div>';
+    + '<tbody>' + tableRows + '</tbody></table></div></div>'
+    + '</div>';
+}
+
+// === Period Switching for Forecast vs Actual Charts ===
+function switchForecastVsActualPeriod(period) {
+  var data = window._fvaData;
+  if (!data) return;
+
+  // Update tab button styles
+  var tabs = ['weekly', 'monthly', 'yearly'];
+  tabs.forEach(function(t) {
+    var btn = document.getElementById('fva-tab-' + t);
+    if (btn) {
+      if (t === period) {
+        btn.style.background = '#1a237e';
+        btn.style.color = '#fff';
+      } else {
+        btn.style.background = '#e0e0e0';
+        btn.style.color = '#333';
+      }
+    }
+  });
+
+  var months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  var now = new Date();
+  var bayarForecastData = [];
+  var bayarActualData = [];
+  var terimaForecastData = [];
+  var terimaActualData = [];
+  var labels = [];
+  var periodTitle = '';
+
+  if (period === 'weekly') {
+    // Next 8 weeks
+    periodTitle = '8 Minggu ke Depan';
+    for (var w = 0; w < 8; w++) {
+      var weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (w * 7));
+      var weekEnd = new Date(weekStart.getTime() + 6 * 86400000);
+      labels.push('Mg ' + (w + 1));
+
+      var fb = 0, ft = 0, ab = 0, at = 0;
+      data.forecastBayarList.forEach(function(x) {
+        if (!x.jatuhTempo) return;
+        var d = new Date(x.jatuhTempo);
+        if (d >= weekStart && d <= weekEnd) fb += x.sisa || 0;
+      });
+      data.forecastTerimaList.forEach(function(x) {
+        if (!x.jatuhTempo) return;
+        var d = new Date(x.jatuhTempo);
+        if (d >= weekStart && d <= weekEnd) ft += x.sisa || 0;
+      });
+      data.actualBayarList.forEach(function(x) {
+        if (!x.tanggal) return;
+        var d = new Date(x.tanggal);
+        if (d >= weekStart && d <= weekEnd) ab += x.jumlah || 0;
+      });
+      data.actualTerimaList.forEach(function(x) {
+        if (!x.tanggal) return;
+        var d = new Date(x.tanggal);
+        if (d >= weekStart && d <= weekEnd) at += x.jumlah || 0;
+      });
+
+      bayarForecastData.push(fb);
+      bayarActualData.push(ab);
+      terimaForecastData.push(ft);
+      terimaActualData.push(at);
+    }
+  } else if (period === 'yearly') {
+    // 12 months of current year
+    periodTitle = 'Tahun ' + now.getFullYear();
+    for (var m = 0; m < 12; m++) {
+      labels.push(months[m]);
+      var mStart = new Date(now.getFullYear(), m, 1);
+      var mEnd = new Date(now.getFullYear(), m + 1, 0);
+
+      var fb = 0, ft = 0, ab = 0, at = 0;
+      data.forecastBayarList.forEach(function(x) {
+        if (!x.jatuhTempo) return;
+        var d = new Date(x.jatuhTempo);
+        if (d >= mStart && d <= mEnd) fb += x.sisa || 0;
+      });
+      data.forecastTerimaList.forEach(function(x) {
+        if (!x.jatuhTempo) return;
+        var d = new Date(x.jatuhTempo);
+        if (d >= mStart && d <= mEnd) ft += x.sisa || 0;
+      });
+      data.actualBayarList.forEach(function(x) {
+        if (!x.tanggal) return;
+        var d = new Date(x.tanggal);
+        if (d >= mStart && d <= mEnd) ab += x.jumlah || 0;
+      });
+      data.actualTerimaList.forEach(function(x) {
+        if (!x.tanggal) return;
+        var d = new Date(x.tanggal);
+        if (d >= mStart && d <= mEnd) at += x.jumlah || 0;
+      });
+
+      bayarForecastData.push(fb);
+      bayarActualData.push(ab);
+      terimaForecastData.push(ft);
+      terimaActualData.push(at);
+    }
+  } else {
+    // Monthly - next 6 months (default)
+    periodTitle = '6 Bulan ke Depan';
+    for (var i = 0; i < 6; i++) {
+      var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      var mEnd = new Date(now.getFullYear(), now.getMonth() + i + 1, 0);
+      labels.push(months[d.getMonth()] + ' ' + d.getFullYear());
+
+      var fb = 0, ft = 0, ab = 0, at = 0;
+      data.forecastBayarList.forEach(function(x) {
+        if (!x.jatuhTempo) return;
+        var dd = new Date(x.jatuhTempo);
+        if (dd.getFullYear() === d.getFullYear() && dd.getMonth() === d.getMonth()) fb += x.sisa || 0;
+      });
+      data.forecastTerimaList.forEach(function(x) {
+        if (!x.jatuhTempo) return;
+        var dd = new Date(x.jatuhTempo);
+        if (dd.getFullYear() === d.getFullYear() && dd.getMonth() === d.getMonth()) ft += x.sisa || 0;
+      });
+      data.actualBayarList.forEach(function(x) {
+        if (!x.tanggal) return;
+        var dd = new Date(x.tanggal);
+        if (dd >= d && dd <= mEnd) ab += x.jumlah || 0;
+      });
+      data.actualTerimaList.forEach(function(x) {
+        if (!x.tanggal) return;
+        var dd = new Date(x.tanggal);
+        if (dd >= d && dd <= mEnd) at += x.jumlah || 0;
+      });
+
+      bayarForecastData.push(fb);
+      bayarActualData.push(ab);
+      terimaForecastData.push(ft);
+      terimaActualData.push(at);
+    }
+  }
+
+  // Build charts
+  var bayarChart = buildLineChart([
+    { data: bayarForecastData, color: '#ff9800', label: 'Forecast' },
+    { data: bayarActualData, color: '#1a237e', label: 'Actual' }
+  ], labels, 'bayar-chart');
+
+  var terimaChart = buildLineChart([
+    { data: terimaForecastData, color: '#ff9800', label: 'Forecast' },
+    { data: terimaActualData, color: '#4caf50', label: 'Actual' }
+  ], labels, 'terima-chart');
+
+  // Build summary table
+  var tableRows = '';
+  for (var idx = 0; idx < labels.length; idx++) {
+    var fb = bayarForecastData[idx];
+    var ab = bayarActualData[idx];
+    var ft = terimaForecastData[idx];
+    var at = terimaActualData[idx];
+    var diffBayar = ab - fb;
+    var diffTerima = at - ft;
+    tableRows += '<tr>'
+      + '<td class="fw-bold">' + labels[idx] + '</td>'
+      + '<td class="text-red">' + fmtRp(fb) + '</td>'
+      + '<td class="text-red">' + fmtRp(ab) + '</td>'
+      + '<td class="' + (diffBayar >= 0 ? 'text-red' : 'text-green') + '">' + fmtRp(diffBayar) + '</td>'
+      + '<td class="text-green">' + fmtRp(ft) + '</td>'
+      + '<td class="text-green">' + fmtRp(at) + '</td>'
+      + '<td class="' + (diffTerima >= 0 ? 'text-green' : 'text-red') + '">' + fmtRp(diffTerima) + '</td>'
+      + '</tr>';
+  }
+
+  // Update container
+  var container = document.getElementById('fva-charts-container');
+  if (container) {
+    container.innerHTML = '<div class="card"><div class="card-header"><h2>Pembayaran: Forecast vs Actual <span style="font-size:0.75rem;color:#888;font-weight:400">(' + periodTitle + ')</span></h2>'
+      + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#1a237e;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
+      + '<div style="padding:10px 0">' + bayarChart + '</div></div>'
+      + '<div class="card"><div class="card-header"><h2>Penerimaan: Forecast vs Actual <span style="font-size:0.75rem;color:#888;font-weight:400">(' + periodTitle + ')</span></h2>'
+      + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#4caf50;border-radius:2px;display:inline-block"></span>Actual</span></div></div>'
+      + '<div style="padding:10px 0">' + terimaChart + '</div></div>'
+      + '<div class="card"><div class="card-header"><h2>Ringkasan (' + periodTitle + ')</h2><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
+      + '<div class="table-wrap"><table><thead><tr><th>Periode</th><th>Forecast Bayar</th><th>Actual Bayar</th><th>Selisih Bayar</th><th>Forecast Terima</th><th>Actual Terima</th><th>Selisih Terima</th></tr></thead>'
+      + '<tbody>' + tableRows + '</tbody></table></div></div>';
+  }
 }
 
 // ===== LAPORAN =====
