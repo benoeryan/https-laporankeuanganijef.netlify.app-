@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Change forecast logic to use jatuh tempo date as the criteria and add auto-journal when jatuh tempo arrives for Approved Final items",
+  "status": "in_progress",
+  "steps": [
+    "1. Modify renderForecastBayar() at line ~3006 in keuangan-app.js: Remove the status-based filter (STATUS.DRAFT || STATUS.PENDING_L1). Instead, include ALL permohonan items (from system input, not import-sheets) whose jatuh tempo date has NOT yet arrived (jatuhTempo > today). Also include items that are Approved Final but jatuhTempo > today. Keep the utangpiutang (Utang with sisa>0) filter unchanged but also apply jatuhTempo > today filter to those entries.",
+    "2. Modify renderForecastTerima() at line ~3014 in keuangan-app.js: Same logic change - include ALL danamasuk items (from system input, not import-sheets) whose jatuh tempo has NOT yet arrived. Use x.tanggal as jatuh tempo field for dana masuk (same as current code). Keep utangpiutang (Piutang with sisa>0) with jatuhTempo > today.",
+    "3. Create a new async function autoJurnalJatuhTempo() that: (a) Gets all permohonan with status === 'Approved Final' AND jatuhTempo <= today() AND (!jurnalId OR jurnalId not in existing jurnal list). (b) Gets all danamasuk with status === 'Approved Final' AND tanggal <= today() AND (!jurnalId OR jurnalId not in existing jurnal list). (c) For each qualifying permohonan, create a journal entry using the same pattern as integrasiPermohonanDanaMasukKeJurnal (Debit expense akunDebit||'5-2200', Credit kas/bank). Save jurnalId back to the permohonan record. (d) For each qualifying danamasuk, create a journal entry (Debit kas/bank, Credit revenue kategori). Save jurnalId back to the danamasuk record. (e) If any journals were created, show a subtle notification: showAlert('Auto-jurnal: X transaksi telah dijurnalkan (jatuh tempo tercapai)', 'info'). (f) This function runs silently - no confirmation prompt needed since it is automatic.",
+    "4. Call autoJurnalJatuhTempo() in two places: (a) Inside renderForecastBayar() - call it at the beginning before building the forecast list (so the list reflects the updated state). (b) Inside renderForecastTerima() - same. Use a simple flag/lock to prevent double-execution if both forecasts are rendered in quick succession.",
+    "5. Update the 'sumber' labels in the combined forecast list to reflect the new logic: items still in forecast (regardless of approval status) should show their actual status (e.g., 'Permohonan - Draft', 'Permohonan - Pending L1', 'Permohonan - Approved Final') so users can see which items are approved but waiting for jatuh tempo.",
+    "6. Verify syntax with: node --check keuangan-app.js"
+  ],
+  "acceptance_criteria": [
+    "renderForecastBayar() includes permohonan items of ANY status (not just Draft/Pending L1) as long as jatuhTempo > today",
+    "renderForecastTerima() includes danamasuk items of ANY status as long as tanggal > today",
+    "Items with status Approved Final and jatuhTempo <= today are automatically journalized via autoJurnalJatuhTempo()",
+    "autoJurnalJatuhTempo() creates proper journal entries matching the pattern of integrasiPermohonanDanaMasukKeJurnal()",
+    "autoJurnalJatuhTempo() stores jurnalId back on the permohonan/danamasuk record",
+    "No duplicate journal creation (checks for existing jurnalId and verifies it exists in jurnal collection)",
+    "node --check keuangan-app.js passes without syntax errors"
+  ],
+  "verification": [
+    "Run: node --check /projects/sandbox/https-laporankeuanganijef.netlify.app-/keuangan-app.js"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

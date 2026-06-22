@@ -1,0 +1,18 @@
+{
+  "project_type": "Single-page financial app (vanilla JS + Firebase)",
+  "language": "JavaScript (ES5/ES6 mix, no bundler)",
+  "build_system": "None - static files served by Netlify",
+  "test_framework": "None - no automated tests",
+  "build_command": "N/A - static HTML/JS app",
+  "test_command": "N/A - no test framework configured",
+  "verification_instructions": "Open index.html in a browser or verify JS syntax with node --check keuangan-app.js",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup required - vanilla JS static app",
+  "environment_constraints": "No build tools, no package manager. Verify syntax only with node --check.",
+  "contribution_requirements": "Commit on feature/forecast-integration-buttons branch",
+  "key_patterns": "Functions use 'function' keyword (not arrow functions for compatibility). KDB.getAll('collection') and KDB.save('collection', id, data) for data access. STATUS constants for approval states. genId('prefix') for IDs. today() returns YYYY-MM-DD string. fmtRp() for currency formatting. fmtDate() for date formatting. showAlert() for user messages. showLoading() for loading indicator. navigate() for page routing. getAkunKasBank() and getApprovers() async helpers.",
+  "relevant_files": [
+    "keuangan-app.js (lines 3006-3020 - renderForecastBayar/Terima, lines 1997-2082 - integrasiPermohonanDanaMasukKeJurnal, lines 355-370 - app init after login)"
+  ],
+  "directory_structure": "Root: index.html (single page), keuangan-app.js (all app logic ~12478 lines), keuangan-firebase.js (Firebase/KDB), netlify/ (serverless functions), netlify.toml (config)"
+}
