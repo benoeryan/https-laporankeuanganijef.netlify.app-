@@ -1,0 +1,18 @@
+{
+  "project_type": "Vanilla JavaScript SPA (single-page financial application)",
+  "language": "JavaScript (ES5/ES6 mix)",
+  "build_system": "None (static site deployed on Netlify)",
+  "test_framework": "None (no test framework present)",
+  "build_command": "N/A - static site, no build step",
+  "test_command": "N/A - no tests",
+  "verification_instructions": "1. Verify JavaScript syntax is valid using node --check. 2. Verify the logic changes match the intended behavior by code review.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - single file JavaScript app",
+  "environment_constraints": "No build tools required. Validate with node --check keuangan-app.js for syntax.",
+  "contribution_requirements": "Push to feature/forecast-integration-buttons branch. PR #5 already exists.",
+  "key_patterns": "Single large keuangan-app.js file (~7000+ lines). Uses KDB abstraction for Firebase. STATUS constants at top. Functions: integrasiPermohonanDanaMasukKeJurnal (manual batch journal), autoJurnalJatuhTempo (auto journal on due date), renderForecastBayar/Terima (forecast views). getFinancialData() calculates saldo from journals. today() returns YYYY-MM-DD string.",
+  "relevant_files": [
+    "keuangan-app.js"
+  ],
+  "directory_structure": "Root: index.html (UI), keuangan-app.js (all logic), keuangan-firebase.js (Firebase config), netlify/ (serverless functions), netlify.toml (deploy config)"
+}

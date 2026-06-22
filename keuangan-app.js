@@ -2001,15 +2001,19 @@ async function integrasiPermohonanDanaMasukKeJurnal() {
   var allJurnal = await KDB.getAll('jurnal');
   var jurnalIds = allJurnal.map(function(j){ return j.id; });
 
-  // Filter: Approved Final & (belum punya jurnal ATAU jurnalnya sudah terhapus)
+  // Filter: Approved Final & jatuh tempo sudah tiba & (belum punya jurnal ATAU jurnalnya sudah terhapus)
+  var todayStr = today();
   var pdBelumJurnal = allPD.filter(function(p) {
     if (p.status !== 'Approved Final') return false;
+    if (!p.jatuhTempo || p.jatuhTempo > todayStr) return false; // jatuh tempo belum tiba, jangan dijurnal
     if (!p.jurnalId) return true; // belum ada jurnal
     if (jurnalIds.indexOf(p.jurnalId) === -1) return true; // jurnal sudah terhapus
     return false;
   });
   var dmBelumJurnal = allDM.filter(function(d) {
     if (d.status !== 'Approved Final') return false;
+    var jt = d.tanggal || '';
+    if (!jt || jt > todayStr) return false; // jatuh tempo belum tiba, jangan dijurnal
     if (!d.jurnalId) return true;
     if (jurnalIds.indexOf(d.jurnalId) === -1) return true;
     return false;
@@ -2045,10 +2049,10 @@ async function integrasiPermohonanDanaMasukKeJurnal() {
       tipe: 'umum', sumber: 'permohonan-dana',
       meta: { permohonanId: p.id, pemohon: p.namaPemohon },
       lines: [
-        { akun: akunDebit, ket: p.keterangan || ('Pembayaran ' + p.namaPemohon), debit: p.nominal, kredit: 0 },
-        { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank||'Bank'), debit: 0, kredit: p.nominal }
+        { akun: akunDebit, ket: p.keterangan || ('Pembayaran ' + p.namaPemohon), debit: parseFloat(p.nominal)||0, kredit: 0 },
+        { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank||'Bank'), debit: 0, kredit: parseFloat(p.nominal)||0 }
       ],
-      totalDebit: p.nominal, totalKredit: p.nominal,
+      totalDebit: parseFloat(p.nominal)||0, totalKredit: parseFloat(p.nominal)||0,
       createdBy: 'system-integrasi', createdAt: new Date().toISOString()
     });
     await KDB.save('permohonan', p.id, Object.assign({}, p, { jurnalId: jurnalId, jurnalCreatedAt: new Date().toISOString() }));
@@ -2069,10 +2073,10 @@ async function integrasiPermohonanDanaMasukKeJurnal() {
       tipe: 'umum', sumber: 'dana-masuk',
       meta: { danaMasukId: d.id, sumber: d.sumber },
       lines: [
-        { akun: akunDebitDM, ket: 'Dana masuk dari ' + d.sumber, debit: d.nominal, kredit: 0 },
-        { akun: akunKreditDM, ket: d.keterangan || d.sumber, debit: 0, kredit: d.nominal }
+        { akun: akunDebitDM, ket: 'Dana masuk dari ' + d.sumber, debit: parseFloat(d.nominal)||0, kredit: 0 },
+        { akun: akunKreditDM, ket: d.keterangan || d.sumber, debit: 0, kredit: parseFloat(d.nominal)||0 }
       ],
-      totalDebit: d.nominal, totalKredit: d.nominal,
+      totalDebit: parseFloat(d.nominal)||0, totalKredit: parseFloat(d.nominal)||0,
       createdBy: 'system-integrasi', createdAt: new Date().toISOString()
     });
     await KDB.save('danamasuk', d.id, Object.assign({}, d, { jurnalId: jurnalIdDM, jurnalCreatedAt: new Date().toISOString() }));
@@ -2142,10 +2146,10 @@ async function autoJurnalJatuhTempo() {
           tipe: 'umum', sumber: 'auto-jatuh-tempo',
           meta: { permohonanId: p.id, pemohon: p.namaPemohon },
           lines: [
-            { akun: akunDebit, ket: p.keterangan || ('Pembayaran ' + p.namaPemohon), debit: p.nominal, kredit: 0 },
-            { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank||'Bank'), debit: 0, kredit: p.nominal }
+            { akun: akunDebit, ket: p.keterangan || ('Pembayaran ' + p.namaPemohon), debit: parseFloat(p.nominal)||0, kredit: 0 },
+            { akun: akunKredit, ket: 'Kas keluar - ' + (p.namaBank||'Bank'), debit: 0, kredit: parseFloat(p.nominal)||0 }
           ],
-          totalDebit: p.nominal, totalKredit: p.nominal,
+          totalDebit: parseFloat(p.nominal)||0, totalKredit: parseFloat(p.nominal)||0,
           createdBy: 'system-auto-jatuh-tempo', createdAt: new Date().toISOString()
         });
         await KDB.save('permohonan', p.id, Object.assign({}, p, { jurnalId: jurnalId, jurnalCreatedAt: new Date().toISOString() }));
@@ -2170,10 +2174,10 @@ async function autoJurnalJatuhTempo() {
           tipe: 'umum', sumber: 'auto-jatuh-tempo',
           meta: { danaMasukId: d.id, sumber: d.sumber },
           lines: [
-            { akun: akunDebitDM, ket: 'Dana masuk dari ' + d.sumber, debit: d.nominal, kredit: 0 },
-            { akun: akunKreditDM, ket: d.keterangan || d.sumber, debit: 0, kredit: d.nominal }
+            { akun: akunDebitDM, ket: 'Dana masuk dari ' + d.sumber, debit: parseFloat(d.nominal)||0, kredit: 0 },
+            { akun: akunKreditDM, ket: d.keterangan || d.sumber, debit: 0, kredit: parseFloat(d.nominal)||0 }
           ],
-          totalDebit: d.nominal, totalKredit: d.nominal,
+          totalDebit: parseFloat(d.nominal)||0, totalKredit: parseFloat(d.nominal)||0,
           createdBy: 'system-auto-jatuh-tempo', createdAt: new Date().toISOString()
         });
         await KDB.save('danamasuk', d.id, Object.assign({}, d, { jurnalId: jurnalIdDM, jurnalCreatedAt: new Date().toISOString() }));
@@ -3132,14 +3136,18 @@ async function renderForecastBayar() {
   var allPD = cached.allPD && cached.allPD.length ? cached.allPD : await KDB.getAll('permohonan');
   const pdForecast = allPD.filter(function(x){
     if (x.sumber === 'import-sheets') return false;
-    if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1) return false;
-    // Include items with jatuhTempo > today (future due date)
+    // Future items ALWAYS shown in forecast regardless of jurnalId or status
     if (x.jatuhTempo && x.jatuhTempo > todayStr) return true;
-    // Also include overdue items (jatuhTempo <= today) that are NOT Approved Final
-    // These need visibility so users know they are overdue and pending approval
-    if (x.jatuhTempo && x.jatuhTempo <= todayStr && x.status !== STATUS.APPROVED) return true;
-    // Items without jatuhTempo: include if not yet journalized
-    if (!x.jatuhTempo) return true;
+    // Past-due or today: exclude only if properly journalized (has valid jurnalId AND Approved Final)
+    if (x.jatuhTempo && x.jatuhTempo <= todayStr) {
+      if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1 && x.status === STATUS.APPROVED) return false;
+      return true;
+    }
+    // No jatuhTempo: exclude if properly journalized
+    if (!x.jatuhTempo) {
+      if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1 && x.status === STATUS.APPROVED) return false;
+      return true;
+    }
     return false;
   });
   const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Utang' : 'Utang (tanpa jatuh tempo)' }; })
@@ -3164,15 +3172,19 @@ async function renderForecastTerima() {
   var allDM = cached.allDM && cached.allDM.length ? cached.allDM : await KDB.getAll('danamasuk');
   const dmForecast = allDM.filter(function(x){
     if (x.sumber === 'import-sheets') return false;
-    if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1) return false;
     var jt = x.tanggal || '';
-    // Include items with tanggal > today (future due date)
+    // Future items ALWAYS shown in forecast regardless of jurnalId or status
     if (jt && jt > todayStr) return true;
-    // Also include overdue items (tanggal <= today) that are NOT Approved Final
-    // These need visibility so users know they are overdue and pending approval
-    if (jt && jt <= todayStr && x.status !== STATUS.APPROVED) return true;
-    // Items without tanggal: include if not yet journalized
-    if (!jt) return true;
+    // Past-due or today: exclude only if properly journalized (has valid jurnalId AND Approved Final)
+    if (jt && jt <= todayStr) {
+      if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1 && x.status === STATUS.APPROVED) return false;
+      return true;
+    }
+    // No tanggal: exclude if properly journalized
+    if (!jt) {
+      if (x.jurnalId && jurnalIds.indexOf(x.jurnalId) !== -1 && x.status === STATUS.APPROVED) return false;
+      return true;
+    }
     return false;
   });
   const combined = upList.map(function(x){ return { jatuhTempo: x.jatuhTempo || '', nama: x.nama, ref: x.noDok||'-', sisa: parseFloat(x.sisa)||0, sumber: x.jatuhTempo ? 'Piutang' : 'Piutang (tanpa jatuh tempo)' }; })
@@ -5547,7 +5559,7 @@ async function viewBankRecDetail(kode, saldoSistem) {
   var totalDebit = 0, totalKredit = 0;
   related.forEach(function(j) {
     (j.lines||[]).forEach(function(l) {
-      if (l.akun === kode) { totalDebit += l.debit||0; totalKredit += l.kredit||0; }
+      if (l.akun === kode) { totalDebit += parseFloat(l.debit)||0; totalKredit += parseFloat(l.kredit)||0; }
     });
   });
 

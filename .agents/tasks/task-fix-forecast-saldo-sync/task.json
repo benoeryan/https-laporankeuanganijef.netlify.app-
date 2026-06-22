@@ -1,0 +1,7 @@
+{
+  "task_id": "task-fix-forecast-saldo-sync",
+  "task_description": "Fix forecast showing empty (0 items / 'Tidak ada outstanding') by correcting filter logic that incorrectly excludes items with jurnalId. Fix saldo sync by adding jatuhTempo check to manual integration function and ensuring all nominal values are parseFloat when creating journals.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}
