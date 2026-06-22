@@ -1,7 +1,7 @@
 {
   "task_id": "task-forecast-jatuh-tempo-auto-jurnal",
   "task_description": "Change forecast logic from status-based filtering to jatuh tempo date-based filtering. Items stay in forecast until their jatuh tempo date arrives. When jatuh tempo arrives AND the item is Approved Final, automatically create a journal entry.",
-  "status": "in_progress",
+  "status": "completed",
   "feature_order": ["FEAT-001"],
   "blocked_reason": null
 }
