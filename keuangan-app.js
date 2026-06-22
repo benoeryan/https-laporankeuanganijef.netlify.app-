@@ -3674,22 +3674,23 @@ async function renderForecastVsActual() {
       var a = fd.akun.find(function(x){ return x.kode === l.akun; });
       if (a && (a.kategori||'').includes('Pendapatan')) pendTotal += l.kredit||0;
     });
-    if (pendTotal > 0) jurnalPendapatan.push({ tanggal: j.tanggal, jumlah: pendTotal });
+    if (pendTotal > 0) jurnalPendapatan.push({ tanggal: j.tanggal, jumlah: pendTotal, ref: (j.noRef||j.id||'').toString() });
   });
   var filteredJurnalPend = jurnalPendapatan.filter(function(jp){ return !dmRefs[(jp.ref||'')]; });
   var actualTerimaList = upActualTerima.map(function(x){ return { tanggal: x.tanggal, jumlah: parseFloat(x.bayar)||0 }; })
     .concat(dmActual.map(function(x){ return { tanggal: x.tanggal, jumlah: parseFloat(x.nominal)||0 }; }))
     .concat(filteredJurnalPend);
 
-  // === Calculate totals ===
+  // === Calculate totals using same 6-month comparison window ===
+  var now = new Date();
+  var windowStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  var windowEnd = new Date(now.getFullYear(), now.getMonth() + 6, 0); // last day of 5th month ahead
   var totalForecastBayar = forecastBayarList.reduce(function(s,x){ return s + x.sisa; }, 0);
   var totalForecastTerima = forecastTerimaList.reduce(function(s,x){ return s + x.sisa; }, 0);
-  var now = new Date();
-  var yearStart = new Date(now.getFullYear(), 0, 1);
-  var actualBayarYTD = actualBayarList.filter(function(x){ var d = new Date(x.tanggal||''); return d >= yearStart && d <= now; });
-  var actualTerimaYTD = actualTerimaList.filter(function(x){ var d = new Date(x.tanggal||''); return d >= yearStart && d <= now; });
-  var totalActualBayar = actualBayarYTD.reduce(function(s,x){ return s + (x.jumlah||0); }, 0);
-  var totalActualTerima = actualTerimaYTD.reduce(function(s,x){ return s + (x.jumlah||0); }, 0);
+  var actualBayarWindow = actualBayarList.filter(function(x){ var d = new Date(x.tanggal||''); return d >= windowStart && d <= windowEnd; });
+  var actualTerimaWindow = actualTerimaList.filter(function(x){ var d = new Date(x.tanggal||''); return d >= windowStart && d <= windowEnd; });
+  var totalActualBayar = actualBayarWindow.reduce(function(s,x){ return s + (x.jumlah||0); }, 0);
+  var totalActualTerima = actualTerimaWindow.reduce(function(s,x){ return s + (x.jumlah||0); }, 0);
   var netForecast = totalForecastTerima - totalForecastBayar;
   var netActual = totalActualTerima - totalActualBayar;
 
@@ -3722,13 +3723,13 @@ async function renderForecastVsActual() {
     if (forecastTerimaByMonth[key]) forecastTerimaByMonth[key].total += x.sisa;
   });
 
-  // Monthly actual pembayaran (current year)
+  // Monthly actual pembayaran (same 6-month window)
   var actualBayarByMonth = new Array(12).fill(0);
-  actualBayarYTD.forEach(function(x){ var m = new Date(x.tanggal||'').getMonth(); if (m >= 0 && m < 12) actualBayarByMonth[m] += x.jumlah||0; });
+  actualBayarWindow.forEach(function(x){ var m = new Date(x.tanggal||'').getMonth(); if (m >= 0 && m < 12) actualBayarByMonth[m] += x.jumlah||0; });
 
-  // Monthly actual penerimaan (current year)
+  // Monthly actual penerimaan (same 6-month window)
   var actualTerimaByMonth = new Array(12).fill(0);
-  actualTerimaYTD.forEach(function(x){ var m = new Date(x.tanggal||'').getMonth(); if (m >= 0 && m < 12) actualTerimaByMonth[m] += x.jumlah||0; });
+  actualTerimaWindow.forEach(function(x){ var m = new Date(x.tanggal||'').getMonth(); if (m >= 0 && m < 12) actualTerimaByMonth[m] += x.jumlah||0; });
 
   // === Build Pembayaran comparison chart (current year months) ===
   var bayarMonthKeys = Object.keys(forecastBayarByMonth);
@@ -3804,13 +3805,15 @@ async function renderForecastVsActual() {
   }).join('');
 
   // === Build final HTML ===
+  var windowLabel = months[windowStart.getMonth()] + ' ' + windowStart.getFullYear() + ' - ' + months[windowEnd.getMonth()] + ' ' + windowEnd.getFullYear();
   return '<div class="page-title">\u2696\uFE0F Forecast vs Actual</div>'
+    + '<div style="font-size:0.82rem;color:#555;margin:-8px 0 12px 0">Periode perbandingan: <b>' + windowLabel + '</b> (6 bulan ke depan)</div>'
     + '<div class="stats-row">'
     + '<div class="stat-box red"><div class="val">' + fmtRp(totalForecastBayar) + '</div><div class="lbl">Forecast Pembayaran</div></div>'
     + '<div class="stat-box"><div class="val">' + fmtRp(totalActualBayar) + '</div><div class="lbl">Actual Pembayaran</div></div>'
     + '<div class="stat-box green"><div class="val">' + fmtRp(totalForecastTerima) + '</div><div class="lbl">Forecast Penerimaan</div></div>'
     + '<div class="stat-box"><div class="val">' + fmtRp(totalActualTerima) + '</div><div class="lbl">Actual Penerimaan</div></div>'
-    + '<div class="stat-box ' + (netActual >= netForecast ? 'green' : 'red') + '"><div class="val">' + fmtRp(netActual - netForecast) + '</div><div class="lbl">Net Difference</div></div>'
+    + '<div class="stat-box ' + (netActual >= netForecast ? 'green' : 'red') + '"><div class="val">' + fmtRp(netActual - netForecast) + '</div><div class="lbl">Selisih Bersih (Actual\u2212Forecast)</div></div>'
     + '</div>'
     + '<div class="card"><div class="card-header"><h2>Pembayaran: Forecast vs Actual</h2>'
     + '<div style="display:flex;gap:10px;font-size:0.75rem"><span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:12px;background:#ff9800;border-radius:2px;display:inline-block"></span>Forecast</span>'
