@@ -3586,7 +3586,7 @@ function renderActualWithChart(list, title, chartId) {
 }
 
 function buildLineChart(datasets, labels, chartId) {
-  var svgWidth = 600, svgHeight = 280;
+  var svgWidth = 600, svgHeight = 200;
   var padLeft = 70, padRight = 30, padTop = 30, padBottom = 50;
   var chartW = svgWidth - padLeft - padRight;
   var chartH = svgHeight - padTop - padBottom;
@@ -3680,8 +3680,8 @@ function buildLineChart(datasets, labels, chartId) {
   var axes = '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (padTop + chartH) + '" stroke="#e0e0e0" stroke-width="1"/>';
   axes += '<line x1="' + padLeft + '" y1="' + (padTop + chartH) + '" x2="' + (padLeft + chartW) + '" y2="' + (padTop + chartH) + '" stroke="#e0e0e0" stroke-width="1"/>';
 
-  return '<div class="fva-chart-wrap" style="position:relative;width:100%">'
-    + '<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" class="fva-chart-svg" style="width:100%;height:auto;display:block">'
+  return '<div class="fva-chart-wrap" style="position:relative;width:100%;max-width:700px;margin:0 auto">'
+    + '<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" class="fva-chart-svg" style="width:100%;max-height:220px;height:auto;display:block">'
     + defs + gridLines + axes + xLabels + areaHtml + linesHtml + circlesHtml
     + '</svg>'
     + '<div id="tooltip-' + chartId + '" class="fva-tooltip"></div>'
