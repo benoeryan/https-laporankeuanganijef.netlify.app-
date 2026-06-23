@@ -1,0 +1,153 @@
+exports.handler = async function(event, context) {
+  // CORS headers
+  const allowedOrigin = process.env.URL || '*';
+  const headers = {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
+  };
+
+  // Handle preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers, body: '' };
+  }
+
+  // Only allow POST
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
+  }
+
+  // Check API key
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: 'GEMINI_API_KEY not configured on server' })
+    };
+  }
+
+  // Parse request body
+  let body;
+  try {
+    body = JSON.parse(event.body);
+  } catch (e) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: 'Invalid JSON body' })
+    };
+  }
+
+  const { totalPendapatan, totalPengeluaran, saldoKasBank } = body;
+
+  if (totalPendapatan === undefined || totalPengeluaran === undefined || saldoKasBank === undefined) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: 'Missing required fields: totalPendapatan, totalPengeluaran, saldoKasBank' })
+    };
+  }
+
+  // Build prompt for Gemini
+  const prompt = 'Bertindaklah sebagai CFO/Konsultan Keuangan Profesional untuk LPK IJEF Corp. '
+    + 'Analisis data keuangan berikut dan berikan:\n'
+    + '1. Satu kalimat analisis kondisi keuangan saat ini\n'
+    + '2. Satu kalimat saran pemasaran/efisiensi yang konkret\n\n'
+    + 'Data Keuangan:\n'
+    + '- Total Pendapatan: Rp ' + Number(totalPendapatan).toLocaleString('id-ID') + '\n'
+    + '- Total Pengeluaran: Rp ' + Number(totalPengeluaran).toLocaleString('id-ID') + '\n'
+    + '- Saldo Kas/Bank saat ini: Rp ' + Number(saldoKasBank).toLocaleString('id-ID') + '\n\n'
+    + 'Format jawaban HARUS dalam JSON seperti berikut (tanpa markdown code block):\n'
+    + '{"ringkasan_analisis": "...", "rekomendasi_strategi": "..."}\n'
+    + 'Jawab dalam Bahasa Indonesia, singkat, profesional, dan langsung ke poin.';
+
+  const contents = [
+    { role: 'user', parts: [{ text: prompt }] }
+  ];
+
+  // Try multiple models with fallback
+  const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+  let lastError = '';
+
+  for (const model of models) {
+    try {
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents })
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.candidates
+          && data.candidates[0]
+          && data.candidates[0].content
+          && data.candidates[0].content.parts
+          && data.candidates[0].content.parts[0]
+          ? data.candidates[0].content.parts[0].text
+          : '';
+
+        if (!text) {
+          lastError = 'Empty response from model ' + model;
+          continue;
+        }
+
+        // Parse AI response - try to extract JSON
+        let ringkasan_analisis = '';
+        let rekomendasi_strategi = '';
+
+        try {
+          // Remove markdown code block markers if present
+          const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+          const parsed = JSON.parse(cleaned);
+          ringkasan_analisis = parsed.ringkasan_analisis || '';
+          rekomendasi_strategi = parsed.rekomendasi_strategi || '';
+        } catch (parseErr) {
+          // Fallback: split text into two sentences
+          const sentences = text.split(/[.\n]/).filter(function(s) { return s.trim().length > 10; });
+          ringkasan_analisis = sentences[0] ? sentences[0].trim() : text.trim();
+          rekomendasi_strategi = sentences[1] ? sentences[1].trim() : 'Lakukan evaluasi berkala terhadap arus kas.';
+        }
+
+        const tanggal = new Date().toISOString();
+
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            ringkasan_analisis: ringkasan_analisis,
+            rekomendasi_strategi: rekomendasi_strategi,
+            tanggal: tanggal
+          })
+        };
+      }
+
+      const errBody = await response.json().catch(function() { return {}; });
+      lastError = errBody.error ? errBody.error.message : ('HTTP ' + response.status);
+
+      // Try next model on these status codes
+      if (response.status === 400 || response.status === 404 || response.status === 403 || response.status === 429) {
+        continue;
+      }
+      break;
+    } catch (fetchErr) {
+      lastError = fetchErr.message;
+      continue;
+    }
+  }
+
+  return {
+    statusCode: 502,
+    headers,
+    body: JSON.stringify({ error: 'Gemini API error: ' + lastError })
+  };
+};

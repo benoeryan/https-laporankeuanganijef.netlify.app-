@@ -489,7 +489,7 @@ async function renderSection(id) {
   showLoading(true);
   try {
     switch(id) {
-      case 'lap-dashboard':       el.innerHTML = await renderDashboard(); startDashAutoRefresh(); break;
+      case 'lap-dashboard':       el.innerHTML = await renderDashboard(); startDashAutoRefresh(); setTimeout(function(){ renderAIInsightSection(); }, 100); break;
       case 'setup-perusahaan':    el.innerHTML = await renderSetupPerusahaan(); break;
       case 'setup-akun':          el.innerHTML = await renderSetupAkun(); break;
       case 'setup-mitra':         el.innerHTML = await renderSetupMitra(); break;
@@ -8876,6 +8876,86 @@ async function callGeminiChat(msg) {
   }
 }
 
+// ===== AI INSIGHT: Generate & Save from Gemini =====
+async function generateAndSaveInsight() {
+  var container = document.getElementById('ai-insight-container');
+  if (container) {
+    container.innerHTML = '<div style="text-align:center;padding:16px;color:#64748b"><span style="font-size:1.2rem">&#9889;</span> Menghasilkan analisis AI...</div>';
+  }
+  try {
+    var fd = await getFinancialData();
+    var saldo = fd.saldo;
+    var totalPendapatan = 0;
+    var totalPengeluaran = 0;
+    var saldoKasBank = 0;
+    Object.values(saldo).forEach(function(s) {
+      var kat = (s.akun.kategori || '').toLowerCase();
+      if (kat.includes('pendapatan')) totalPendapatan += (s.kredit - s.debit);
+      if (kat.includes('beban')) totalPengeluaran += (s.debit - s.kredit);
+      if (kat.includes('kas') || kat.includes('bank') || (s.akun.kode && s.akun.kode.charAt(0) === '1' && (s.akun.nama || '').toLowerCase().match(/kas|bank|tunai/))) {
+        saldoKasBank += (s.debit - s.kredit);
+      }
+    });
+
+    var response = await fetch('/.netlify/functions/generateFinancialInsight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        totalPendapatan: totalPendapatan,
+        totalPengeluaran: totalPengeluaran,
+        saldoKasBank: saldoKasBank
+      })
+    });
+
+    var data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Server error');
+    }
+
+    var insightId = 'insight_' + Date.now();
+    var insightData = {
+      id: insightId,
+      tanggal: data.tanggal || new Date().toISOString(),
+      ringkasan_analisis: data.ringkasan_analisis || '',
+      rekomendasi_strategi: data.rekomendasi_strategi || '',
+      status_aktif: true
+    };
+
+    await KDB.saveAIInsight(insightData);
+    renderAIInsightSection();
+  } catch(e) {
+    if (container) {
+      container.innerHTML = '<div style="color:#f43f5e;padding:12px;font-size:0.85rem">Gagal menghasilkan insight: ' + e.message + '</div>'
+        + '<button class="btn btn-xs btn-primary" onclick="generateAndSaveInsight()" style="margin-top:8px">Coba Lagi</button>';
+    }
+  }
+}
+
+async function renderAIInsightSection() {
+  var container = document.getElementById('ai-insight-container');
+  if (!container) return;
+  try {
+    var latest = await KDB.getLatestAIInsight();
+    if (latest && latest.ringkasan_analisis) {
+      var tgl = latest.tanggal ? new Date(latest.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+      container.innerHTML = '<div style="margin-bottom:8px">'
+        + '<div style="font-weight:600;font-size:0.82rem;color:#1a237e;margin-bottom:6px">&#128161; Analisis AI (Gemini):</div>'
+        + '<p style="font-size:0.82rem;line-height:1.6;color:#333;margin-bottom:4px"><strong>Kondisi:</strong> ' + latest.ringkasan_analisis + '</p>'
+        + '<p style="font-size:0.82rem;line-height:1.6;color:#333;margin-bottom:6px"><strong>Saran:</strong> ' + latest.rekomendasi_strategi + '</p>'
+        + '<div style="font-size:0.7rem;color:#94a3b8">Terakhir diperbarui: ' + tgl + '</div>'
+        + '</div>'
+        + '<button class="btn btn-xs btn-primary" onclick="generateAndSaveInsight()" style="margin-top:6px">&#x1F504; Refresh AI Insight</button>';
+    } else {
+      container.innerHTML = '<div style="text-align:center;padding:12px;color:#64748b">'
+        + '<div style="font-size:0.85rem;margin-bottom:8px">Belum ada analisis AI. Klik tombol di bawah untuk generate.</div>'
+        + '<button class="btn btn-xs btn-primary" onclick="generateAndSaveInsight()">&#x2728; Generate AI Insight</button>'
+        + '</div>';
+    }
+  } catch(e) {
+    container.innerHTML = '<div style="color:#f43f5e;font-size:0.82rem">Error memuat insight: ' + e.message + '</div>';
+  }
+}
+
 async function callOpenRouterChat(msg, apiKey) {
   try {
     var fd = await getFinancialData();
@@ -11989,8 +12069,11 @@ function buildDashboardExtras(jurnal, fd, allPD, allDM) {
     + '<div style="margin-bottom:8px"><div style="font-size:0.8rem;font-weight:600;margin-bottom:4px">Efisiensi Beban: ' + efisiensiBeban + '% dari pendapatan</div>'
     + '<div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden"><div style="width:' + Math.min(parseFloat(efisiensiBeban),100) + '%;height:100%;background:' + (parseFloat(efisiensiBeban)<70?'#10b981':'#ff9800') + ';border-radius:6px"></div></div></div>'
     + '<div style="background:#f8f9ff;border-radius:8px;padding:12px;margin-top:8px;border-left:4px solid #1a237e">'
-    + '<div style="font-weight:600;font-size:0.82rem;color:#1a237e;margin-bottom:4px">💡 Analisis & Saran:</div>'
+    + '<div style="font-weight:600;font-size:0.82rem;color:#1a237e;margin-bottom:4px">&#128161; Analisis & Saran:</div>'
     + '<p style="font-size:0.82rem;line-height:1.6;color:#333">' + saran + '</p>'
+    + '<div id="ai-insight-container" style="margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0">'
+    + '<div style="text-align:center;padding:8px;color:#94a3b8;font-size:0.78rem">Memuat insight AI...</div>'
+    + '</div>'
     + '</div></div>';
 
   // 4. Grafik per COA — integrated into dashboard

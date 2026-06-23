@@ -164,6 +164,87 @@ const KDB = {
     }
   },
 
+  // ---- STANDARDIZED COLLECTIONS (Flutter-compatible, no k_ prefix) ----
+  async saveTransaction(data) {
+    var id = data.id || ('txn_' + Date.now());
+    data.id = id;
+    if (kfbReady) {
+      try { await kfs.setDoc(kfs.doc(kdb, 'transactions', id), data); } catch(e) { console.warn(e); }
+    }
+    var all = _klget('std_transactions_all', []);
+    var idx = all.findIndex(function(x) { return x.id === id; });
+    if (idx >= 0) { all[idx] = data; } else { all.push(data); }
+    _klset('std_transactions_all', all);
+    return id;
+  },
+
+  async getTransactions() {
+    if (kfbReady) {
+      try {
+        var snap = await kfs.getDocs(kfs.collection(kdb, 'transactions'));
+        var items = snap.docs.map(function(d) { return d.data(); });
+        _klset('std_transactions_all', items);
+        return items;
+      } catch(e) { console.warn(e); }
+    }
+    return _klget('std_transactions_all', []);
+  },
+
+  async saveApproval(data) {
+    var id = data.id || ('appr_' + Date.now());
+    data.id = id;
+    if (kfbReady) {
+      try { await kfs.setDoc(kfs.doc(kdb, 'approvals', id), data); } catch(e) { console.warn(e); }
+    }
+    var all = _klget('std_approvals_all', []);
+    var idx = all.findIndex(function(x) { return x.id === id; });
+    if (idx >= 0) { all[idx] = data; } else { all.push(data); }
+    _klset('std_approvals_all', all);
+    return id;
+  },
+
+  async getApprovals() {
+    if (kfbReady) {
+      try {
+        var snap = await kfs.getDocs(kfs.collection(kdb, 'approvals'));
+        var items = snap.docs.map(function(d) { return d.data(); });
+        _klset('std_approvals_all', items);
+        return items;
+      } catch(e) { console.warn(e); }
+    }
+    return _klget('std_approvals_all', []);
+  },
+
+  async saveAIInsight(data) {
+    var id = data.id || ('insight_' + Date.now());
+    data.id = id;
+    if (kfbReady) {
+      try { await kfs.setDoc(kfs.doc(kdb, 'ai_insights', id), data); } catch(e) { console.warn(e); }
+    }
+    var all = _klget('std_ai_insights_all', []);
+    var idx = all.findIndex(function(x) { return x.id === id; });
+    if (idx >= 0) { all[idx] = data; } else { all.push(data); }
+    _klset('std_ai_insights_all', all);
+    return id;
+  },
+
+  async getLatestAIInsight() {
+    if (kfbReady) {
+      try {
+        var snap = await kfs.getDocs(kfs.collection(kdb, 'ai_insights'));
+        var items = snap.docs.map(function(d) { return d.data(); });
+        _klset('std_ai_insights_all', items);
+        var active = items.filter(function(x) { return x.status_aktif !== false; });
+        active.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
+        return active.length > 0 ? active[0] : null;
+      } catch(e) { console.warn(e); }
+    }
+    var all = _klget('std_ai_insights_all', []);
+    var active = all.filter(function(x) { return x.status_aktif !== false; });
+    active.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
+    return active.length > 0 ? active[0] : null;
+  },
+
   // ---- SETTINGS ----
   async saveSetting(key, val) {
     _klset('ksetting_' + key, val);
