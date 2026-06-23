@@ -8877,7 +8877,10 @@ async function callGeminiChat(msg) {
 }
 
 // ===== AI INSIGHT: Generate & Save from Gemini =====
+var _aiInsightGenerating = false;
 async function generateAndSaveInsight() {
+  if (_aiInsightGenerating) return;
+  _aiInsightGenerating = true;
   var container = document.getElementById('ai-insight-container');
   if (container) {
     container.innerHTML = '<div style="text-align:center;padding:16px;color:#64748b"><span style="font-size:1.2rem">&#9889;</span> Menghasilkan analisis AI...</div>';
@@ -8928,6 +8931,8 @@ async function generateAndSaveInsight() {
       container.innerHTML = '<div style="color:#f43f5e;padding:12px;font-size:0.85rem">Gagal menghasilkan insight: ' + e.message + '</div>'
         + '<button class="btn btn-xs btn-primary" onclick="generateAndSaveInsight()" style="margin-top:8px">Coba Lagi</button>';
     }
+  } finally {
+    _aiInsightGenerating = false;
   }
 }
 
@@ -8940,8 +8945,8 @@ async function renderAIInsightSection() {
       var tgl = latest.tanggal ? new Date(latest.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
       container.innerHTML = '<div style="margin-bottom:8px">'
         + '<div style="font-weight:600;font-size:0.82rem;color:#1a237e;margin-bottom:6px">&#128161; Analisis AI (Gemini):</div>'
-        + '<p style="font-size:0.82rem;line-height:1.6;color:#333;margin-bottom:4px"><strong>Kondisi:</strong> ' + latest.ringkasan_analisis + '</p>'
-        + '<p style="font-size:0.82rem;line-height:1.6;color:#333;margin-bottom:6px"><strong>Saran:</strong> ' + latest.rekomendasi_strategi + '</p>'
+        + '<p style="font-size:0.82rem;line-height:1.6;color:#333;margin-bottom:4px"><strong>Kondisi:</strong> ' + escapeHtml(latest.ringkasan_analisis) + '</p>'
+        + '<p style="font-size:0.82rem;line-height:1.6;color:#333;margin-bottom:6px"><strong>Saran:</strong> ' + escapeHtml(latest.rekomendasi_strategi) + '</p>'
         + '<div style="font-size:0.7rem;color:#94a3b8">Terakhir diperbarui: ' + tgl + '</div>'
         + '</div>'
         + '<button class="btn btn-xs btn-primary" onclick="generateAndSaveInsight()" style="margin-top:6px">&#x1F504; Refresh AI Insight</button>';

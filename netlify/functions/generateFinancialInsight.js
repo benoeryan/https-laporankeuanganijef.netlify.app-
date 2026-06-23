@@ -22,6 +22,12 @@ exports.handler = async function(event, context) {
     };
   }
 
+  // Body size limit
+  const MAX_BODY_SIZE = 50000; // 50KB limit
+  if (event.body && event.body.length > MAX_BODY_SIZE) {
+    return { statusCode: 413, headers, body: JSON.stringify({ error: 'Request body too large' }) };
+  }
+
   // Check API key
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
