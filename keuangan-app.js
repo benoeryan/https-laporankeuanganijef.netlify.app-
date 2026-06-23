@@ -863,7 +863,11 @@ async function renderDashboard() {
     : '<tr><td colspan="3" class="text-center text-muted">Belum ada transaksi</td></tr>';
 
   const approvedPD = allPD.filter(function(x){ return x.status === STATUS.APPROVED; }).slice(-3).map(function(p){
-    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;font-size:0.82rem"><span>' + (p.namaPemohon||'-') + ' — ' + (p.noPOInvoice||'-') + '</span><span class="badge badge-success">Approved</span></div>';
+    var nameStr = (p.namaPemohon||'-');
+    var words = nameStr.split(/\s+/);
+    var initials = words.length >= 2 ? (words[0][0]||'') + (words[1][0]||'') : (words[0]||'').substring(0,2);
+    initials = initials.toUpperCase();
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;font-size:0.82rem"><span style="display:flex;align-items:center;gap:8px"><span style="width:28px;height:28px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:#475569;flex-shrink:0">' + initials + '</span>' + nameStr + ' — ' + (p.noPOInvoice||'-') + '</span><span style="background:#ecfdf5;color:#065f46;border-radius:12px;padding:3px 10px;font-size:0.73rem;font-weight:600">Approved</span></div>';
   }).join('');
 
   // Saldo cards — hanya Kas BNI, Mandiri, Petty Cash + pengeluaran/pendapatan hari ini
@@ -895,27 +899,40 @@ async function renderDashboard() {
       net = (saldo[a.kode] || {}).net || 0;
     }
     const bg = net > 0 ? '#f8fff8' : net < 0 ? '#fff8f8' : '#f8f9ff';
-    const border = net > 0 ? '#4caf50' : net < 0 ? '#f44336' : '#1a237e';
+    const border = net > 0 ? '#10b981' : net < 0 ? '#f43f5e' : '#1a237e';
     const cls = net > 0 ? 'text-green' : net < 0 ? 'text-red' : 'text-blue';
-    return '<div style="background:' + bg + ';border-radius:8px;padding:12px;border-left:4px solid ' + border + '">'
-      + '<div style="font-size:0.72rem;color:#888">' + a.nama + '</div>'
-      + '<div class="fw-bold ' + cls + '" style="font-size:1rem;margin-top:3px">' + fmtRp(Math.abs(net)) + '</div>'
+    return '<div style="background:' + bg + ';border-radius:12px;padding:16px;border-left:3px solid ' + border + ';box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
+      + '<div style="font-size:0.75rem;color:#64748b">' + a.nama + '</div>'
+      + '<div class="fw-bold ' + cls + '" style="font-size:1.15rem;margin-top:3px">' + fmtRp(Math.abs(net)) + '</div>'
       + '</div>';
   }).join('')
-    + '<div style="background:#fff8f8;border-radius:8px;padding:12px;border-left:4px solid #f44336">'
-    + '<div style="font-size:0.72rem;color:#888">Pengeluaran Hari Ini</div>'
-    + '<div class="fw-bold text-red" style="font-size:1rem;margin-top:3px">' + fmtRp(pengeluaranHariIni) + '</div></div>'
-    + '<div style="background:#f8fff8;border-radius:8px;padding:12px;border-left:4px solid #4caf50">'
-    + '<div style="font-size:0.72rem;color:#888">Pendapatan Hari Ini</div>'
-    + '<div class="fw-bold text-green" style="font-size:1rem;margin-top:3px">' + fmtRp(pendapatanHariIni) + '</div></div>';
+    + '<div style="background:#fff8f8;border-radius:12px;padding:16px;border-left:3px solid #f43f5e;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
+    + '<div style="font-size:0.75rem;color:#64748b">Pengeluaran Hari Ini</div>'
+    + '<div class="fw-bold text-red" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pengeluaranHariIni) + '</div></div>'
+    + '<div style="background:#f8fff8;border-radius:12px;padding:16px;border-left:3px solid #10b981;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
+    + '<div style="font-size:0.75rem;color:#64748b">Pendapatan Hari Ini</div>'
+    + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni) + '</div></div>';
   const totalAsetLancar = kasAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+
+  // Compute total pendapatan and pengeluaran for primary KPI
+  var totalPendapatanKPI = 0, totalPengeluaranKPI = 0;
+  jurnal.forEach(function(j) {
+    (j.lines||[]).forEach(function(l) {
+      var a = fd.akun.find(function(x){ return x.kode === l.akun; });
+      if (a && (a.kategori||'').includes('Beban')) totalPengeluaranKPI += l.debit||0;
+      if (a && (a.kategori||'').includes('Pendapatan')) totalPendapatanKPI += l.kredit||0;
+    });
+  });
+  var labaRugi = totalPendapatanKPI - totalPengeluaranKPI;
 
   return '<div class="page-title">🎯 Dashboard Keuangan</div>'
     + perusahaanBanner + pendingBanner
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
+    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalAsetLancar) + '</div><div class="lbl">Total Kas & Bank</div></div>'
+    + '<div class="stat-box ' + (labaRugi >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(labaRugi) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
+    + '</div>'
     + '<div class="stats-row">'
     + '<div class="stat-box"><div class="val">' + jurnal.length + '</div><div class="lbl">Total Jurnal</div></div>'
-    + '<div class="stat-box green"><div class="val">' + fmtRp(totalDebit) + '</div><div class="lbl">Total Debit</div></div>'
-    + '<div class="stat-box red"><div class="val">' + fmtRp(totalKredit) + '</div><div class="lbl">Total Kredit</div></div>'
     + '<div class="stat-box orange"><div class="val">' + fmtRp(unpaidInvoice) + '</div><div class="lbl">Invoice Belum Lunas</div></div>'
     + '<div class="stat-box purple"><div class="val">' + fmtRp(totalPO) + '</div><div class="lbl">Total PO</div></div>'
     + '<div class="stat-box orange"><div class="val">' + (pendingPD+pendingDM) + '</div><div class="lbl">Pending Approval</div></div>'
@@ -1008,19 +1025,19 @@ async function renderDashboardApprover() {
   const saldoCards = dashKasAkun2.map(function(a) {
     const net = (saldo[a.kode] || {}).net || 0;
     const bg = net > 0 ? '#f8fff8' : net < 0 ? '#fff8f8' : '#f8f9ff';
-    const border = net > 0 ? '#4caf50' : net < 0 ? '#f44336' : '#1a237e';
+    const border = net > 0 ? '#10b981' : net < 0 ? '#f43f5e' : '#1a237e';
     const cls = net > 0 ? 'text-green' : net < 0 ? 'text-red' : 'text-blue';
-    return '<div style="background:' + bg + ';border-radius:8px;padding:12px;border-left:4px solid ' + border + '">'
-      + '<div style="font-size:0.72rem;color:#888">' + a.nama + '</div>'
-      + '<div class="fw-bold ' + cls + '" style="font-size:1rem;margin-top:3px">' + fmtRp(Math.abs(net)) + '</div>'
+    return '<div style="background:' + bg + ';border-radius:12px;padding:16px;border-left:3px solid ' + border + ';box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
+      + '<div style="font-size:0.75rem;color:#64748b">' + a.nama + '</div>'
+      + '<div class="fw-bold ' + cls + '" style="font-size:1.15rem;margin-top:3px">' + fmtRp(Math.abs(net)) + '</div>'
       + '</div>';
   }).join('')
-    + '<div style="background:#fff8f8;border-radius:8px;padding:12px;border-left:4px solid #f44336">'
-    + '<div style="font-size:0.72rem;color:#888">Pengeluaran Hari Ini</div>'
-    + '<div class="fw-bold text-red" style="font-size:1rem;margin-top:3px">' + fmtRp(pengeluaranHariIni2) + '</div></div>'
-    + '<div style="background:#f8fff8;border-radius:8px;padding:12px;border-left:4px solid #4caf50">'
-    + '<div style="font-size:0.72rem;color:#888">Pendapatan Hari Ini</div>'
-    + '<div class="fw-bold text-green" style="font-size:1rem;margin-top:3px">' + fmtRp(pendapatanHariIni2) + '</div></div>';
+    + '<div style="background:#fff8f8;border-radius:12px;padding:16px;border-left:3px solid #f43f5e;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
+    + '<div style="font-size:0.75rem;color:#64748b">Pengeluaran Hari Ini</div>'
+    + '<div class="fw-bold text-red" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pengeluaranHariIni2) + '</div></div>'
+    + '<div style="background:#f8fff8;border-radius:12px;padding:16px;border-left:3px solid #10b981;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
+    + '<div style="font-size:0.75rem;color:#64748b">Pendapatan Hari Ini</div>'
+    + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni2) + '</div></div>';
   const totalAsetLancar = kasAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
 
   const jurnalRows = recentJurnal.length
@@ -1028,16 +1045,33 @@ async function renderDashboardApprover() {
     : '<tr><td colspan="3" class="text-center text-muted">Belum ada transaksi</td></tr>';
 
   const approvedPD = allPD.filter(function(x){ return x.status === STATUS.APPROVED; }).slice(-3).map(function(p){
-    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;font-size:0.82rem"><span>' + (p.namaPemohon||'-') + ' — ' + (p.noPOInvoice||'-') + '</span><span class="badge badge-success">Approved</span></div>';
+    var nameStr = (p.namaPemohon||'-');
+    var words = nameStr.split(/\s+/);
+    var initials = words.length >= 2 ? (words[0][0]||'') + (words[1][0]||'') : (words[0]||'').substring(0,2);
+    initials = initials.toUpperCase();
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;font-size:0.82rem"><span style="display:flex;align-items:center;gap:8px"><span style="width:28px;height:28px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:#475569;flex-shrink:0">' + initials + '</span>' + nameStr + ' — ' + (p.noPOInvoice||'-') + '</span><span style="background:#ecfdf5;color:#065f46;border-radius:12px;padding:3px 10px;font-size:0.73rem;font-weight:600">Approved</span></div>';
   }).join('');
+
+  // Compute total pendapatan and pengeluaran for primary KPI
+  var totalPendapatanKPI2 = 0, totalPengeluaranKPI2 = 0;
+  jurnal.forEach(function(j) {
+    (j.lines||[]).forEach(function(l) {
+      var a = fd.akun.find(function(x){ return x.kode === l.akun; });
+      if (a && (a.kategori||'').includes('Beban')) totalPengeluaranKPI2 += l.debit||0;
+      if (a && (a.kategori||'').includes('Pendapatan')) totalPendapatanKPI2 += l.kredit||0;
+    });
+  });
+  var labaRugi2 = totalPendapatanKPI2 - totalPengeluaranKPI2;
 
   return '<div class="page-title">🎯 Dashboard Keuangan</div>'
     + perusahaanBanner + pendingBanner
-    // Stats row — sama seperti admin
+    // Primary KPI row
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
+    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalAsetLancar) + '</div><div class="lbl">Total Kas & Bank</div></div>'
+    + '<div class="stat-box ' + (labaRugi2 >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(labaRugi2) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
+    + '</div>'
     + '<div class="stats-row">'
     + '<div class="stat-box"><div class="val">' + jurnal.length + '</div><div class="lbl">Total Jurnal</div></div>'
-    + '<div class="stat-box green"><div class="val">' + fmtRp(totalDebit) + '</div><div class="lbl">Total Debit</div></div>'
-    + '<div class="stat-box red"><div class="val">' + fmtRp(totalKredit) + '</div><div class="lbl">Total Kredit</div></div>'
     + '<div class="stat-box orange"><div class="val">' + fmtRp(unpaidInvoice) + '</div><div class="lbl">Invoice Belum Lunas</div></div>'
     + '<div class="stat-box purple"><div class="val">' + fmtRp(totalPO) + '</div><div class="lbl">Total PO</div></div>'
     + '<div class="stat-box orange"><div class="val">' + (pendingPD+pendingDM) + '</div><div class="lbl">Pending Approval</div></div>'
@@ -11859,15 +11893,19 @@ function buildDashboardExtras(jurnal, fd, allPD, allDM) {
     linePointsK.push(xPct + ',' + (80 - hK));
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">'
       + '<div style="display:flex;gap:2px;align-items:flex-end;height:80px">'
-      + '<div style="width:8px;height:' + hP + 'px;background:#4caf50;border-radius:2px 2px 0 0;min-height:1px" title="Pendapatan: ' + fmtRp(pendapatanArr[i]) + '"></div>'
-      + '<div style="width:8px;height:' + hK + 'px;background:#f44336;border-radius:2px 2px 0 0;min-height:1px" title="Pengeluaran: ' + fmtRp(pengeluaranArr[i]) + '"></div>'
-      + '</div><div style="font-size:0.6rem;color:' + (isCur?'#1a237e':'#888') + ';font-weight:' + (isCur?'700':'400') + '">' + lbl + '</div></div>';
+      + '<div style="width:8px;height:' + hP + 'px;background:linear-gradient(180deg,#10b981,#34d399);border-radius:8px 8px 0 0;min-height:1px" title="Pendapatan: ' + fmtRp(pendapatanArr[i]) + '"></div>'
+      + '<div style="width:8px;height:' + hK + 'px;background:linear-gradient(180deg,#f43f5e,#fb7185);border-radius:8px 8px 0 0;min-height:1px" title="Pengeluaran: ' + fmtRp(pengeluaranArr[i]) + '"></div>'
+      + '</div><div style="font-size:0.6rem;color:' + (isCur?'#1a237e':'#64748b') + ';font-weight:' + (isCur?'700':'400') + '">' + lbl + '</div></div>';
   }).join('');
 
-  // SVG line overlay
+  // SVG line overlay with gradient area fills
   var svgLine = '<svg style="position:absolute;top:0;left:2%;width:96%;height:80px;pointer-events:none" viewBox="0 0 100 80" preserveAspectRatio="none">'
-    + '<polyline points="' + linePointsP.join(' ') + '" fill="none" stroke="#2e7d32" stroke-width="0.8" stroke-dasharray="2,1"/>'
-    + '<polyline points="' + linePointsK.join(' ') + '" fill="none" stroke="#c62828" stroke-width="0.8" stroke-dasharray="2,1"/>'
+    + '<defs><linearGradient id="gradP" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/><stop offset="100%" stop-color="#10b981" stop-opacity="0.02"/></linearGradient>'
+    + '<linearGradient id="gradK" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f43f5e" stop-opacity="0.3"/><stop offset="100%" stop-color="#f43f5e" stop-opacity="0.02"/></linearGradient></defs>'
+    + '<polygon points="' + linePointsP.join(' ') + ' 100,80 0,80" fill="url(#gradP)"/>'
+    + '<polygon points="' + linePointsK.join(' ') + ' 100,80 0,80" fill="url(#gradK)"/>'
+    + '<polyline points="' + linePointsP.join(' ') + '" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '<polyline points="' + linePointsK.join(' ') + '" fill="none" stroke="#f43f5e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'
     + '</svg>';
 
   var forecastPD = allPD.filter(function(x){ return x.status === STATUS.DRAFT || x.status === STATUS.PENDING_L1; });
@@ -11923,22 +11961,22 @@ function buildDashboardExtras(jurnal, fd, allPD, allDM) {
     + '<div style="font-weight:600;font-size:0.82rem;margin-bottom:6px">Grafik Pendapatan vs Pengeluaran</div>'
     + '<div style="position:relative;display:flex;align-items:flex-end;gap:3px;padding:6px 0">' + bars + svgLine + '</div>'
     + '<div style="display:flex;gap:16px;justify-content:center;margin-top:4px;font-size:0.72rem">'
-    + '<span><span style="display:inline-block;width:8px;height:8px;background:#4caf50;border-radius:2px;margin-right:3px"></span>Pendapatan</span>'
-    + '<span><span style="display:inline-block;width:8px;height:8px;background:#f44336;border-radius:2px;margin-right:3px"></span>Pengeluaran</span>'
-    + '<span><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #2e7d32;margin-right:3px"></span>Trend Pendapatan</span>'
-    + '<span><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #c62828;margin-right:3px"></span>Trend Pengeluaran</span>'
+    + '<span><span style="display:inline-block;width:8px;height:8px;background:#10b981;border-radius:2px;margin-right:3px"></span>Pendapatan</span>'
+    + '<span><span style="display:inline-block;width:8px;height:8px;background:#f43f5e;border-radius:2px;margin-right:3px"></span>Pengeluaran</span>'
+    + '<span><span style="display:inline-block;width:12px;height:0;border-top:2px solid #10b981;margin-right:3px"></span>Trend Pendapatan</span>'
+    + '<span><span style="display:inline-block;width:12px;height:0;border-top:2px solid #f43f5e;margin-right:3px"></span>Trend Pengeluaran</span>'
     + '</div></div>';
 
   // 2. Forecast
   html += '<div class="card"><div class="card-header"><h2>📈 Forecast (Pending Approval)</h2>' + periodBtns + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-    + '<div style="background:#fff8f8;border-radius:8px;padding:14px;border-left:4px solid #f44336"><div class="text-muted" style="font-size:0.72rem">Forecast Pengeluaran</div><div class="fw-bold text-red" style="font-size:1.1rem">' + fmtRp(totalForecastOut) + '</div><div class="text-muted" style="font-size:0.7rem;margin-top:4px">' + forecastPD.length + ' permohonan pending</div></div>'
-    + '<div style="background:#f8fff8;border-radius:8px;padding:14px;border-left:4px solid #4caf50"><div class="text-muted" style="font-size:0.72rem">Forecast Penerimaan</div><div class="fw-bold text-green" style="font-size:1.1rem">' + fmtRp(totalForecastIn) + '</div><div class="text-muted" style="font-size:0.7rem;margin-top:4px">' + forecastDM.length + ' dana masuk pending</div></div>'
+    + '<div style="background:#fff8f8;border-radius:8px;padding:14px;border-left:4px solid #f43f5e"><div class="text-muted" style="font-size:0.72rem">Forecast Pengeluaran</div><div class="fw-bold text-red" style="font-size:1.1rem">' + fmtRp(totalForecastOut) + '</div><div class="text-muted" style="font-size:0.7rem;margin-top:4px">' + forecastPD.length + ' permohonan pending</div></div>'
+    + '<div style="background:#f8fff8;border-radius:8px;padding:14px;border-left:4px solid #10b981"><div class="text-muted" style="font-size:0.72rem">Forecast Penerimaan</div><div class="fw-bold text-green" style="font-size:1.1rem">' + fmtRp(totalForecastIn) + '</div><div class="text-muted" style="font-size:0.7rem;margin-top:4px">' + forecastDM.length + ' dana masuk pending</div></div>'
     + '</div></div>';
 
   // 3. Actual vs Budget
   var pctBar = Math.min(parseFloat(budgetVsActual), 100);
-  var pctColor = pctBar >= 80 ? '#4caf50' : pctBar >= 50 ? '#ff9800' : '#f44336';
+  var pctColor = pctBar >= 80 ? '#10b981' : pctBar >= 50 ? '#ff9800' : '#f43f5e';
   html += '<div class="card"><div class="card-header"><h2>🎯 Actual vs Budget — ' + periodLabelShort + '</h2>' + periodBtns + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
     + '<div style="background:#f8f9ff;border-radius:8px;padding:10px;text-align:center"><div class="text-muted" style="font-size:0.7rem">Budget Pendapatan/Bln</div><div class="fw-bold text-blue" style="font-size:0.95rem">' + fmtRp(budgetBulanan) + '</div></div>'
@@ -11949,7 +11987,7 @@ function buildDashboardExtras(jurnal, fd, allPD, allDM) {
     + '<div style="margin-bottom:8px"><div style="font-size:0.8rem;font-weight:600;margin-bottom:4px">Pencapaian Target: ' + budgetVsActual + '%</div>'
     + '<div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden"><div style="width:' + pctBar + '%;height:100%;background:' + pctColor + ';border-radius:6px"></div></div></div>'
     + '<div style="margin-bottom:8px"><div style="font-size:0.8rem;font-weight:600;margin-bottom:4px">Efisiensi Beban: ' + efisiensiBeban + '% dari pendapatan</div>'
-    + '<div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden"><div style="width:' + Math.min(parseFloat(efisiensiBeban),100) + '%;height:100%;background:' + (parseFloat(efisiensiBeban)<70?'#4caf50':'#ff9800') + ';border-radius:6px"></div></div></div>'
+    + '<div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden"><div style="width:' + Math.min(parseFloat(efisiensiBeban),100) + '%;height:100%;background:' + (parseFloat(efisiensiBeban)<70?'#10b981':'#ff9800') + ';border-radius:6px"></div></div></div>'
     + '<div style="background:#f8f9ff;border-radius:8px;padding:12px;margin-top:8px;border-left:4px solid #1a237e">'
     + '<div style="font-weight:600;font-size:0.82rem;color:#1a237e;margin-bottom:4px">💡 Analisis & Saran:</div>'
     + '<p style="font-size:0.82rem;line-height:1.6;color:#333">' + saran + '</p>'
@@ -11998,7 +12036,7 @@ function buildDashboardExtras(jurnal, fd, allPD, allDM) {
       var w = Math.round((val/maxBebanCOA)*100);
       return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         + '<div style="width:160px;font-size:0.75rem;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + a.nama + '">' + a.nama + '</div>'
-        + '<div style="flex:1;background:#eee;border-radius:4px;height:18px;overflow:hidden"><div style="width:' + w + '%;height:100%;background:#f44336;border-radius:4px"></div></div>'
+        + '<div style="flex:1;background:#eee;border-radius:8px;height:18px;overflow:hidden"><div style="width:' + w + '%;height:100%;background:linear-gradient(90deg,#f43f5e,#fb7185);border-radius:8px"></div></div>'
         + '<div style="width:100px;font-size:0.75rem;font-weight:600;text-align:right">' + fmtRp(val) + '</div></div>';
     }).join('');
 
@@ -12009,15 +12047,15 @@ function buildDashboardExtras(jurnal, fd, allPD, allDM) {
       var w = Math.round((val/maxPendCOA)*100);
       return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         + '<div style="width:160px;font-size:0.75rem;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + a.nama + '">' + a.nama + '</div>'
-        + '<div style="flex:1;background:#eee;border-radius:4px;height:18px;overflow:hidden"><div style="width:' + w + '%;height:100%;background:#4caf50;border-radius:4px"></div></div>'
+        + '<div style="flex:1;background:#eee;border-radius:8px;height:18px;overflow:hidden"><div style="width:' + w + '%;height:100%;background:linear-gradient(90deg,#10b981,#34d399);border-radius:8px"></div></div>'
         + '<div style="width:100px;font-size:0.75rem;font-weight:600;text-align:right">' + fmtRp(val) + '</div></div>';
     }).join('');
 
   html += '<div class="card"><div class="card-header"><h2>📊 Grafik per COA — ' + periodLabel + '</h2>' + periodBtns + '</div>'
-    + '<div style="margin-bottom:16px"><div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:#c62828">Pengeluaran per Item (Beban)</div>'
+    + '<div style="margin-bottom:16px"><div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:#9f1239">Pengeluaran per Item (Beban)</div>'
     + (bebanBars || '<div class="text-muted" style="font-size:0.82rem">Belum ada data beban</div>')
     + '</div>'
-    + '<div style="border-top:1px solid #eee;padding-top:12px"><div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:#2e7d32">Pendapatan per Item</div>'
+    + '<div style="border-top:1px solid #eee;padding-top:12px"><div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:#065f46">Pendapatan per Item</div>'
     + (pendBars || '<div class="text-muted" style="font-size:0.82rem">Belum ada data pendapatan</div>')
     + '</div></div>';
 
