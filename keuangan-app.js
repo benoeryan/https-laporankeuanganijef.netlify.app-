@@ -395,7 +395,7 @@ function buildSidebar() {
     } else if (isLimited) {
       // Leader/Viewer: Dashboard + Approval Center + Portal Aset + Monitor
       if (group.group === 'Laporan') {
-        items = visible.filter(function(i) { return i.id === 'lap-dashboard'; });
+        items = visible.filter(function(i) { return i.id === 'lap-dashboard' || i.id === 'lap-print-bundle'; });
       } else if (group.group === 'Transaksi') {
         items = visible.filter(function(i) { return i.id === 'dana-approval'; });
       } else if (group.group === 'Monitor') {
