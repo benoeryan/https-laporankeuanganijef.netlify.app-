@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-003",
+  "type": "fix",
+  "description": "Fix critical issues from semantic review: FCM race condition, wrong gcm_sender_id in manifest.json, and duplicate loadScript function definition.",
+  "status": "completed",
+  "steps": [
+    "Fix the FCM race condition by moving initFCM() inside the .then() callback of initNotifikasi()",
+    "Fix the wrong gcm_sender_id in manifest.json from '103953800507' to '48180557823'",
+    "Rename the function-scoped loadScript inside downloadPdfLaporan to _loadPdfScript to avoid shadowing the module-level loadScript"
+  ],
+  "acceptance_criteria": [
+    "initFCM() is called inside the .then() callback of initNotifikasi(), not separately",
+    "manifest.json gcm_sender_id is '48180557823'",
+    "No duplicate loadScript function names exist in the file",
+    "node -c keuangan-app.js passes without errors",
+    "python3 -m json.tool manifest.json passes without errors"
+  ],
+  "verification": [
+    "Run: node -c keuangan-app.js",
+    "Run: python3 -m json.tool manifest.json",
+    "Grep for initFCM in the .then() callback",
+    "Grep gcm_sender_id in manifest.json should show 48180557823"
+  ],
+  "blocked_reason": null,
+  "findings": "All three review issues fixed: (1) FCM race condition resolved by moving initFCM() inside initNotifikasi().then(), (2) gcm_sender_id corrected to 48180557823, (3) inner loadScript renamed to _loadPdfScript to eliminate shadowing."
+}

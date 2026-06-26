@@ -360,9 +360,7 @@ function buildApp() {
   buildSidebar();
   buildContent();
   // Init notifikasi
-  initNotifikasi().then(function(){ updateNotifBadge(); });
-  // Init Firebase Cloud Messaging for push notifications
-  initFCM();
+  initNotifikasi().then(function(){ updateNotifBadge(); initFCM(); });
   // Nanda: langsung ke portal aset
   if (KU.role === 'nanda') {
     navigate('portal-aset');
@@ -11849,7 +11847,7 @@ function downloadPdfLaporan() {
   if (!content) { showAlert('Konten laporan tidak ditemukan!', 'danger'); return; }
   showLoading(true);
 
-  function loadScript(src) {
+  function _loadPdfScript(src) {
     return new Promise(function(resolve, reject) {
       if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
       var s = document.createElement('script');
@@ -11863,7 +11861,7 @@ function downloadPdfLaporan() {
   var html2canvasUrl = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
   var jspdfUrl = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
 
-  Promise.all([loadScript(html2canvasUrl), loadScript(jspdfUrl)])
+  Promise.all([_loadPdfScript(html2canvasUrl), _loadPdfScript(jspdfUrl)])
     .then(function() {
       return html2canvas(content, {
         scale: 2,
