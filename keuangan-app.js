@@ -3681,8 +3681,12 @@ function renderActualWithChart(list, title, chartId) {
       }
     }
     if (x.jurnalId) {
-      actionBtns = '<td class="tbl-actions">' + viewBtn + ' <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + x.jurnalId + '\')">Edit</button>'
-        + '<button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + x.jurnalId + '\')">Hapus</button></td>';
+      var editHapusBtn = '';
+      if (KU.role === 'superadmin') {
+        editHapusBtn = ' <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + x.jurnalId + '\')">Edit</button>'
+          + '<button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + x.jurnalId + '\')">Hapus</button>';
+      }
+      actionBtns = '<td class="tbl-actions">' + viewBtn + editHapusBtn + '</td>';
     } else {
       actionBtns = '<td class="tbl-actions">' + (viewBtn || '<span class="text-muted" style="font-size:0.7rem">-</span>') + '</td>';
     }
