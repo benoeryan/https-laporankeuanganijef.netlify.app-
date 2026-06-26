@@ -393,11 +393,19 @@ function buildSidebar() {
         return;
       }
     } else if (isLimited) {
-      // Leader/Viewer: Dashboard + Approval Center + Portal Aset
+      // Leader/Viewer: Dashboard + Approval Center + Portal Aset + Monitor
       if (group.group === 'Laporan') {
         items = visible.filter(function(i) { return i.id === 'lap-dashboard'; });
       } else if (group.group === 'Transaksi') {
         items = visible.filter(function(i) { return i.id === 'dana-approval'; });
+      } else if (group.group === 'Monitor') {
+        items = visible.filter(function(i) {
+          return i.id === 'monitor-forecast-bayar' ||
+                 i.id === 'monitor-forecast-terima' ||
+                 i.id === 'monitor-actual-bayar' ||
+                 i.id === 'monitor-actual-terima' ||
+                 i.id === 'monitor-forecast-vs-actual';
+        });
       } else {
         return;
       }
