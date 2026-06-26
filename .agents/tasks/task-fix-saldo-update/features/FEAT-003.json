@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "fix",
   "description": "Fix real-time sync issues: reduce self-save window from 10s to 3s, add utangpiutang to subscription list, handle modal interference by deferring navigate when modal is open",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1: In keuangan-firebase.js _kSubscribeCollection, reduce the self-save skip window from 10000ms to 3000ms.",
     "Step 2: In keuangan-firebase.js startRealtimeSync(), add 'utangpiutang' to the collections list.",
@@ -22,5 +22,5 @@
     "Run: node -c keuangan-app.js"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "All fixes applied successfully: (1) Self-save window reduced from 10000ms to 3000ms for faster cross-user update propagation. (2) utangpiutang added to real-time subscribed collections. (3) Modal interference handled by deferring navigate() and using window._kDataUpdated flag. (4) Both closeModal() and closeModalDirect() now check the flag and refresh after modal dismissal. Syntax validation passed (node -c) for both files."
 }
