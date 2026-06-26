@@ -290,10 +290,10 @@ function _kSubscribeCollection(col, onChange) {
     var now = Date.now();
     snapshot.docChanges().forEach(function(change) {
       var docId = change.doc.id;
-      // If this doc is in _recentSaves (saved locally within last 10s), skip it
+      // If this doc is in _recentSaves (saved locally within last 3s), skip it
       if (KDB._recentSaves[col] && KDB._recentSaves[col][docId]) {
         var saveTime = KDB._recentSaves[col][docId];
-        if ((now - saveTime) < 10000) {
+        if ((now - saveTime) < 3000) {
           // This is a self-triggered change, skip
           return;
         }
@@ -335,11 +335,17 @@ function _kSubscribeCollection(col, onChange) {
 function startRealtimeSync() {
   if (_kRealtimeSyncActive || !kfbReady) return;
   _kRealtimeSyncActive = true;
-  var collections = ['jurnal', 'permohonan', 'danamasuk', 'inventori_atk', 'settings'];
+  var collections = ['jurnal', 'permohonan', 'danamasuk', 'inventori_atk', 'settings', 'utangpiutang'];
   var onCollectionUpdate = function(col, items) {
     // Re-render current section if it exists
     if (typeof currentSection !== 'undefined' && currentSection && typeof navigate === 'function') {
-      navigate(currentSection);
+      // Check if a modal is currently open - defer navigate to avoid UI conflicts
+      var modalOverlay = document.getElementById('modal-overlay');
+      if (modalOverlay && modalOverlay.classList.contains('open')) {
+        window._kDataUpdated = true;
+      } else {
+        navigate(currentSection);
+      }
     }
   };
   collections.forEach(function(col) {

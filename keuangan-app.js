@@ -169,11 +169,25 @@ function openModal(html, title) {
 function closeModal(e) {
   if (!e || e.target === document.getElementById('modal-overlay')) {
     document.getElementById('modal-overlay').classList.remove('open');
+    // If data was updated while modal was open, refresh the current view
+    if (window._kDataUpdated) {
+      window._kDataUpdated = false;
+      if (typeof currentSection !== 'undefined' && currentSection && typeof navigate === 'function') {
+        navigate(currentSection);
+      }
+    }
   }
 }
 
 function closeModalDirect() {
   document.getElementById('modal-overlay').classList.remove('open');
+  // If data was updated while modal was open, refresh the current view
+  if (window._kDataUpdated) {
+    window._kDataUpdated = false;
+    if (typeof currentSection !== 'undefined' && currentSection && typeof navigate === 'function') {
+      navigate(currentSection);
+    }
+  }
 }
 
 function showAlert(msg, type, duration) {
