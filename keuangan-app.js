@@ -339,6 +339,8 @@ async function doLogin() {
 function doLogout() {
   KU = null;
   localStorage.removeItem('k_session');
+  // Stop real-time sync listeners
+  stopRealtimeSync();
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-user').value = '';
@@ -361,6 +363,8 @@ function buildApp() {
   buildContent();
   // Init notifikasi
   initNotifikasi().then(function(){ updateNotifBadge(); initFCM(); });
+  // Start real-time sync for cross-user updates
+  startRealtimeSync();
   // Nanda: langsung ke portal aset
   if (KU.role === 'nanda') {
     navigate('portal-aset');

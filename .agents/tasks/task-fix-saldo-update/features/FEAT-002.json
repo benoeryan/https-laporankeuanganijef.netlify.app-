@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add Firestore real-time listeners (onSnapshot) to KDB layer so that when any user saves/updates data, ALL other connected users automatically receive the update without manual refresh.",
+  "status": "in_progress",
+  "steps": [
+    "1. Import onSnapshot from Firebase Firestore module in initKFirebase() and add it to the kfs object.",
+    "2. Add a subscribeCollection(col, callback) method to KDB that sets up an onSnapshot listener on a collection.",
+    "3. Add startRealtimeSync() function that subscribes to critical collections (jurnal, permohonan, danamasuk, inventori_atk, k_settings) after login.",
+    "4. When a snapshot update arrives from another user, update the localStorage cache AND re-render the current active section using navigate(currentSection).",
+    "5. Use _recentSaves tracking to skip self-triggered snapshot changes (avoid infinite loops).",
+    "6. Add stopRealtimeSync() to unsubscribe all listeners on logout.",
+    "7. Call startRealtimeSync() from buildApp() after login, call stopRealtimeSync() from doLogout()."
+  ],
+  "acceptance_criteria": [
+    "onSnapshot is imported and available in the kfs object",
+    "KDB.subscribeCollection sets up real-time listeners",
+    "After login, critical collections are subscribed",
+    "Snapshot updates from other users refresh the current view",
+    "Self-triggered changes do not cause re-renders (using _recentSaves)",
+    "Logout unsubscribes all listeners",
+    "node -c keuangan-firebase.js and node -c keuangan-app.js pass without errors"
+  ],
+  "verification": [
+    "Run: node -c keuangan-firebase.js",
+    "Run: node -c keuangan-app.js"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -25,7 +25,8 @@ async function initKFirebase() {
     kdb = fm.getFirestore(app);
     kfs = { doc: fm.doc, setDoc: fm.setDoc, getDoc: fm.getDoc, collection: fm.collection,
             getDocs: fm.getDocs, deleteDoc: fm.deleteDoc, query: fm.query,
-            where: fm.where, orderBy: fm.orderBy, addDoc: fm.addDoc, updateDoc: fm.updateDoc };
+            where: fm.where, orderBy: fm.orderBy, addDoc: fm.addDoc, updateDoc: fm.updateDoc,
+            onSnapshot: fm.onSnapshot };
     kfbReady = true;
     console.log('[KFirebase] ✅ Connected');
     return true;
@@ -263,6 +264,103 @@ const KDB = {
     return _klget('ksetting_' + key, def);
   },
 };
+
+// ===== REAL-TIME SYNC (onSnapshot) =====
+var _kRealtimeUnsubs = [];
+var _kRealtimeSyncActive = false;
+
+/**
+ * Subscribe to a Firestore collection for real-time updates.
+ * When changes arrive from other users, update localStorage cache
+ * and trigger a UI re-render via the provided callback.
+ * Self-triggered changes (tracked in KDB._recentSaves) are skipped.
+ */
+function _kSubscribeCollection(col, onChange) {
+  if (!kfbReady || !kfs.onSnapshot) return null;
+  var colRef = kfs.collection(kdb, 'k_' + col);
+  var isFirstSnapshot = true;
+  var unsub = kfs.onSnapshot(colRef, function(snapshot) {
+    // Skip the initial snapshot (it matches what we already have from getDocs)
+    if (isFirstSnapshot) {
+      isFirstSnapshot = false;
+      return;
+    }
+    // Check if this change was triggered by current user's recent save
+    var hasExternalChange = false;
+    var now = Date.now();
+    snapshot.docChanges().forEach(function(change) {
+      var docId = change.doc.id;
+      // If this doc is in _recentSaves (saved locally within last 10s), skip it
+      if (KDB._recentSaves[col] && KDB._recentSaves[col][docId]) {
+        var saveTime = KDB._recentSaves[col][docId];
+        if ((now - saveTime) < 10000) {
+          // This is a self-triggered change, skip
+          return;
+        }
+      }
+      hasExternalChange = true;
+    });
+    if (!hasExternalChange) return;
+    // External change detected - update localStorage cache
+    var items = snapshot.docs.map(function(d) { return d.data(); });
+    // Merge with dirty items (same logic as getAll)
+    var dirtyPrefix = 'k_' + col + '_dirty_';
+    for (var i = 0; i < localStorage.length; i++) {
+      var lsKey = localStorage.key(i);
+      if (lsKey && lsKey.indexOf(dirtyPrefix) === 0) {
+        var dirtyId = lsKey.substring(dirtyPrefix.length);
+        var dirtyTime = _klget('k_' + col + '_dirty_' + dirtyId, 0);
+        if (dirtyTime && (now - dirtyTime) < 10000) {
+          var localItem = _klget('k_' + col + '_' + dirtyId, null);
+          if (localItem) {
+            var idx = items.findIndex(function(x) { return x.id === dirtyId || x._id === dirtyId; });
+            if (idx >= 0) { items[idx] = localItem; } else { items.push(localItem); }
+          }
+        }
+      }
+    }
+    _klset('k_' + col + '_all', items);
+    // Trigger UI refresh
+    if (onChange) onChange(col, items);
+  }, function(err) {
+    console.warn('[KFirebase] onSnapshot error for ' + col + ':', err.message);
+  });
+  return unsub;
+}
+
+/**
+ * Start real-time sync for critical collections.
+ * Call after successful login (when kfbReady is true).
+ */
+function startRealtimeSync() {
+  if (_kRealtimeSyncActive || !kfbReady) return;
+  _kRealtimeSyncActive = true;
+  var collections = ['jurnal', 'permohonan', 'danamasuk', 'inventori_atk', 'settings'];
+  var onCollectionUpdate = function(col, items) {
+    // Re-render current section if it exists
+    if (typeof currentSection !== 'undefined' && currentSection && typeof navigate === 'function') {
+      navigate(currentSection);
+    }
+  };
+  collections.forEach(function(col) {
+    var unsub = _kSubscribeCollection(col, onCollectionUpdate);
+    if (unsub) _kRealtimeUnsubs.push(unsub);
+  });
+  console.log('[KFirebase] Real-time sync started for ' + collections.length + ' collections');
+}
+
+/**
+ * Stop real-time sync - unsubscribe all listeners.
+ * Call on logout.
+ */
+function stopRealtimeSync() {
+  _kRealtimeUnsubs.forEach(function(unsub) {
+    if (typeof unsub === 'function') unsub();
+  });
+  _kRealtimeUnsubs = [];
+  _kRealtimeSyncActive = false;
+  console.log('[KFirebase] Real-time sync stopped');
+}
 
 function _klget(key, def) {
   try { return JSON.parse(localStorage.getItem(key)) ?? def; } catch(e) { return def; }
