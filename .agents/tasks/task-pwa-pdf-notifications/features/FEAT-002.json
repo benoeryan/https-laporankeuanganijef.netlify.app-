@@ -1,0 +1,38 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Make the app a Progressive Web App (PWA) installable on Android and iOS, and add Firebase Cloud Messaging push notifications. Following the hr-legal-app pattern, create manifest.json, sw.js (caching service worker), and firebase-messaging-sw.js (FCM background notifications). Update index.html with PWA meta tags. Add service worker registration and FCM initialization to keuangan-app.js. Add install prompt handling.",
+  "status": "pending",
+  "steps": [
+    "Create /projects/sandbox/https-laporankeuanganijef.netlify.app-/manifest.json following the hr-legal-app pattern. Use: name='Sistem Keuangan IJEF Corp', short_name='Keuangan IJEF', display='standalone', orientation='portrait', background_color='#1a237e', theme_color='#1a237e', start_url='/', categories=['business','productivity']. Use ui-avatars.com for icons with name=KU (Keuangan) background=1a237e color=ffffff size=192 and 512. Set gcm_sender_id to '103953800507'.",
+    "Create /projects/sandbox/https-laporankeuanganijef.netlify.app-/sw.js following the hr-legal-app sw.js pattern exactly. Use CACHE_NAME='keuangan-ijef-v1'. Include: skipWaiting on install, cache cleanup on activate with clients.claim(), notificationclick handler that focuses existing window or opens '/', network-first fetch strategy that caches non-JS/non-HTML assets.",
+    "Create /projects/sandbox/https-laporankeuanganijef.netlify.app-/firebase-messaging-sw.js following the hr-legal-app pattern exactly. Use importScripts for firebase-app-compat.js and firebase-messaging-compat.js v10.12.2. Use the same Firebase config from keuangan-firebase.js (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId). Implement onBackgroundMessage handler with vibrate pattern, notification icon from ui-avatars.com (name=KU&background=1a237e&color=ffffff&size=192). Include notificationclick handler.",
+    "Update /projects/sandbox/https-laporankeuanganijef.netlify.app-/index.html: (1) Add <link rel='manifest' href='manifest.json'> in <head>. (2) Add <meta name='theme-color' content='#1a237e'>. (3) Add <link rel='apple-touch-icon' href='https://ui-avatars.com/api/?name=KU&background=1a237e&color=ffffff&size=192'>. (4) Add <meta name='apple-mobile-web-app-capable' content='yes'>. (5) Add <meta name='apple-mobile-web-app-status-bar-style' content='black-translucent'>.",
+    "Add PWA service worker registration at the end of keuangan-app.js (after all existing code). Following the hr-legal-app core.js pattern (line 1087-1096): Register '/sw.js' for caching. This should be unconditional, outside any function.",
+    "Add FCM initialization to keuangan-app.js. Create a new function initFCM() that: (1) Checks for serviceWorker and Notification support, (2) Checks if _notifEnabled is true, (3) Requests notification permission if needed, (4) Registers firebase-messaging-sw.js as a service worker, (5) Loads Firebase messaging compat SDK dynamically (https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js and firebase-messaging-compat.js), (6) Initializes firebase messaging and gets token using VAPID_KEY constant (use the same key from hr-legal-app: 'BKGJy5_3Z0dSIifKhousIb_mp06c0-bLVcUcOq0HyOTnpHY65DuUJ4hpyz0xyO48bJgwBId_LPfM1Twcn_QGwUc'), (7) Saves token to Firestore collection 'k_fcm_tokens' with username/device info, (8) Sets up onMessage handler for foreground notifications that calls kirimNotifikasi(). Call initFCM() from buildApp() after initNotifikasi().",
+    "Add PWA install prompt handling in keuangan-app.js: (1) Add beforeinstallprompt event listener that stores the event, (2) Add a function showInstallPrompt() that triggers the stored prompt, (3) Add an install banner/button in the app UI (e.g., in the header or as a floating button) that appears when the install prompt is available and dismisses after install or user dismissal."
+  ],
+  "acceptance_criteria": [
+    "manifest.json exists and is valid JSON with correct PWA fields",
+    "sw.js exists with caching service worker logic",
+    "firebase-messaging-sw.js exists with FCM background message handling",
+    "index.html includes manifest link, theme-color meta, and apple-touch-icon",
+    "Service workers are registered from keuangan-app.js",
+    "FCM is initialized after login when notifications are enabled",
+    "Install prompt is captured and can be shown to user",
+    "The app meets PWA installability criteria (manifest + service worker + HTTPS assumed via Netlify)"
+  ],
+  "verification": [
+    "Run: node -c manifest.json (valid JSON check, or use python -m json.tool manifest.json)",
+    "Run: node -c sw.js to verify no syntax errors",
+    "Run: node -c firebase-messaging-sw.js to verify no syntax errors (note: importScripts will fail in node but syntax should be valid)",
+    "Run: node -c keuangan-app.js to verify no syntax errors",
+    "Grep index.html for 'manifest.json' link tag",
+    "Grep index.html for 'theme-color' meta tag",
+    "Grep keuangan-app.js for 'serviceWorker' registration",
+    "Grep keuangan-app.js for 'initFCM' function",
+    "Grep keuangan-app.js for 'beforeinstallprompt' event listener"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

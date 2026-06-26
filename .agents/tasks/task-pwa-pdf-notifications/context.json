@@ -1,0 +1,25 @@
+{
+  "project_type": "Vanilla JavaScript single-page app deployed on Netlify (financial management system)",
+  "language": "JavaScript (vanilla, no framework)",
+  "build_system": "None - static files served via Netlify, no build step",
+  "test_framework": "None - no test infrastructure",
+  "build_command": "N/A - static HTML/JS served directly",
+  "test_command": "N/A - no automated tests",
+  "verification_instructions": "1. Verify all files are syntactically valid JS/HTML (no parse errors). 2. Confirm manifest.json is valid JSON. 3. Confirm service workers are valid JS. 4. Verify index.html references new files correctly.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup required - pure static site. Files are served as-is by Netlify.",
+  "environment_constraints": "Open internet - can use CDN scripts (jsPDF, Firebase SDKs). No build tools needed. No Docker. Netlify deployment.",
+  "contribution_requirements": "Follow patterns from hr-legal-app reference repository at /projects/sandbox/hr-legal-app/",
+  "key_patterns": "1. Firebase config reused from KFB_CONFIG in keuangan-firebase.js (same project: test-kesehatan-ijef-corp-7c278). 2. App branding: 'Sistem Keuangan IJEF Corp', primary color #1a237e. 3. Existing notification system uses basic Notification API (no FCM) + EmailJS. 4. Print bundle renders financial reports via renderPrintBundle() which creates full HTML for Laba Rugi, Neraca, Arus Kas, Ekuitas. 5. printBundleLaporan() opens new window with formatted content and calls window.print(). 6. initNotifikasi() called from buildApp() on login. 7. App uses ES module imports for Firebase (from CDN). 8. Reference app uses Firebase compat SDK in service workers (v10.12.2).",
+  "relevant_files": [
+    "/projects/sandbox/https-laporankeuanganijef.netlify.app-/index.html",
+    "/projects/sandbox/https-laporankeuanganijef.netlify.app-/keuangan-app.js",
+    "/projects/sandbox/https-laporankeuanganijef.netlify.app-/keuangan-firebase.js",
+    "/projects/sandbox/https-laporankeuanganijef.netlify.app-/netlify.toml",
+    "/projects/sandbox/hr-legal-app/manifest.json",
+    "/projects/sandbox/hr-legal-app/sw.js",
+    "/projects/sandbox/hr-legal-app/firebase-messaging-sw.js",
+    "/projects/sandbox/hr-legal-app/core.js"
+  ],
+  "directory_structure": "Root: index.html (main app shell + styles), keuangan-app.js (~13612 lines, all app logic), keuangan-firebase.js (Firebase/Firestore layer), netlify/ (serverless functions), netlify.toml (deploy config)"
+}

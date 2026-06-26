@@ -11672,6 +11672,7 @@ async function renderPrintBundle() {
     + '</div>'
     + '<div class="flex-row" style="gap:8px">'
     + '<button class="btn btn-primary" onclick="printBundleLaporan()">🖨️ Print Semua Laporan</button>'
+    + '<button class="btn btn-success" onclick="downloadPdfLaporan()">📄 Download PDF</button>'
     + '<span class="text-muted">Periode: ' + periode + '</span>'
     + '</div></div>'
     + '<div class="print-bundle-section">'
@@ -11839,6 +11840,84 @@ function printBundleLaporan() {
   w.document.write('</body></html>');
   w.document.close();
   setTimeout(function() { w.print(); }, 500);
+}
+
+function downloadPdfLaporan() {
+  var content = document.querySelector('.print-bundle-section');
+  if (!content) { showAlert('Konten laporan tidak ditemukan!', 'danger'); return; }
+  showLoading(true);
+
+  function loadScript(src) {
+    return new Promise(function(resolve, reject) {
+      if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function() { reject(new Error('Gagal memuat: ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  var html2canvasUrl = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+  var jspdfUrl = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+
+  Promise.all([loadScript(html2canvasUrl), loadScript(jspdfUrl)])
+    .then(function() {
+      return html2canvas(content, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+    })
+    .then(function(canvas) {
+      var jsPDF = window.jspdf.jsPDF;
+      var pdf = new jsPDF('p', 'mm', 'a4');
+      var pageWidth = pdf.internal.pageSize.getWidth();
+      var pageHeight = pdf.internal.pageSize.getHeight();
+      var margin = 10;
+      var usableWidth = pageWidth - (margin * 2);
+      var usableHeight = pageHeight - (margin * 2);
+
+      var imgWidth = usableWidth;
+      var imgHeight = (canvas.height * imgWidth) / canvas.width;
+      var heightLeft = imgHeight;
+      var position = margin;
+      var pageCount = 0;
+
+      while (heightLeft > 0) {
+        if (pageCount > 0) { pdf.addPage(); }
+        var sourceY = pageCount * (canvas.width * usableHeight / usableWidth);
+        var sourceHeight = Math.min(canvas.height - sourceY, canvas.width * usableHeight / usableWidth);
+        if (sourceHeight <= 0) break;
+
+        var tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = sourceHeight;
+        var ctx = tempCanvas.getContext('2d');
+        ctx.drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight);
+
+        var imgData = tempCanvas.toDataURL('image/jpeg', 0.95);
+        var sliceHeight = (sourceHeight * usableWidth) / canvas.width;
+        pdf.addImage(imgData, 'JPEG', margin, margin, usableWidth, sliceHeight);
+
+        heightLeft -= usableHeight;
+        pageCount++;
+      }
+
+      var today = new Date();
+      var dateStr = today.getFullYear() + '-' +
+        String(today.getMonth() + 1).padStart(2, '0') + '-' +
+        String(today.getDate()).padStart(2, '0');
+      pdf.save('Laporan-Keuangan-IJEF-Corp-' + dateStr + '.pdf');
+      showAlert('PDF berhasil didownload!', 'success');
+      showLoading(false);
+    })
+    .catch(function(err) {
+      console.error('PDF generation error:', err);
+      showAlert('Gagal membuat PDF: ' + (err.message || 'Terjadi kesalahan'), 'danger');
+      showLoading(false);
+    });
 }
 
 // ===== PRINT FILTER STATE =====
