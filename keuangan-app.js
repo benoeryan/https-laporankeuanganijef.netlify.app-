@@ -13116,11 +13116,68 @@ async function showATKPublicForm() {
 
 function buildATKItemRow(atkOpts) {
   return '<div class="pub-atk-row" style="display:grid;grid-template-columns:1fr 80px 30px;gap:8px;margin-bottom:8px;align-items:center">'
-    + '<select class="pub-atk-id" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;font-size:0.85rem"><option value="">-- Pilih ATK --</option>' + atkOpts + '</select>'
+    + '<div class="search-select-wrap">'
+    + '<input type="hidden" class="pub-atk-id" value="">'
+    + '<input type="text" class="ss-input" placeholder="Cari ATK..." autocomplete="off" onfocus="openATKDropdown(this)" oninput="filterATKDropdown(this)">'
+    + '<div class="ss-dropdown"></div>'
+    + '</div>'
     + '<input type="number" class="pub-atk-qty" placeholder="Qty" min="1" value="1" style="padding:8px;border:1.5px solid #ddd;border-radius:7px;font-size:0.85rem;text-align:center">'
     + '<button onclick="this.closest(\'.pub-atk-row\').remove()" style="background:#f44336;color:white;border:none;border-radius:6px;padding:6px 8px;cursor:pointer">x</button>'
     + '</div>';
 }
+
+function openATKDropdown(input) {
+  var wrap = input.closest('.search-select-wrap');
+  if (!wrap) return;
+  renderATKDropdownItems(wrap, '');
+  wrap.classList.add('open');
+}
+
+function filterATKDropdown(input) {
+  var wrap = input.closest('.search-select-wrap');
+  if (!wrap) return;
+  var keyword = (input.value || '').toLowerCase();
+  renderATKDropdownItems(wrap, keyword);
+  wrap.classList.add('open');
+}
+
+function renderATKDropdownItems(wrap, keyword) {
+  var dropdown = wrap.querySelector('.ss-dropdown');
+  if (!dropdown) return;
+  var list = window._atkList || [];
+  var html = '';
+  var count = 0;
+  for (var i = 0; i < list.length; i++) {
+    var item = list[i];
+    var label = item.nama + ' (' + (item.satuan || 'pcs') + ')';
+    if (keyword && label.toLowerCase().indexOf(keyword) === -1) continue;
+    html += '<div class="ss-item" data-id="' + item.id + '" data-label="' + label.replace(/"/g, '&quot;') + '" onclick="selectATKItem(this)">' + label + '</div>';
+    count++;
+    if (count >= 50) break;
+  }
+  if (!html) html = '<div class="ss-item" style="color:#999;cursor:default">Tidak ditemukan</div>';
+  dropdown.innerHTML = html;
+}
+
+function selectATKItem(el) {
+  var wrap = el.closest('.search-select-wrap');
+  if (!wrap) return;
+  var id = el.getAttribute('data-id') || '';
+  var label = el.getAttribute('data-label') || '';
+  wrap.querySelector('.pub-atk-id').value = id;
+  wrap.querySelector('.ss-input').value = label;
+  wrap.classList.remove('open');
+}
+
+// Close ATK dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.search-select-wrap')) {
+    var openWraps = document.querySelectorAll('.search-select-wrap.open');
+    for (var i = 0; i < openWraps.length; i++) {
+      openWraps[i].classList.remove('open');
+    }
+  }
+});
 
 function previewPubFoto(input) {
   var el = document.getElementById('pub-foto-preview');
