@@ -361,6 +361,8 @@ function buildApp() {
   buildContent();
   // Init notifikasi
   initNotifikasi().then(function(){ updateNotifBadge(); });
+  // Init Firebase Cloud Messaging for push notifications
+  initFCM();
   // Nanda: langsung ke portal aset
   if (KU.role === 'nanda') {
     navigate('portal-aset');
@@ -13688,4 +13690,178 @@ async function testNotifikasi() {
   await kirimNotifikasi('🧪 Test Notifikasi', 'Sistem notifikasi berjalan dengan baik!', '');
   var el = document.getElementById('notif-test-result');
   if (el) el.innerHTML = '<div class="alert alert-success">Notifikasi test dikirim!</div>';
+}
+
+// ── PWA: Firebase Cloud Messaging (FCM) Push Notifications ────────────────────
+const FCM_VAPID_KEY = 'BKGJy5_3Z0dSIifKhousIb_mp06c0-bLVcUcOq0HyOTnpHY65DuUJ4hpyz0xyO48bJgwBId_LPfM1Twcn_QGwUc';
+let _fcmMessaging = null;
+
+function hashFCMToken(token) {
+  var hash = 0;
+  for (var i = 0; i < token.length; i++) {
+    var chr = token.charCodeAt(i);
+    hash = (hash << 5) - hash + chr;
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+async function initFCM() {
+  try {
+    if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+    if (!KU) return;
+    if (!_notifEnabled) return;
+
+    // Request permission if needed
+    var permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== 'granted') {
+      console.warn('[FCM] Notification permission not granted:', permission);
+      return;
+    }
+
+    // Register the FCM service worker
+    var swRegistration;
+    try {
+      swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      await navigator.serviceWorker.ready;
+    } catch (swErr) {
+      console.warn('[FCM] Service Worker registration failed:', swErr.message);
+      return;
+    }
+
+    // Load Firebase compat SDK if not already loaded
+    if (typeof firebase === 'undefined' || !firebase.messaging) {
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+    }
+
+    // Initialize Firebase compat app if not already initialized
+    if (!firebase.apps.length) {
+      firebase.initializeApp(KFB_CONFIG);
+    }
+
+    _fcmMessaging = firebase.messaging();
+
+    var token;
+    try {
+      token = await _fcmMessaging.getToken({
+        vapidKey: FCM_VAPID_KEY,
+        serviceWorkerRegistration: swRegistration,
+      });
+    } catch (tokenErr) {
+      console.warn('[FCM] getToken failed, retrying...', tokenErr.message);
+      await new Promise(function(r) { setTimeout(r, 2000); });
+      try {
+        token = await _fcmMessaging.getToken({
+          vapidKey: FCM_VAPID_KEY,
+          serviceWorkerRegistration: swRegistration,
+        });
+      } catch (e) {
+        console.error('[FCM] getToken retry failed:', e.message);
+        return;
+      }
+    }
+
+    if (token) {
+      console.log('[FCM] Token registered successfully');
+      var tokenId = hashFCMToken(token);
+      await KDB.save('k_fcm_tokens', KU.username + '_' + tokenId, {
+        token: token,
+        userId: KU.username,
+        userName: KU.nama,
+        role: KU.role,
+        device: navigator.userAgent,
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      console.warn('[FCM] No token received');
+    }
+
+    // Handle foreground messages
+    _fcmMessaging.onMessage(function(payload) {
+      var notification = payload.notification || payload.data || {};
+      var title = notification.title || (payload.data && payload.data.title) || 'Keuangan IJEF Notifikasi';
+      var body = notification.body || (payload.data && payload.data.body) || '';
+      kirimNotifikasi(title, body, '');
+    });
+  } catch (e) {
+    console.warn('[FCM] init failed:', e);
+  }
+}
+
+function loadScript(src) {
+  return new Promise(function(resolve, reject) {
+    if (document.querySelector('script[src="' + src + '"]')) {
+      resolve();
+      return;
+    }
+    var script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+// ── PWA: Install Prompt Handling ──────────────────────────────────────────────
+var _deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  showInstallBanner();
+});
+
+function showInstallBanner() {
+  // Only show if not already installed and prompt is available
+  if (!_deferredInstallPrompt) return;
+  var existing = document.getElementById('pwa-install-banner');
+  if (existing) return;
+
+  var banner = document.createElement('div');
+  banner.id = 'pwa-install-banner';
+  banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a237e;color:white;padding:12px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;z-index:9999;font-size:0.9rem;max-width:90vw;';
+  banner.innerHTML = '<span>📱 Install aplikasi untuk akses lebih cepat!</span>' +
+    '<button onclick="triggerInstallPrompt()" style="background:white;color:#1a237e;border:none;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;white-space:nowrap;">Install</button>' +
+    '<button onclick="dismissInstallBanner()" style="background:transparent;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:1.2rem;padding:4px 8px;">✕</button>';
+  document.body.appendChild(banner);
+}
+
+function triggerInstallPrompt() {
+  if (!_deferredInstallPrompt) return;
+  _deferredInstallPrompt.prompt();
+  _deferredInstallPrompt.userChoice.then(function(choiceResult) {
+    if (choiceResult.outcome === 'accepted') {
+      console.log('[PWA] User accepted install prompt');
+    }
+    _deferredInstallPrompt = null;
+    dismissInstallBanner();
+  });
+}
+
+function dismissInstallBanner() {
+  var banner = document.getElementById('pwa-install-banner');
+  if (banner) banner.remove();
+}
+
+window.addEventListener('appinstalled', function() {
+  console.log('[PWA] App installed successfully');
+  _deferredInstallPrompt = null;
+  dismissInstallBanner();
+});
+
+// ── PWA: Service Worker Registration ──────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  // Unregister old service workers that are NOT firebase-messaging-sw.js
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(r) {
+      if (r.active && r.active.scriptURL.includes('firebase-messaging-sw.js')) return;
+      if (r.active && r.active.scriptURL.includes('sw.js')) return;
+      r.unregister();
+    });
+  });
+  navigator.serviceWorker.register('/sw.js').catch(function() {});
 }

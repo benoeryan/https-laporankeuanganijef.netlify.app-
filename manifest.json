@@ -1,0 +1,28 @@
+{
+  "name": "Sistem Keuangan IJEF Corp",
+  "short_name": "Keuangan IJEF",
+  "description": "Sistem Keuangan IJEF Corp - Laporan Keuangan, Pencatatan, dan Analisis",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a237e",
+  "theme_color": "#1a237e",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "https://ui-avatars.com/api/?name=KU&background=1a237e&color=ffffff&size=192&format=png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://ui-avatars.com/api/?name=KU&background=1a237e&color=ffffff&size=512&format=png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false,
+  "gcm_sender_id": "103953800507"
+}
