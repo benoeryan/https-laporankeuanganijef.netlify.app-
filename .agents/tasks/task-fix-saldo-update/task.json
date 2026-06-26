@@ -2,6 +2,6 @@
   "task_id": "task-fix-saldo-update",
   "task_description": "Fix balance/saldo report not updating correctly after transactions are edited. Three root causes: (1) Race condition between KDB.save() writing to localStorage and KDB.getAll() fetching potentially stale data from Firebase, (2) renderPrintBundle duplicates saldo calculation without including saldo awal, (3) debit/kredit values not safely parsed as numbers from Firebase.",
   "status": "in_progress",
-  "feature_order": ["FEAT-001"],
+  "feature_order": ["FEAT-001", "FEAT-002"],
   "blocked_reason": null
 }

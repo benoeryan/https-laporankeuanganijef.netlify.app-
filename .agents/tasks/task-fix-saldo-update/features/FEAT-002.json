@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Add Firestore real-time listeners (onSnapshot) to KDB layer so that when any user saves/updates data, ALL other connected users automatically receive the update without manual refresh.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "1. Import onSnapshot from Firebase Firestore module in initKFirebase() and add it to the kfs object.",
     "2. Add a subscribeCollection(col, callback) method to KDB that sets up an onSnapshot listener on a collection.",
@@ -26,5 +26,5 @@
     "Run: node -c keuangan-app.js"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Successfully implemented onSnapshot real-time listeners. The solution: (1) Added fm.onSnapshot to the kfs object in initKFirebase(). (2) Created _kSubscribeCollection() that sets up onSnapshot on each collection with self-change detection using KDB._recentSaves (10s window). (3) Created startRealtimeSync() subscribing to jurnal, permohonan, danamasuk, inventori_atk, and settings collections. (4) Created stopRealtimeSync() to clean up listeners on logout. (5) Integrated into buildApp() and doLogout(). (6) The initial snapshot is skipped to avoid redundant re-renders at login. (7) Dirty item merging is applied in the snapshot handler to protect local writes. Syntax validation passed (node -c) for both files."
 }
