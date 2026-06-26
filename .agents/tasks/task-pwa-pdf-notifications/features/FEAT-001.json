@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Add PDF download for financial reports (Laporan Keuangan). Add a 'Download PDF' button alongside the existing 'Print' button in the renderPrintBundle section. Use html2canvas + jsPDF loaded from CDN to capture the print bundle content as a multi-page PDF document.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "In keuangan-app.js, find the renderPrintBundle() function (line ~11469). Locate where the Print button is rendered (around line 11676): '<button class=\"btn btn-primary\" onclick=\"printBundleLaporan()\">Print Semua Laporan</button>'. Add a new 'Download PDF' button next to it: '<button class=\"btn btn-success\" onclick=\"downloadPdfLaporan()\">📄 Download PDF</button>'.",
     "Add the downloadPdfLaporan() function in keuangan-app.js (after the printBundleLaporan function around line ~11842). This function should: (1) Show a loading indicator, (2) Dynamically load html2canvas (https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js) and jsPDF (https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js) from CDN if not already loaded, (3) Get the .print-bundle-section element, (4) Use html2canvas to render it, (5) Split into A4 pages using jsPDF, (6) Save as 'Laporan-Keuangan-IJEF-Corp-[date].pdf'. Follow the same pattern used by printBundleLaporan() for getting the content element.",
@@ -21,5 +21,5 @@
     "Grep for 'Download PDF' button text in the renderPrintBundle output to confirm UI integration"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Implementation complete. html2canvas and jsPDF are loaded dynamically from CDN on first use. The function splits the canvas into A4-sized pages for multi-page PDF output. Syntax check passes with node -c."
 }
