@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Make the app a Progressive Web App (PWA) installable on Android and iOS, and add Firebase Cloud Messaging push notifications. Following the hr-legal-app pattern, create manifest.json, sw.js (caching service worker), and firebase-messaging-sw.js (FCM background notifications). Update index.html with PWA meta tags. Add service worker registration and FCM initialization to keuangan-app.js. Add install prompt handling.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create /projects/sandbox/https-laporankeuanganijef.netlify.app-/manifest.json following the hr-legal-app pattern. Use: name='Sistem Keuangan IJEF Corp', short_name='Keuangan IJEF', display='standalone', orientation='portrait', background_color='#1a237e', theme_color='#1a237e', start_url='/', categories=['business','productivity']. Use ui-avatars.com for icons with name=KU (Keuangan) background=1a237e color=ffffff size=192 and 512. Set gcm_sender_id to '103953800507'.",
     "Create /projects/sandbox/https-laporankeuanganijef.netlify.app-/sw.js following the hr-legal-app sw.js pattern exactly. Use CACHE_NAME='keuangan-ijef-v1'. Include: skipWaiting on install, cache cleanup on activate with clients.claim(), notificationclick handler that focuses existing window or opens '/', network-first fetch strategy that caches non-JS/non-HTML assets.",
@@ -34,5 +34,5 @@
     "Grep keuangan-app.js for 'beforeinstallprompt' event listener"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Implementation complete. Created manifest.json, sw.js, and firebase-messaging-sw.js following hr-legal-app patterns. Updated index.html with all PWA meta tags. Added initFCM() with token storage in k_fcm_tokens collection, foreground message handler that calls kirimNotifikasi(), and beforeinstallprompt handler with install banner UI. Service worker registration added at end of keuangan-app.js. All syntax checks pass (node -c). Firebase compat SDK is loaded dynamically in initFCM() since the main app uses ES modules for Firebase."
 }
