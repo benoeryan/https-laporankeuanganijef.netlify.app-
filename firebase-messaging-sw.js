@@ -23,8 +23,8 @@ messaging.onBackgroundMessage((payload) => {
   const body = notification.body || data.body || '';
   const options = {
     body: body,
-    icon: 'https://ui-avatars.com/api/?name=KU&background=1a237e&color=ffffff&size=192',
-    badge: 'https://ui-avatars.com/api/?name=KU&background=1a237e&color=ffffff&size=192',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-192x192.png',
     vibrate: [200, 100, 200, 100, 300],
     silent: false,
     tag: 'keuangan-notif-' + Date.now(),
