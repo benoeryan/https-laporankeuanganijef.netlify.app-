@@ -3402,6 +3402,13 @@ function renderForecastWithChart(list, title, chartId, saldoData) {
         viewBtn = '<button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + safeItemId + '\')" title="Lihat Detail">👁 View</button>';
       } else if (sumberLower.indexOf('dana masuk') !== -1) {
         viewBtn = '<button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + safeItemId + '\')" title="Lihat Detail">👁 View</button>';
+      } else if (sumberLower.indexOf('utang') !== -1 || sumberLower.indexOf('piutang') !== -1) {
+        viewBtn = '<button class="btn btn-xs btn-info" onclick="navigate(\'monitor-utang-piutang\')" title="Lihat Detail">👁 View</button>';
+      }
+    } else {
+      var sumberLower2 = (x.sumber||'').toLowerCase();
+      if (sumberLower2.indexOf('utang') !== -1 || sumberLower2.indexOf('piutang') !== -1) {
+        viewBtn = '<button class="btn btn-xs btn-info" onclick="navigate(\'monitor-utang-piutang\')" title="Lihat Detail">👁 View</button>';
       }
     }
     return '<tr><td class="fw-bold">' + (x.nama||'-') + '</td><td>' + (x.ref||'-') + '</td><td class="' + (od?'text-red fw-bold':'') + '">' + fmtDate(x.jatuhTempo) + '</td><td class="fw-bold">' + fmtRp(x.sisa) + '</td><td><span class="chip">' + (x.sumber||'-') + '</span></td><td><span class="badge ' + (od?'badge-danger':'badge-warning') + '">' + (od?'Overdue':'Upcoming') + '</span></td><td>' + viewBtn + ' ' + aksiBtn + '</td></tr>';
@@ -3562,8 +3569,8 @@ async function renderActualBayar() {
       jurnalBeban.push({ tanggal: j.tanggal, nama: j.keterangan, ref: (j.noRef||j.id||'').toString(), jumlah: bebanTotal, sumber: 'Jurnal', jurnalId: j.id });
     }
   });
-  var combined = upList.map(function(x){ return { tanggal: x.tanggal, nama: x.nama, ref: x.noDok||'-', jumlah: parseFloat(x.bayar)||0, sumber: 'Utang Piutang' }; })
-    .concat(pdList.map(function(x){ return { tanggal: x.tanggal, nama: x.namaPemohon, ref: x.noPOInvoice||(x.id||'').toString(), jumlah: parseFloat(x.nominal)||0, sumber: 'Permohonan Dana' }; }))
+  var combined = upList.map(function(x){ return { tanggal: x.tanggal, nama: x.nama, ref: x.noDok||'-', jumlah: parseFloat(x.bayar)||0, sumber: 'Utang Piutang', itemId: x.id }; })
+    .concat(pdList.map(function(x){ return { tanggal: x.tanggal, nama: x.namaPemohon, ref: x.noPOInvoice||(x.id||'').toString(), jumlah: parseFloat(x.nominal)||0, sumber: 'Permohonan Dana', itemId: x.id }; }))
     .concat(jurnalImport.map(function(j){ return { tanggal: j.tanggal, nama: j.keterangan, ref: (j.noRef||'').toString(), jumlah: parseFloat(j.totalDebit)||0, sumber: 'Import Sheets', jurnalId: j.id }; }))
     .concat(jurnalBeban);
   return renderActualWithChart(combined, 'Actual Pembayaran', 'bayar');
@@ -3603,8 +3610,8 @@ async function renderActualTerima() {
   var filteredJurnalPend = jurnalPendapatan.filter(function(jp) {
     return !dmRefs[jp.ref];
   });
-  var combined = upList.map(function(x){ return { tanggal: x.tanggal, nama: x.nama, ref: x.noDok||'-', jumlah: parseFloat(x.bayar)||0, sumber: 'Piutang' }; })
-    .concat(dmList.map(function(x){ return { tanggal: x.tanggal, nama: x.sumber, ref: x.noRef||(x.id||'').toString(), jumlah: parseFloat(x.nominal)||0, sumber: 'Dana Masuk' }; }))
+  var combined = upList.map(function(x){ return { tanggal: x.tanggal, nama: x.nama, ref: x.noDok||'-', jumlah: parseFloat(x.bayar)||0, sumber: 'Piutang', itemId: x.id }; })
+    .concat(dmList.map(function(x){ return { tanggal: x.tanggal, nama: x.sumber, ref: x.noRef||(x.id||'').toString(), jumlah: parseFloat(x.nominal)||0, sumber: 'Dana Masuk', itemId: x.id }; }))
     .concat(filteredJurnalPend);
   return renderActualWithChart(combined, 'Actual Penerimaan', 'terima');
 }
@@ -3657,11 +3664,27 @@ function renderActualWithChart(list, title, chartId) {
 
   var rows = filtered.slice().sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); }).slice(0,100).map(function(x) {
     var actionBtns = '';
+    var viewBtn = '';
+    var sumberLower = (x.sumber||'').toLowerCase();
+    // View button based on source type
     if (x.jurnalId) {
-      actionBtns = '<td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + x.jurnalId + '\')">Edit</button>'
+      var safeJId = (x.jurnalId||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      viewBtn = '<button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + safeJId + '\')" title="Lihat Detail">👁 View</button>';
+    } else if (x.itemId) {
+      var safeIId = (x.itemId||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      if (sumberLower.indexOf('permohonan') !== -1) {
+        viewBtn = '<button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + safeIId + '\')" title="Lihat Detail">👁 View</button>';
+      } else if (sumberLower.indexOf('dana masuk') !== -1) {
+        viewBtn = '<button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + safeIId + '\')" title="Lihat Detail">👁 View</button>';
+      } else if (sumberLower.indexOf('utang') !== -1 || sumberLower.indexOf('piutang') !== -1) {
+        viewBtn = '<button class="btn btn-xs btn-info" onclick="navigate(\'monitor-utang-piutang\')" title="Lihat Detail">👁 View</button>';
+      }
+    }
+    if (x.jurnalId) {
+      actionBtns = '<td class="tbl-actions">' + viewBtn + ' <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + x.jurnalId + '\')">Edit</button>'
         + '<button class="btn btn-xs btn-danger" onclick="hapusJurnal(\'' + x.jurnalId + '\')">Hapus</button></td>';
     } else {
-      actionBtns = '<td class="tbl-actions text-muted" style="font-size:0.7rem">-</td>';
+      actionBtns = '<td class="tbl-actions">' + (viewBtn || '<span class="text-muted" style="font-size:0.7rem">-</span>') + '</td>';
     }
     return '<tr><td>' + fmtDate(x.tanggal) + '</td><td class="fw-bold">' + (x.nama||'-') + '</td><td>' + (x.ref||'-') + '</td><td><span class="chip">' + (x.sumber||'-') + '</span></td><td class="fw-bold ' + (chartId==='terima'?'text-green':'text-red') + '">' + fmtRp(x.jumlah) + '</td>' + actionBtns + '</tr>';
   }).join('');
