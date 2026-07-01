@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Add BOD (Board of Directors) role with dedicated portal showing executive financial reports in read-only mode. BOD gets access to Dashboard, Laba Rugi, Neraca, Arus Kas, Posisi Saldo Hari Ini, Forecast Pembayaran, Forecast Penerimaan, Actual Pembayaran, Actual Penerimaan, Forecast vs Actual, and Print Laporan Keuangan. All pages are read-only with action buttons hidden for BOD.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "1. In keuangan-app.js line 5, add 'bod: 2' to the ROLES constant: const ROLES = { superadmin: 4, admin: 3, leader: 2, bod: 2, viewer: 1, nanda: 1 };",
     "2. In index.html after .role-nanda CSS rule (around line 46), add: .role-bod{background:#1565c0;color:white}",
@@ -28,5 +28,5 @@
     "Review the buildSidebar function to confirm BOD filtering logic is correct and complete"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All changes verified with node --check (no syntax errors). BOD role added to ROLES, initUsers, buildSidebar, forecast pages, lap-saldo page, and user management dropdowns. The buildApp() default navigation already handles BOD correctly (falls through to else branch which navigates to lap-dashboard). Actual pages already restrict Edit/Hapus to superadmin so BOD cannot see those buttons. Also added BOD option to user management role dropdowns for completeness."
 }
