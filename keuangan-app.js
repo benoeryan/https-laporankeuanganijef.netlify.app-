@@ -2,7 +2,7 @@
 'use strict';
 
 // ===== CONSTANTS (must be at top) =====
-const ROLES = { superadmin: 4, admin: 3, leader: 2, viewer: 1, nanda: 1 };
+const ROLES = { superadmin: 4, admin: 3, leader: 2, bod: 2, viewer: 1, nanda: 1 };
 
 const STATUS = {
   DRAFT:       'Draft',
@@ -318,7 +318,8 @@ window.onload = async function() {
 async function initUsers() {
   const DEFAULT = { username: 'superadmin', password: 'admin2026', role: 'superadmin', nama: 'Super Admin', email: '' };
   const NANDA = { username: 'nanda', password: 'nanda2026', role: 'nanda', nama: 'Nanda Yoga Maulana', email: '' };
-  const systemUsers = [DEFAULT, NANDA];
+  const BOD = { username: 'bod', password: 'bod2026', role: 'bod', nama: 'Board of Directors', email: '' };
+  const systemUsers = [DEFAULT, NANDA, BOD];
 
   // Always ensure system users exist in localStorage
   const local = _klget('kusers', []);
@@ -430,6 +431,8 @@ function buildSidebar() {
 
   // nanda: hanya Portal Perlengkapan & Aset
   const isNanda = (role === 'nanda');
+  // bod: read-only executive reports
+  const isBOD = (role === 'bod');
   // viewer & leader: Dashboard + Approval Center + Portal Aset
   const isLimited = (role === 'viewer' || role === 'leader');
 
@@ -444,6 +447,23 @@ function buildSidebar() {
       // Nanda hanya lihat Portal Perlengkapan & Aset
       if (group.group === 'Transaksi') {
         items = visible.filter(function(i) { return i.id === 'portal-aset'; });
+      } else {
+        return;
+      }
+    } else if (isBOD) {
+      // BOD: read-only executive reports + monitor
+      if (group.group === 'Laporan') {
+        items = visible.filter(function(i) {
+          return i.id === 'lap-dashboard' || i.id === 'lap-labarugi' || i.id === 'lap-neraca' || i.id === 'lap-aruskas' || i.id === 'lap-saldo' || i.id === 'lap-print-bundle';
+        });
+      } else if (group.group === 'Monitor') {
+        items = visible.filter(function(i) {
+          return i.id === 'monitor-forecast-bayar' ||
+                 i.id === 'monitor-forecast-terima' ||
+                 i.id === 'monitor-actual-bayar' ||
+                 i.id === 'monitor-actual-terima' ||
+                 i.id === 'monitor-forecast-vs-actual';
+        });
       } else {
         return;
       }
@@ -3419,7 +3439,7 @@ function renderForecastWithChart(list, title, chartId, saldoData) {
   var rows = list.slice().sort(function(a,b){ return (a.jatuhTempo||'').localeCompare(b.jatuhTempo||''); }).map(function(x) {
     var od = x.jatuhTempo && new Date(x.jatuhTempo) < now;
     var aksiBtn = '';
-    if (od) {
+    if (od && KU.role !== 'bod') {
       var safeNama = (x.nama||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       var safeRef = (x.ref||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       var safeSisa = parseFloat(x.sisa)||0;
@@ -3450,9 +3470,9 @@ function renderForecastWithChart(list, title, chartId, saldoData) {
     }
     return '<tr><td class="fw-bold">' + (x.nama||'-') + '</td><td>' + (x.ref||'-') + '</td><td class="' + (od?'text-red fw-bold':'') + '">' + fmtDate(x.jatuhTempo) + '</td><td class="fw-bold">' + fmtRp(x.sisa) + '</td><td><span class="chip">' + (x.sumber||'-') + '</span></td><td><span class="badge ' + (od?'badge-danger':'badge-warning') + '">' + (od?'Overdue':'Upcoming') + '</span></td><td>' + viewBtn + ' ' + aksiBtn + '</td></tr>';
   }).join('');
-  var navBtn = chartId === 'bayar'
+  var navBtn = KU.role === 'bod' ? '' : (chartId === 'bayar'
     ? '<button class="btn btn-sm btn-primary no-print" onclick="navigate(\'dana-permohonan\')" style="margin-left:auto">📤 Buka Permohonan Dana</button>'
-    : '<button class="btn btn-sm btn-success no-print" onclick="navigate(\'dana-masuk\')" style="margin-left:auto">📥 Buka Dana Masuk</button>';
+    : '<button class="btn btn-sm btn-success no-print" onclick="navigate(\'dana-masuk\')" style="margin-left:auto">📥 Buka Dana Masuk</button>');
 
   // Saldo projection calculation
   // For the cross-forecast totals, we need to show both pembayaran and penerimaan context
@@ -4821,7 +4841,7 @@ async function renderSaldoHariIni() {
   }).join('');
   return '<div class="page-title">💵 Posisi Saldo Hari Ini</div>'
     + '<div class="alert alert-info">📅 ' + today_str + '</div>'
-    + '<div class="card"><div class="card-header"><h2>Saldo Akun</h2><div style="display:flex;gap:8px"><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button><button class="btn btn-sm btn-warning no-print" onclick="analisaSelisihSaldo()">🔍 Analisa Selisih</button></div></div>'
+    + '<div class="card"><div class="card-header"><h2>Saldo Akun</h2><div style="display:flex;gap:8px"><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button>' + (KU.role === 'bod' ? '' : '<button class="btn btn-sm btn-warning no-print" onclick="analisaSelisihSaldo()">🔍 Analisa Selisih</button>') + '</div></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama Akun</th><th class="text-right">Saldo</th><th>Status</th></tr></thead><tbody>' + rows
     + '<tr style="background:#1a237e;color:white"><td colspan="2"><b>TOTAL</b></td><td class="text-right fw-bold">' + fmtRp(totalFiltered) + '</td><td></td></tr>'
     + '</tbody></table></div></div>';
@@ -8249,7 +8269,7 @@ async function renderAdminUsers() {
     + '<div class="fg"><label>Username</label><input id="u-user" placeholder="Username (unik)"></div>'
     + '<div class="fg"><label>Password</label><div style="position:relative"><input type="password" id="u-pass" placeholder="Password" style="padding-right:36px;width:100%"><button type="button" onclick="togglePwd(\'u-pass\',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:0.9rem;color:#888">👁</button></div></div>'
     + '<div class="fg"><label>Email</label><input id="u-email" placeholder="email@..."></div>'
-    + '<div class="fg"><label>Role</label><select id="u-role"><option value="viewer">Viewer</option><option value="leader">Leader</option><option value="admin">Admin</option>' + superOpt + '</select></div>'
+    + '<div class="fg"><label>Role</label><select id="u-role"><option value="viewer">Viewer</option><option value="leader">Leader</option><option value="bod">BOD</option><option value="admin">Admin</option>' + superOpt + '</select></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="tambahUser()">Tambah User</button></div></div>'
     + '<div class="card"><div class="card-header"><h2>Daftar User (' + users.length + ')</h2></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Username</th><th>Email</th><th>Role</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
@@ -8290,6 +8310,7 @@ async function editUser(username) {
     + '<div class="fg"><label>Role</label><select id="eu-role">'
     + '<option value="viewer" ' + (u.role==='viewer'?'selected':'') + '>Viewer</option>'
     + '<option value="leader" ' + (u.role==='leader'?'selected':'') + '>Leader</option>'
+    + '<option value="bod" ' + (u.role==='bod'?'selected':'') + '>BOD</option>'
     + '<option value="admin" ' + (u.role==='admin'?'selected':'') + '>Admin</option>'
     + superOpt + '</select></div>'
     + '</div><div class="modal-footer">'
@@ -8382,7 +8403,7 @@ function getBantuanContent(modId) {
   if (modId === 'portal') return { title: '📦 Panduan Portal Aset', html: ''
     + s + '<li>User <b>nanda</b> hanya akses menu ini</li><li>Input perlengkapan: nama, satuan, stok, pembelian, harga</li><li>Pembelian otomatis buat Draft Permohonan Dana</li><li>Bisa dikonversi ke Aset di menu Penyusutan</li>' + e };
   if (modId === 'users') return { title: '👤 Panduan Manajemen User', html: ''
-    + s + '<li>Buka <b>Admin > Manajemen User</b> (superadmin only)</li><li>Tambah user: username, password, role, nama, email</li><li>Role: superadmin, admin, leader, viewer, nanda</li><li>User superadmin dan nanda tidak bisa dihapus</li>' + e };
+    + s + '<li>Buka <b>Admin > Manajemen User</b> (superadmin only)</li><li>Tambah user: username, password, role, nama, email</li><li>Role: superadmin, admin, leader, bod, viewer, nanda</li><li>User superadmin dan nanda tidak bisa dihapus</li>' + e };
   return { title: 'Modul', html: '<p>Pilih modul dari daftar di atas.</p>' };
 }
 

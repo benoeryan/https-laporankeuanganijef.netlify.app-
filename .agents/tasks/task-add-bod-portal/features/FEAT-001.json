@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add BOD (Board of Directors) role with dedicated portal showing executive financial reports in read-only mode. BOD gets access to Dashboard, Laba Rugi, Neraca, Arus Kas, Posisi Saldo Hari Ini, Forecast Pembayaran, Forecast Penerimaan, Actual Pembayaran, Actual Penerimaan, Forecast vs Actual, and Print Laporan Keuangan. All pages are read-only with action buttons hidden for BOD.",
+  "status": "in_progress",
+  "steps": [
+    "1. In keuangan-app.js line 5, add 'bod: 2' to the ROLES constant: const ROLES = { superadmin: 4, admin: 3, leader: 2, bod: 2, viewer: 1, nanda: 1 };",
+    "2. In index.html after .role-nanda CSS rule (around line 46), add: .role-bod{background:#1565c0;color:white}",
+    "3. In keuangan-app.js initUsers() function (line 281), add a BOD default user alongside DEFAULT and NANDA: const BOD = { username: 'bod', password: 'bod2026', role: 'bod', nama: 'Board of Directors', email: '' }; and include it in the systemUsers array.",
+    "4. In keuangan-app.js buildSidebar() function (line 390), add BOD filtering BEFORE the isLimited check. Add: const isBOD = (role === 'bod'); Then add a new branch: else if (isBOD) { if (group.group === 'Laporan') { items = visible.filter(i => i.id === 'lap-dashboard' || i.id === 'lap-labarugi' || i.id === 'lap-neraca' || i.id === 'lap-aruskas' || i.id === 'lap-saldo' || i.id === 'lap-print-bundle'); } else if (group.group === 'Monitor') { items = visible.filter(i => i.id === 'monitor-forecast-bayar' || i.id === 'monitor-forecast-terima' || i.id === 'monitor-actual-bayar' || i.id === 'monitor-actual-terima' || i.id === 'monitor-forecast-vs-actual'); } else { return; } }",
+    "5. In keuangan-app.js buildApp() function (line 369), update the navigation logic so BOD lands on lap-dashboard: change the else branch to: else if (KU.role === 'bod') { navigate('lap-dashboard'); } else { navigate('lap-dashboard'); } - or more simply, keep the existing else navigate('lap-dashboard') which already works for BOD.",
+    "6. In keuangan-app.js, make Forecast pages hide action buttons for BOD. In the renderForecastWithChart function (around line 3380-3395), wrap the aksiBtn assignment with a role check: if (KU.role !== 'bod') { aksiBtn = ... }. Also hide the navBtn (Buka Permohonan Dana / Buka Dana Masuk) for BOD by wrapping: var navBtn = (KU.role === 'bod') ? '' : (chartId === 'bayar' ? '...' : '...');",
+    "7. In keuangan-app.js lap-saldo rendering (around line 4787), hide the 'Analisa Selisih' button for BOD. Change the card-header div to conditionally render: (KU.role === 'bod' ? '' : '<button class=\"btn btn-sm btn-warning no-print\" onclick=\"analisaSelisihSaldo()\">... Analisa Selisih</button>')"
+  ],
+  "acceptance_criteria": [
+    "ROLES constant includes bod: 2",
+    "CSS class .role-bod exists in index.html with background:#1565c0",
+    "initUsers() creates a default 'bod' user with password 'bod2026' and role 'bod'",
+    "buildSidebar() shows BOD only: Laporan group (Dashboard, Laba Rugi, Neraca, Arus Kas, Posisi Saldo Hari Ini, Print Laporan) and Monitor group (Forecast Bayar, Forecast Terima, Actual Bayar, Actual Terima, Forecast vs Actual)",
+    "BOD cannot see Setup, Jurnal, Kalkulator, Transaksi, Admin, Bantuan groups",
+    "Forecast pages do not show Ajukan/Catat action buttons or navigation buttons for BOD",
+    "Posisi Saldo page does not show Analisa Selisih button for BOD",
+    "BOD default navigation lands on lap-dashboard"
+  ],
+  "verification": [
+    "grep -n 'bod' keuangan-app.js to confirm role is added to ROLES, initUsers, and buildSidebar",
+    "grep -n 'role-bod' index.html to confirm CSS chip is added",
+    "Review the buildSidebar function to confirm BOD filtering logic is correct and complete"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
