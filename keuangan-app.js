@@ -126,13 +126,22 @@ function today() {
 function formatNominalInput(el) {
   var cursorPos = el.selectionStart;
   var oldLen = el.value.length;
-  var raw = el.value.replace(/[^0-9]/g, '');
-  if (!raw) { el.value = ''; return; }
+  // Pisahkan bagian desimal (setelah koma)
+  var parts = el.value.split(',');
+  var intPart = parts[0].replace(/[^0-9]/g, '');
+  var decPart = parts.length > 1 ? parts[1].replace(/[^0-9]/g, '').substring(0, 2) : null;
+  if (!intPart && !decPart) { el.value = ''; return; }
+  if (!intPart) intPart = '0';
+  // Format bagian integer dengan titik ribuan
   var formatted = '';
-  for (var i = raw.length - 1, count = 0; i >= 0; i--) {
-    formatted = raw[i] + formatted;
+  for (var i = intPart.length - 1, count = 0; i >= 0; i--) {
+    formatted = intPart[i] + formatted;
     count++;
     if (count % 3 === 0 && i > 0) formatted = '.' + formatted;
+  }
+  // Gabungkan dengan desimal jika ada koma
+  if (decPart !== null) {
+    formatted += ',' + decPart;
   }
   el.value = formatted;
   var newLen = el.value.length;
@@ -142,19 +151,31 @@ function formatNominalInput(el) {
 
 function parseNominal(val) {
   if (!val) return 0;
-  return parseFloat(String(val).replace(/\./g, '')) || 0;
+  // Format Indonesia: titik = ribuan, koma = desimal
+  var str = String(val).replace(/\./g, '').replace(',', '.');
+  return parseFloat(str) || 0;
 }
 
 function formatNominalValue(n) {
   if (!n) return '0';
-  var s = String(Math.round(Number(n)));
+  var num = Number(n);
+  var isNeg = num < 0;
+  num = Math.abs(num);
+  var intPart = Math.floor(num);
+  var decPart = Math.round((num - intPart) * 100);
+  // Format integer dengan titik ribuan
+  var s = String(intPart);
   var formatted = '';
   for (var i = s.length - 1, count = 0; i >= 0; i--) {
     formatted = s[i] + formatted;
     count++;
     if (count % 3 === 0 && i > 0) formatted = '.' + formatted;
   }
-  return formatted;
+  // Tambahkan desimal jika ada
+  if (decPart > 0) {
+    formatted += ',' + (decPart < 10 ? '0' + decPart : decPart);
+  }
+  return (isNeg ? '-' : '') + formatted;
 }
 
 function genId(prefix) {
