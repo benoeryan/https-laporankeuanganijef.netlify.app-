@@ -78,13 +78,13 @@ exports.handler = async function(event, context) {
   ];
 
   // Try multiple models with fallback
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-pro'];
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
   let lastError = '';
 
   for (const model of models) {
     try {
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1/models/' + model + ':generateContent?key=' + apiKey,
+        'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
