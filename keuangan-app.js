@@ -451,11 +451,13 @@ function buildSidebar() {
         return;
       }
     } else if (isBOD) {
-      // BOD: read-only executive reports + monitor
+      // BOD: read-only executive reports + monitor + approval center (layer 3 only)
       if (group.group === 'Laporan') {
         items = visible.filter(function(i) {
-          return i.id === 'lap-dashboard' || i.id === 'lap-labarugi' || i.id === 'lap-neraca' || i.id === 'lap-aruskas' || i.id === 'lap-saldo' || i.id === 'lap-print-bundle';
+          return i.id === 'lap-dashboard' || i.id === 'lap-labarugi' || i.id === 'lap-neraca' || i.id === 'lap-aruskas' || i.id === 'lap-print-bundle';
         });
+      } else if (group.group === 'Transaksi') {
+        items = visible.filter(function(i) { return i.id === 'dana-approval'; });
       } else if (group.group === 'Monitor') {
         items = visible.filter(function(i) {
           return i.id === 'monitor-forecast-bayar' ||
@@ -1029,7 +1031,7 @@ async function renderDashboard() {
     + '<span class="fw-bold text-blue" style="font-size:1.1rem">' + fmtRp(totalAsetLancar) + '</span>'
     + '</div></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
-    + '<div class="card"><div class="card-header"><h2>📝 Transaksi Terbaru</h2><button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button></div>'
+    + '<div class="card"><div class="card-header"><h2>📝 Transaksi Terbaru</h2>' + (KU.role !== 'bod' ? '<button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button>' : '') + '</div>'
     + '<table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th></tr></thead><tbody>' + jurnalRows + '</tbody></table></div>'
     + '<div class="card"><div class="card-header"><h2>✅ Status Approval</h2><button class="btn btn-sm btn-outline" onclick="navigate(\'dana-approval\')">Buka</button></div>'
     + '<div class="stats-row" style="margin-bottom:0">'
@@ -1169,7 +1171,7 @@ async function renderDashboardApprover() {
     + '</div></div>'
     // Transaksi Terbaru + Status Approval
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
-    + '<div class="card"><div class="card-header"><h2>� Transaksi Terbaru</h2><button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button></div>'
+    + '<div class="card"><div class="card-header"><h2>� Transaksi Terbaru</h2>' + (KU.role !== 'bod' ? '<button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button>' : '') + '</div>'
     + '<table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th></tr></thead><tbody>' + jurnalRows + '</tbody></table></div>'
     + '<div class="card"><div class="card-header"><h2>✅ Status Approval</h2><button class="btn btn-sm btn-outline" onclick="navigate(\'dana-approval\')">Buka</button></div>'
     + '<div class="stats-row" style="margin-bottom:0">'
@@ -7842,6 +7844,7 @@ async function renderApprovalCenter() {
     if (KU.role === 'superadmin') myLayers = [3];
     else if (KU.role === 'admin') myLayers = [2, 3];
     else if (KU.role === 'leader') myLayers = [1, 2, 3];
+    else if (KU.role === 'bod') myLayers = [3];
     else myLayers = [];
   }
 
@@ -7870,32 +7873,42 @@ async function renderApprovalCenter() {
     + '</div>' + pendingBanner;
 
   if (myPD.length) {
+    const isBODApproval = (KU.role === 'bod');
     const pdRows = myPD.map(function(p) {
-      return '<tr><td><input type="checkbox" class="appr-check" data-col="permohonan" data-id="' + p.id + '"></td><td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||'-') + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + (p.namaBank||'-') + '<br><span class="text-muted">' + (p.noRekening||'') + '</span></td><td>' + statusBadge(p.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'permohonan\',\'' + p.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'permohonan\',\'' + p.id + '\')">Tolak</button></td></tr>';
+      var actionBtns = isBODApproval
+        ? '<button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button>'
+        : '<button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'permohonan\',\'' + p.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'permohonan\',\'' + p.id + '\')">Tolak</button>';
+      var checkboxCol = isBODApproval ? '<td></td>' : '<td><input type="checkbox" class="appr-check" data-col="permohonan" data-id="' + p.id + '"></td>';
+      return '<tr>' + checkboxCol + '<td>' + fmtDate(p.tanggal) + '</td><td class="fw-bold">' + (p.namaPemohon||'-') + '</td><td>' + (p.noPOInvoice||'-') + '</td><td class="fw-bold text-blue">' + fmtRp(p.nominal) + '</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.keterangan||'-') + '</td><td>' + (p.namaBank||'-') + '<br><span class="text-muted">' + (p.noRekening||'') + '</span></td><td>' + statusBadge(p.status) + '</td><td class="tbl-actions">' + actionBtns + '</td></tr>';
     }).join('');
-    html += '<div class="card"><div class="card-header"><h2>Permohonan Dana — Menunggu Approval Anda (' + myPD.length + ')</h2>'
-      + '<div class="flex-row" style="gap:6px"><button class="btn btn-sm btn-success" onclick="approveSemuaItem(\'permohonan\')">✅ Approve Semua</button><button class="btn btn-sm btn-danger" onclick="rejectSemuaItem(\'permohonan\')">❌ Reject Semua</button></div></div>'
-      + '<div style="padding:8px 12px;background:#f0f4ff;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    html += '<div class="card"><div class="card-header"><h2>Permohonan Dana — Menunggu Approval (' + myPD.length + ')</h2>'
+      + (isBODApproval ? '' : '<div class="flex-row" style="gap:6px"><button class="btn btn-sm btn-success" onclick="approveSemuaItem(\'permohonan\')">✅ Approve Semua</button><button class="btn btn-sm btn-danger" onclick="rejectSemuaItem(\'permohonan\')">❌ Reject Semua</button></div>') + '</div>'
+      + (isBODApproval ? '' : '<div style="padding:8px 12px;background:#f0f4ff;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
       + '<label style="font-size:0.82rem;font-weight:600"><input type="checkbox" onchange="toggleSelectAll(this,\'permohonan\')"> Pilih Semua</label>'
       + '<button class="btn btn-xs btn-success" onclick="approveSelected(\'permohonan\')">✅ Approve Terpilih</button>'
       + '<button class="btn btn-xs btn-danger" onclick="rejectSelected(\'permohonan\')">❌ Reject Terpilih</button>'
       + '<span id="selected-count-permohonan" style="font-size:0.8rem;color:#555">0 dipilih</span>'
-      + '</div>'
+      + '</div>')
       + '<div class="table-wrap"><table><thead><tr><th style="width:30px">✓</th><th>Tgl</th><th>Pemohon</th><th>No. PO/Inv</th><th>Nominal</th><th>Keterangan</th><th>Bank / Rekening</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + pdRows + '</tbody></table></div></div>';
   }
 
   if (myDM.length) {
+    const isBODApprovalDM = (KU.role === 'bod');
     const dmRows = myDM.map(function(d) {
-      return '<tr><td><input type="checkbox" class="appr-check" data-col="danamasuk" data-id="' + d.id + '"></td><td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.keterangan||'-') + '</td><td>' + statusBadge(d.status) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'danamasuk\',\'' + d.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'danamasuk\',\'' + d.id + '\')">Tolak</button></td></tr>';
+      var actionBtns = isBODApprovalDM
+        ? '<button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button>'
+        : '<button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button><button class="btn btn-xs btn-success" onclick="approveItem(\'danamasuk\',\'' + d.id + '\')">ACC</button><button class="btn btn-xs btn-danger" onclick="rejectItem(\'danamasuk\',\'' + d.id + '\')">Tolak</button>';
+      var checkboxCol = isBODApprovalDM ? '<td></td>' : '<td><input type="checkbox" class="appr-check" data-col="danamasuk" data-id="' + d.id + '"></td>';
+      return '<tr>' + checkboxCol + '<td>' + fmtDate(d.tanggal) + '</td><td class="fw-bold">' + (d.sumber||'-') + '</td><td>' + (d.noRef||'-') + '</td><td class="fw-bold text-green">' + fmtRp(d.nominal) + '</td><td><span class="chip">' + (d.kategori||'-') + '</span></td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.keterangan||'-') + '</td><td>' + statusBadge(d.status) + '</td><td class="tbl-actions">' + actionBtns + '</td></tr>';
     }).join('');
-    html += '<div class="card"><div class="card-header"><h2>Dana Masuk — Menunggu Konfirmasi Anda (' + myDM.length + ')</h2>'
-      + '<div class="flex-row" style="gap:6px"><button class="btn btn-sm btn-success" onclick="approveSemuaItem(\'danamasuk\')">✅ Approve Semua</button><button class="btn btn-sm btn-danger" onclick="rejectSemuaItem(\'danamasuk\')">❌ Reject Semua</button></div></div>'
-      + '<div style="padding:8px 12px;background:#f0fff4;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    html += '<div class="card"><div class="card-header"><h2>Dana Masuk — Menunggu Konfirmasi (' + myDM.length + ')</h2>'
+      + (isBODApprovalDM ? '' : '<div class="flex-row" style="gap:6px"><button class="btn btn-sm btn-success" onclick="approveSemuaItem(\'danamasuk\')">✅ Approve Semua</button><button class="btn btn-sm btn-danger" onclick="rejectSemuaItem(\'danamasuk\')">❌ Reject Semua</button></div>') + '</div>'
+      + (isBODApprovalDM ? '' : '<div style="padding:8px 12px;background:#f0fff4;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
       + '<label style="font-size:0.82rem;font-weight:600"><input type="checkbox" onchange="toggleSelectAll(this,\'danamasuk\')"> Pilih Semua</label>'
       + '<button class="btn btn-xs btn-success" onclick="approveSelected(\'danamasuk\')">✅ Approve Terpilih</button>'
       + '<button class="btn btn-xs btn-danger" onclick="rejectSelected(\'danamasuk\')">❌ Reject Terpilih</button>'
       + '<span id="selected-count-danamasuk" style="font-size:0.8rem;color:#555">0 dipilih</span>'
-      + '</div>'
+      + '</div>')
       + '<div class="table-wrap"><table><thead><tr><th style="width:30px">✓</th><th>Tgl</th><th>Sumber</th><th>No. Ref</th><th>Nominal</th><th>Kategori</th><th>Keterangan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>' + dmRows + '</tbody></table></div></div>';
   }
 
