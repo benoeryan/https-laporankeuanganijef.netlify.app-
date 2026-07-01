@@ -81,8 +81,9 @@ exports.handler = async function(event, context) {
   if (openRouterKey) {
     // Use OpenRouter API (OpenAI-compatible format)
     const openRouterModels = [
-      'google/gemini-2.0-flash-exp:free',
-      'google/gemini-2.5-flash-preview-05-20'
+      'google/gemini-2.5-flash-lite',
+      'google/gemini-2.5-flash',
+      'meta-llama/llama-3.3-70b-instruct:free'
     ];
 
     for (const model of openRouterModels) {
