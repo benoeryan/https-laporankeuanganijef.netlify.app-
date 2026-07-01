@@ -7873,7 +7873,7 @@ async function renderApprovalCenter() {
     + '</div>' + pendingBanner;
 
   if (myPD.length) {
-    const isBODApproval = (KU.role === 'bod');
+    const isBODApproval = (KU.role === 'bod' && KU.username !== 'anaijefcorp');
     const pdRows = myPD.map(function(p) {
       var actionBtns = isBODApproval
         ? '<button class="btn btn-xs btn-info" onclick="detailPermohonan(\'' + p.id + '\')">Detail</button>'
@@ -7893,7 +7893,7 @@ async function renderApprovalCenter() {
   }
 
   if (myDM.length) {
-    const isBODApprovalDM = (KU.role === 'bod');
+    const isBODApprovalDM = (KU.role === 'bod' && KU.username !== 'anaijefcorp');
     const dmRows = myDM.map(function(d) {
       var actionBtns = isBODApprovalDM
         ? '<button class="btn btn-xs btn-info" onclick="detailDanaMasuk(\'' + d.id + '\')">Detail</button>'
