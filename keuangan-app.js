@@ -103,7 +103,7 @@ function showLoading(v) {
 
 function fmtRp(n) {
   const num = parseFloat(n) || 0;
-  return 'Rp ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return 'Rp ' + num.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function togglePwd(inputId, btn) {
