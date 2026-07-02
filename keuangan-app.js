@@ -331,6 +331,15 @@ function findPreferredBankAccountCode(akunList, bankName, fallbackKode) {
   return fallback;
 }
 
+async function moveJurnalToTrash(id) {
+  var jurnal = await KDB.getAll('jurnal');
+  var j = jurnal.find(function(x){ return x.id === id; });
+  if (!j) return false;
+  await KDB.save('jurnal_trash', id, Object.assign({}, j, { deletedAt: new Date().toISOString(), deletedBy: KU.username }));
+  await KDB.delete('jurnal', id);
+  return true;
+}
+
 async function autoSyncBankAccountForJurnal(jurnalId, forcedTargetAkun) {
   var jurnal = await KDB.getAll('jurnal');
   var j = jurnal.find(function(x){ return x.id === jurnalId; });
@@ -6832,7 +6841,7 @@ async function renderBankRec() {
       + '<td class="text-right"><input type="text" inputmode="decimal" class="br-actual-input" data-kode="' + a.kode + '" value="' + (savedActual ? formatNominalValue(savedActual) : '') + '" placeholder="Isi saldo aktual rekening" style="width:160px;padding:6px 10px;border:1.5px solid #ddd;border-radius:6px;text-align:right;font-size:0.85rem" oninput="formatNominalInput(this)"></td>'
       + '<td class="text-right fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '">' + (savedActual ? fmtRp(selisih) : '-') + '</td>'
       + '<td>' + statusBadge + '</td>'
-      + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewBankRecDetail(\'' + a.kode + '\',' + saldoSistem + ')">👁️ Detail</button>' + (savedActual && Math.abs(selisih) >= 1 ? ' <button class="btn btn-xs btn-warning" onclick="koreksiSaldoAwalBank(\'' + a.kode + '\',' + saldoSistem + ',' + savedActual + ')">🔧 Koreksi</button>' : '') + '</td></tr>';
+      + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="viewBankRecDetail(\'' + a.kode + '\',' + saldoSistem + ')">👁️ Detail</button>' + (savedActual && Math.abs(selisih) >= 1 ? ' <button class="btn btn-xs btn-warning" onclick="analisaKoreksiBank(\'' + a.kode + '\',' + saldoSistem + ',' + savedActual + ')">🔎 Analisa</button>' : '') + '</td></tr>';
   }).join('');
 
   const now = new Date();
@@ -6906,19 +6915,165 @@ async function simpanSaldoAktualBank() {
 }
 
 async function koreksiSaldoAwalBank(kode, saldoSistem, saldoAktual) {
-  // Hitung selisih dan update saldo awal agar saldo sistem = saldo aktual
-  // Selisih = Sistem - Aktual. Jika positif → saldo awal terlalu besar. Jika negatif → terlalu kecil.
+  // Fallback terakhir jika analisa transaksi tidak menemukan penyebab spesifik.
   var selisih = saldoSistem - saldoAktual;
   if (Math.abs(selisih) < 1) { showAlert('Saldo sudah cocok!', 'info'); return; }
   var tahun = new Date().getFullYear();
   var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahun, {});
   var saLama = parseFloat(saldoAwalData[kode]) || 0;
   var saBaru = saLama - selisih;
-  if (!confirm('Koreksi saldo awal akun ' + kode + ' agar sistem = aktual?\n\nSaldo sistem: ' + fmtRp(saldoSistem) + '\nSaldo aktual: ' + fmtRp(saldoAktual) + '\nSelisih: ' + fmtRp(selisih) + '\n\nSaldo awal lama: ' + fmtRp(saLama) + '\nSaldo awal baru: ' + fmtRp(saBaru))) return;
+  if (!confirm('Gunakan koreksi saldo awal sebagai langkah TERAKHIR?\n\nPastikan hasil analisa transaksi sudah direview dan tidak ada jurnal yang perlu dibetulkan terlebih dahulu.\n\nSaldo sistem: ' + fmtRp(saldoSistem) + '\nSaldo aktual: ' + fmtRp(saldoAktual) + '\nSelisih: ' + fmtRp(selisih) + '\n\nSaldo awal lama: ' + fmtRp(saLama) + '\nSaldo awal baru: ' + fmtRp(saBaru))) return;
   saldoAwalData[kode] = saBaru;
   await KDB.saveSetting('saldo_awal_' + tahun, saldoAwalData);
-  showAlert('Saldo awal akun ' + kode + ' diperbarui! Sistem sekarang match dengan aktual.');
+  showAlert('Saldo awal akun ' + kode + ' diperbarui sebagai fallback terakhir.');
   navigate('kalk-bank-rec');
+}
+
+async function getBankRecAnalysis(kode, saldoSistem, saldoAktual) {
+  var allJ = await KDB.getAll('jurnal');
+  var akunList = await getAkun();
+  var akun = akunList.find(function(a){ return a.kode === kode; });
+  var pdList = await KDB.getAll('permohonan');
+  var dmList = await KDB.getAll('danamasuk');
+  var pdMap = {};
+  var dmMap = {};
+  pdList.forEach(function(p) { pdMap[p.id] = p; });
+  dmList.forEach(function(d) { dmMap[d.id] = d; });
+  var related = allJ.filter(function(j) {
+    return (j.lines || []).some(function(l){ return l.akun === kode; });
+  }).sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); });
+  var findings = [];
+  var dupMap = {};
+
+  related.forEach(function(j) {
+    var key = getJurnalDuplicateKey(j);
+    if (!key) return;
+    if (!dupMap[key]) dupMap[key] = j;
+    else findings.push({ kind: 'duplicate', jurnalId: j.id, masterId: dupMap[key].id, title: 'Duplikat jurnal', severity: 'danger', tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Mirip dengan jurnal ' + dupMap[key].id });
+  });
+
+  related.forEach(function(j) {
+    var meta = j.meta || {};
+    if (j.sumber === 'permohonan-dana' && meta.permohonanId) {
+      var p = pdMap[meta.permohonanId];
+      if (!p) {
+        findings.push({ kind: 'orphan', jurnalId: j.id, masterId: meta.permohonanId, title: 'Jurnal yatim permohonan', severity: 'danger', tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Permohonan ' + meta.permohonanId + ' sudah tidak ada' });
+      } else {
+        var expectedDate = p.jatuhTempo || p.tanggal || '';
+        var expectedRef = p.noPOInvoice || p.id || '';
+        var expectedAmount = parseFloat(p.nominal) || 0;
+        var expectedDebit = p.akunDebit || '5-2200';
+        var expectedKredit = p.akunKredit || '1-1100';
+        var lineAkun = (j.lines || []).map(function(l) { return l.akun; });
+        var mismatch = j.tanggal !== expectedDate || (j.noRef || '') !== expectedRef || Math.abs((parseFloat(j.totalDebit) || 0) - expectedAmount) > 0.01 || lineAkun.indexOf(expectedDebit) === -1 || lineAkun.indexOf(expectedKredit) === -1;
+        if (mismatch) findings.push({ kind: 'stale-permohonan', jurnalId: j.id, masterId: p.id, title: 'Link permohonan tidak sinkron', severity: 'warning', tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Tanggal/ref/akun/nominal belum sinkron dengan permohonan' });
+      }
+    }
+    if (j.sumber === 'dana-masuk' && meta.danaMasukId) {
+      var d = dmMap[meta.danaMasukId];
+      if (!d) {
+        findings.push({ kind: 'orphan', jurnalId: j.id, masterId: meta.danaMasukId, title: 'Jurnal yatim dana masuk', severity: 'danger', tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Dana masuk ' + meta.danaMasukId + ' sudah tidak ada' });
+      } else {
+        var expectedDateDM = d.tanggal || '';
+        var expectedRefDM = d.noRef || d.id || '';
+        var expectedAmountDM = parseFloat(d.nominal) || 0;
+        var expectedDebitDM = d.akunTerima || '1-1100';
+        var expectedKreditDM = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-')) ? d.kategori : '4-2000';
+        var lineAkunDM = (j.lines || []).map(function(l) { return l.akun; });
+        var mismatchDM = j.tanggal !== expectedDateDM || (j.noRef || '') !== expectedRefDM || Math.abs((parseFloat(j.totalDebit) || 0) - expectedAmountDM) > 0.01 || lineAkunDM.indexOf(expectedDebitDM) === -1 || lineAkunDM.indexOf(expectedKreditDM) === -1;
+        if (mismatchDM) findings.push({ kind: 'stale-danamasuk', jurnalId: j.id, masterId: d.id, title: 'Link dana masuk tidak sinkron', severity: 'warning', tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Tanggal/ref/akun/nominal belum sinkron dengan dana masuk' });
+      }
+    }
+    var targetAkun = findPreferredBankAccountCode(akunList, meta.namaBank, kode);
+    if (meta.namaBank && targetAkun && targetAkun !== kode) {
+      findings.push({ kind: 'wrong-bank', jurnalId: j.id, masterId: targetAkun, title: 'Salah akun bank', severity: 'warning', tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Keterangan/metadata bank mengarah ke akun ' + targetAkun });
+    }
+    var bankLines = (j.lines || []).filter(function(l) { return l.akun === kode; });
+    var hasDebit = bankLines.some(function(l) { return (parseFloat(l.debit)||0) > 0; });
+    var hasKredit = bankLines.some(function(l) { return (parseFloat(l.kredit)||0) > 0; });
+    if (hasDebit && hasKredit) findings.push({ kind: 'mixed-bank', jurnalId: j.id, masterId: '', title: 'Debit & kredit di akun bank sama', severity: 'warning', tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Perlu review detail COA karena akun bank yang sama muncul di dua sisi' });
+  });
+
+  var now = new Date();
+  var weekAgo = new Date(now);
+  weekAgo.setDate(now.getDate() - 7);
+  var weekAgoStr = weekAgo.toISOString().split('T')[0];
+  var pendingJurnal = related.filter(function(j) { return j.tanggal >= weekAgoStr; });
+  return { akun: akun, findings: findings, related: related, pendingJurnal: pendingJurnal, selisih: saldoSistem - saldoAktual };
+}
+
+async function eksekusiTemuanBankRec(kind, jurnalId, masterId, kode, saldoSistem, saldoAktual) {
+  showLoading(true);
+  try {
+    if (kind === 'duplicate' || kind === 'orphan') {
+      await moveJurnalToTrash(jurnalId);
+    } else if (kind === 'stale-permohonan') {
+      var pdList = await KDB.getAll('permohonan');
+      var p = pdList.find(function(x) { return x.id === masterId; });
+      if (p) await syncPermohonanLinkedJurnal(p);
+    } else if (kind === 'stale-danamasuk') {
+      var dmList = await KDB.getAll('danamasuk');
+      var d = dmList.find(function(x) { return x.id === masterId; });
+      if (d) await syncDanaMasukLinkedJurnal(d);
+    } else if (kind === 'wrong-bank') {
+      await autoSyncBankAccountForJurnal(jurnalId, masterId);
+    } else if (kind === 'mixed-bank') {
+      showLoading(false);
+      closeModalDirect();
+      editJurnal(jurnalId);
+      return;
+    }
+    showLoading(false);
+    closeModalDirect();
+    setTimeout(function() { analisaKoreksiBank(kode, saldoSistem, saldoAktual); }, 250);
+  } catch (err) {
+    showLoading(false);
+    showAlert('Eksekusi temuan gagal: ' + (err.message || err), 'danger');
+  }
+}
+
+async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
+  showLoading(true);
+  try {
+    var analisa = await getBankRecAnalysis(kode, saldoSistem, saldoAktual);
+    showLoading(false);
+    var findings = analisa.findings;
+    var rows = findings.map(function(f) {
+      var badgeCls = f.severity === 'danger' ? 'badge-danger' : 'badge-warning';
+      var actionLabel = (f.kind === 'duplicate' || f.kind === 'orphan') ? 'Hapus' : (f.kind === 'mixed-bank' ? 'Edit Jurnal' : 'Eksekusi');
+      return '<tr>'
+        + '<td><span class="badge ' + badgeCls + '">' + f.title + '</span></td>'
+        + '<td>' + fmtDate(f.tanggal) + '</td>'
+        + '<td>' + (f.jurnalId || '-') + '</td>'
+        + '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (f.ket || '-') + '</td>'
+        + '<td class="text-right">' + fmtRp(f.nominal) + '</td>'
+        + '<td style="font-size:0.76rem;color:#666;max-width:240px">' + f.detail + '</td>'
+        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> <button class="btn btn-xs btn-warning" onclick="eksekusiTemuanBankRec(\'' + f.kind + '\',\'' + f.jurnalId + '\',\'' + (f.masterId || '') + '\',\'' + kode + '\',' + saldoSistem + ',' + saldoAktual + ')">' + actionLabel + '</button></td>'
+        + '</tr>';
+    }).join('');
+    var pendingRows = analisa.pendingJurnal.slice(0,8).map(function(j) {
+      var d=0,k=0;
+      (j.lines||[]).forEach(function(l){ if(l.akun===kode){ d += parseFloat(l.debit)||0; k += parseFloat(l.kredit)||0; } });
+      return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (j.keterangan||'-') + '</td><td class="text-green">' + (d ? fmtRp(d) : '-') + '</td><td class="text-red">' + (k ? fmtRp(k) : '-') + '</td></tr>';
+    }).join('');
+    var html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
+      + '<div style="background:#e3f2fd;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.72rem;color:#888">Saldo Sistem</div><div class="fw-bold" style="font-size:1.1rem;color:#1a237e">' + fmtRp(saldoSistem) + '</div></div>'
+      + '<div style="background:#e8f5e9;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.72rem;color:#888">Saldo Aktual</div><div class="fw-bold" style="font-size:1.1rem;color:#2e7d32">' + fmtRp(saldoAktual) + '</div></div>'
+      + '<div style="background:#ffebee;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.72rem;color:#888">Selisih</div><div class="fw-bold text-red" style="font-size:1.1rem">' + fmtRp(analisa.selisih) + '</div></div>'
+      + '</div>'
+      + (findings.length ? '<div class="alert alert-warning">Sistem menemukan <b>' + findings.length + '</b> transaksi/relasi yang perlu dibetulkan dulu. Saldo awal tidak dikoreksi langsung.</div>' : '<div class="alert alert-success">Tidak ada temuan transaksi yang jelas. Koreksi saldo awal boleh dipakai sebagai fallback terakhir.</div>')
+      + (findings.length ? '<div class="table-wrap" style="max-height:320px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Temuan</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '')
+      + (analisa.pendingJurnal.length ? '<div style="margin-top:12px;background:#fff8e1;border-left:4px solid #ff9800;border-radius:8px;padding:12px"><div style="font-weight:700;color:#e65100;margin-bottom:8px">⏳ Transaksi 7 hari terakhir yang mungkin masih proses bank</div><div class="table-wrap" style="max-height:180px;overflow-y:auto"><table style="font-size:0.8rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>' + pendingRows + '</tbody></table></div></div>' : '')
+      + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+      + (findings.length ? '' : '<button class="btn btn-warning" onclick="koreksiSaldoAwalBank(\'' + kode + '\',' + saldoSistem + ',' + saldoAktual + ');closeModalDirect()">🔧 Fallback Koreksi Saldo Awal</button>')
+      + '<button class="btn btn-info" onclick="viewBankRecDetail(\'' + kode + '\',' + saldoSistem + ');closeModalDirect()">📚 Lihat Detail Rekening</button>'
+      + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
+      + '</div>';
+    openModal(html, '🔎 Analisa Rekonsiliasi: ' + ((analisa.akun || {}).nama || kode));
+  } catch (err) {
+    showLoading(false);
+    showAlert('Analisa rekonsiliasi gagal: ' + (err.message || err), 'danger');
+  }
 }
 
 async function viewBankRecDetail(kode, saldoSistem) {
@@ -7006,7 +7161,7 @@ async function viewBankRecDetail(kode, saldoSistem) {
     + '<div style="font-weight:600;margin-bottom:6px">20 Jurnal Terakhir:</div>'
     + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th><th>Aksi</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
     + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
-    + (savedActual && Math.abs(selisih)>=1 ? '<button class="btn btn-warning" onclick="koreksiSaldoAwalBank(\'' + kode + '\',' + saldoSistem + ',' + savedActual + ');closeModalDirect()">🔧 Koreksi Saldo Awal</button>' : '')
+    + (savedActual && Math.abs(selisih)>=1 ? '<button class="btn btn-warning" onclick="analisaKoreksiBank(\'' + kode + '\',' + saldoSistem + ',' + savedActual + ');closeModalDirect()">🔎 Analisa Dulu</button>' : '')
     + '<button class="btn btn-info" onclick="navigate(\'monitor-buku-besar\');closeModalDirect()">📚 Buku Besar</button>'
     + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
     + '</div>';
