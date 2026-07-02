@@ -3606,6 +3606,14 @@ async function simpanEditJurnal(id) {
     setTimeout(function(){ analisaSelisihSaldo(true); }, 800);
     return;
   }
+  if (window._returnToBankRecAnalysis) {
+    var bankRecCtx = window._returnToBankRecAnalysis;
+    window._returnToBankRecAnalysis = null;
+    setTimeout(function() {
+      analisaKoreksiBank(bankRecCtx.kode, bankRecCtx.saldoSistem, bankRecCtx.saldoAktual);
+    }, 300);
+    return;
+  }
   navigate('jurnal-umum');
   setTimeout(reapplyJurnalFilter, 500);
   setTimeout(reapplyJurnalFilter, 1000);
@@ -7160,8 +7168,7 @@ async function eksekusiTemuanBankRec(kind, jurnalId, masterId, kode, saldoSistem
       await autoSyncBankAccountForJurnal(jurnalId, masterId);
     } else if (kind === 'mixed-bank') {
       showLoading(false);
-      closeModalDirect();
-      editJurnal(jurnalId);
+      editBankRecFindingJurnal(jurnalId, kode, saldoSistem, saldoAktual);
       return;
     }
     showLoading(false);
@@ -7171,6 +7178,16 @@ async function eksekusiTemuanBankRec(kind, jurnalId, masterId, kode, saldoSistem
     showLoading(false);
     showAlert('Eksekusi temuan gagal: ' + (err.message || err), 'danger');
   }
+}
+
+function editBankRecFindingJurnal(jurnalId, kode, saldoSistem, saldoAktual) {
+  window._returnToBankRecAnalysis = {
+    kode: kode,
+    saldoSistem: saldoSistem,
+    saldoAktual: saldoAktual
+  };
+  closeModalDirect();
+  editJurnal(jurnalId);
 }
 
 async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
@@ -7198,7 +7215,7 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
       var badgeCls = f.severity === 'danger' ? 'badge-danger' : 'badge-warning';
       var actionLabel = (f.kind === 'duplicate' || f.kind === 'orphan') ? 'Hapus' : (f.kind === 'mixed-bank' ? 'Edit Jurnal' : 'Eksekusi');
       var filterKind = (f.kind === 'duplicate' || f.kind === 'orphan') ? 'critical' : (f.kind === 'wrong-bank' ? 'wrong' : (f.kind === 'mixed-bank' ? 'mixed' : 'sync'));
-      var editBtn = f.jurnalId ? ' <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + f.jurnalId + '\');closeModalDirect()">Edit</button>' : '';
+      var editBtn = f.jurnalId ? ' <button class="btn btn-xs btn-warning" onclick="editBankRecFindingJurnal(\'' + f.jurnalId + '\',\'' + kode + '\',' + saldoSistem + ',' + saldoAktual + ')">Edit</button>' : '';
       f.filterKind = filterKind;
       summaryCards[filterKind].count += 1;
       summaryCards[filterKind].amount += parseFloat(f.nominal) || 0;
