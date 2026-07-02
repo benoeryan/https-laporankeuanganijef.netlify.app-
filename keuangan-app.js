@@ -3166,6 +3166,12 @@ function updateAuditTransaksiLamaSelection() {
   if (countEl) countEl.textContent = checked.length ? checked.length + ' dipilih' : '';
 }
 
+function editAuditTransaksiLamaJurnal(jurnalId) {
+  window._returnToAuditTransaksiLama = true;
+  closeModalDirect();
+  editJurnal(jurnalId);
+}
+
 function filterAuditTransaksiLamaRows(tableId, query, kind) {
   var root = document.getElementById(tableId);
   if (!root) return;
@@ -3423,7 +3429,7 @@ async function jalankanAuditTransaksiLama() {
         + '<td class="audit-old-cell-wrap">' + (f.ket || '-') + '</td>'
         + '<td class="text-right">' + fmtRp(f.nominal) + '</td>'
         + '<td class="audit-old-cell-detail">' + f.detail + '</td>'
-        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> ' + actionBtn + '</td>'
+        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> <button class="btn btn-xs btn-warning" onclick="editAuditTransaksiLamaJurnal(\'' + f.jurnalId + '\')">Edit</button> ' + actionBtn + '</td>'
         + '</tr>';
     }).join('');
 
@@ -3432,6 +3438,9 @@ async function jalankanAuditTransaksiLama() {
       + cards
       + (findings.length ? '<div class="audit-old-toolbar">'
         + '<div class="audit-old-toolbar-left">'
+        + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'\')">Compact</button>'
+        + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'wide\')">Wide</button>'
+        + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'full\')">Full</button>'
         + '<label style="font-size:0.82rem"><input type="checkbox" onchange="toggleAuditTransaksiLama(this.checked)"> Pilih Semua</label>'
         + '<button class="btn btn-sm btn-success" onclick="batchSyncAuditTransaksiLama()">🔄 Sync Terpilih</button>'
         + '<button class="btn btn-sm btn-danger" onclick="batchHapusAuditTransaksiLama()">🗑️ Hapus Terpilih</button>'
@@ -3650,6 +3659,11 @@ async function simpanEditJurnal(id) {
     setTimeout(function() {
       analisaKoreksiBank(bankRecCtx.kode, bankRecCtx.saldoSistem, bankRecCtx.saldoAktual);
     }, 300);
+    return;
+  }
+  if (window._returnToAuditTransaksiLama) {
+    window._returnToAuditTransaksiLama = false;
+    setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
     return;
   }
   navigate('jurnal-umum');
