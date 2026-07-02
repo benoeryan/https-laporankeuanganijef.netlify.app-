@@ -4856,16 +4856,17 @@ async function renderSaldoHariIni() {
 }
 
 // ===== ANALISA SELISIH SALDO =====
-var _lastSaldoReal = 0;
+var _lastSaldoReal = parseFloat(localStorage.getItem('k_saldo_real_mandiri') || '0') || 0;
 async function analisaSelisihSaldo(skipPrompt) {
   var saldoReal = _lastSaldoReal;
   if (!skipPrompt || !saldoReal) {
-    var input = prompt('Masukkan saldo real Bank Mandiri saat ini (tanpa Rp, contoh: 155083806.92):', _lastSaldoReal || '');
+    var input = prompt('Masukkan saldo real Bank Mandiri saat ini (tanpa Rp, contoh: 62177002.54):', _lastSaldoReal || '');
     if (!input) return;
     saldoReal = parseFloat(input.replace(/[^\d.,]/g,'').replace(/,/g,'')) || 0;
   }
   if (saldoReal <= 0) { showAlert('Saldo tidak valid!', 'danger'); return; }
   _lastSaldoReal = saldoReal;
+  localStorage.setItem('k_saldo_real_mandiri', saldoReal);
 
   showLoading(true);
   var jurnal = await KDB.getAll('jurnal');
@@ -4947,7 +4948,7 @@ async function analisaSelisihSaldo(skipPrompt) {
     var lines = j.lines || [];
     var touchKas = lines.some(function(l) { return l.akun === kasAkun; });
     if (!touchKas) return;
-    var key = (j.tanggal||'') + '|' + (parseFloat(j.totalDebit)||0) + '|' + (j.keterangan||'').substring(0,30).toLowerCase();
+    var key = (j.tanggal||'') + '|' + (parseFloat(j.totalDebit)||0) + '|' + (j.noRef||'') + '|' + (j.keterangan||'').toLowerCase().trim();
     if (seen[key]) {
       // Tambahkan transaksi pertama jika belum ditambahkan
       if (!addedFirst[key]) {
@@ -9761,10 +9762,10 @@ async function runAIAnalysis() {
     allJurnal.forEach(function(j) {
       if (j.tipe === 'penutup') return;
       if (!j.noRef) return;
-      // Hanya deteksi duplikat jika TANGGAL SAMA + NOMINAL SAMA + REF SAMA + KETERANGAN SAMA
+      // Hanya deteksi duplikat jika TANGGAL SAMA + NOMINAL SAMA + REF SAMA + KETERANGAN SAMA (full, bukan substring)
       // Dan nominal minimal Rp 10.000 (exclude recurring charges kecil seperti biaya admin/bunga)
       if ((j.totalDebit||0) < 10000) return;
-      var key = (j.tanggal||'') + '_' + (j.totalDebit||0).toFixed(0) + '_' + (j.noRef||'') + '_' + (j.keterangan||'').substring(0,50);
+      var key = (j.tanggal||'') + '_' + (j.totalDebit||0).toFixed(0) + '_' + (j.noRef||'') + '_' + (j.keterangan||'').trim();
       if (refMap[key]) {
         // Cek apakah pasangan ini sudah ditandai "bukan duplikat"
         var pairKey = refMap[key].id + '_' + j.id;
