@@ -49,6 +49,17 @@
       gap: 8px;
       margin-top: 12px;
     }
+    .link-btn {
+      background: #0f766e;
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .link-btn:hover { background: #115e59; }
     button {
       background: var(--brand);
       border: none;
@@ -90,6 +101,8 @@
         <button onclick="downloadSvg('flow-diagram', 'backend-workflow-transaksi-flow.svg')">Download Flow SVG</button>
         <button onclick="downloadSvg('seq-diagram', 'backend-workflow-transaksi-sequence.svg')">Download Sequence SVG</button>
         <button class="btn-muted" onclick="downloadMarkdown()">Download Markdown Bundle</button>
+        <a class="link-btn" href="./backend-workflow-transaksi-flow.svg" download>Unduh Flow SVG Statis</a>
+        <a class="link-btn" href="./backend-workflow-transaksi-sequence.svg" download>Unduh Sequence SVG Statis</a>
       </div>
     </div>
 

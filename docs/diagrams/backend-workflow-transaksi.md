@@ -3,6 +3,8 @@
 ## Akses Cepat
 
 - Buka viewer interaktif: [backend-workflow-transaksi.html](./backend-workflow-transaksi.html)
+- Buka gambar flow (SVG): [backend-workflow-transaksi-flow.svg](./backend-workflow-transaksi-flow.svg)
+- Buka gambar sequence (SVG): [backend-workflow-transaksi-sequence.svg](./backend-workflow-transaksi-sequence.svg)
 - Buka source flowchart: [backend-workflow-transaksi.mmd](./backend-workflow-transaksi.mmd)
 - Buka source sequence: [backend-workflow-transaksi-sequence.mmd](./backend-workflow-transaksi-sequence.mmd)
 - Jika tetap terbuka sebagai teks, gunakan Explorer lalu klik file `backend-workflow-transaksi.html`.
