@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Backend Workflow Transaksi - Downloadable Diagrams</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --brand: #1d4ed8;
+      --brand-dark: #1e40af;
+      --border: #dbe4f0;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: linear-gradient(180deg, #eef3ff 0%, var(--bg) 100%);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+    .sub {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 0.92rem;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    button {
+      background: var(--brand);
+      border: none;
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { background: var(--brand-dark); }
+    .btn-muted {
+      background: #0ea5e9;
+    }
+    .diagram-box {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: #fff;
+    }
+    .section-title {
+      margin: 0 0 10px;
+      font-size: 1rem;
+      color: #0b3f95;
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Diagram Backend Workflow Transaksi</h1>
+      <div class="sub">Unduh sebagai SVG atau Markdown agar mudah dibagikan ke tim.</div>
+      <div class="toolbar">
+        <button onclick="downloadSvg('flow-diagram', 'backend-workflow-transaksi-flow.svg')">Download Flow SVG</button>
+        <button onclick="downloadSvg('seq-diagram', 'backend-workflow-transaksi-sequence.svg')">Download Sequence SVG</button>
+        <button class="btn-muted" onclick="downloadMarkdown()">Download Markdown Bundle</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Flow End-to-End</h2>
+      <div class="diagram-box">
+        <div id="flow-diagram" class="mermaid">
+flowchart TD
+    A([Mulai Transaksi]) --> B[User Input Draft Transaksi]
+    B --> C{Jenis Transaksi}
+    C --> C1[Permohonan Dana]
+    C --> C2[Dana Masuk]
+    C --> C3[Jurnal Manual]
+
+    C1 --> D[Validasi Form: nominal, akun, keterangan, bukti]
+    C2 --> D
+    C3 --> D
+
+    D --> E[KDB.save ke localStorage cache]
+    E --> F{Firebase Ready?}
+    F -- Ya --> G[Sinkron ke Firestore]
+    F -- Tidak --> H[Simpan dirty flag lokal, retry nanti]
+    G --> I[Status Draft Tersimpan]
+    H --> I
+
+    I --> J{Submit Approval?}
+    J -- Tidak --> K[Edit Draft / Tetap Draft]
+    K --> I
+    J -- Ya --> L[Naik ke Approval Layer 1]
+
+    L --> M{Approve L1?}
+    M -- Tidak --> N[Reject + catatan revisi]
+    N --> K
+    M -- Ya --> O[Approval Layer 2]
+
+    O --> P{Approve L2?}
+    P -- Tidak --> N
+    P -- Ya --> Q[Approval Layer 3 Final]
+
+    Q --> R{Approved Final?}
+    R -- Tidak --> N
+    R -- Ya --> S[Trigger Auto Integrasi Jurnal]
+
+    S --> T{Jurnal linked sudah ada?}
+    T -- Ya --> U[Sync jurnal linked sesuai data terbaru]
+    T -- Tidak --> V[Buat jurnal baru + meta link]
+    U --> W[Jurnal Umum Terupdate]
+    V --> W
+
+    W --> X[Masuk Monitoring: Buku Besar, Saldo, Dashboard]
+    X --> Y[Masuk Engine Analisa/Audit]
+    Y --> Z{Ada Temuan? duplicate/orphan/stale/wrong-bank}
+    Z -- Tidak --> AA[Transaksi dianggap sehat]
+    Z -- Ya --> AB[User review temuan]
+
+    AB --> AC{Aksi Koreksi}
+    AC --> AC1[View Detail]
+    AC --> AC2[Edit Jurnal]
+    AC --> AC3[Sync Link]
+    AC --> AC4[Hapus ke Trash]
+
+    AC1 --> AD[Re-analisa]
+    AC2 --> AD
+    AC3 --> AD
+    AC4 --> AD
+
+    AD --> AE{Masih ada temuan kritis?}
+    AE -- Ya --> AB
+    AE -- Tidak --> AF[Lanjut Rekonsiliasi]
+
+    AF --> AG[Bank Reconcile: bandingkan saldo sistem vs aktual]
+    AG --> AH{Selisih ada?}
+    AH -- Tidak --> AI[Reconcile selesai]
+    AH -- Ya --> AJ[Analisa Rekonsiliasi dulu]
+    AJ --> AK[Eksekusi per temuan]
+    AK --> AL{Selisih selesai?}
+    AL -- Ya --> AI
+    AL -- Tidak --> AM[Fallback Koreksi Saldo Awal - opsi terakhir]
+    AM --> AI
+
+    AI --> AN[Periode Akhir: Jurnal Penyesuaian]
+    AN --> AO[Neraca Lajur Review]
+    AO --> AP[Jurnal Penutup]
+    AP --> AQ[Generate Laporan: LR, Neraca, Arus Kas, Ekuitas]
+    AQ --> AR[Export/Print/Arsip]
+    AR --> AS([Selesai End-to-End])
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Sequence Request-Response</h2>
+      <div class="diagram-box">
+        <div id="seq-diagram" class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend App
+    participant KDB as KDB Layer
+    participant LS as localStorage
+    participant FS as Firestore
+    participant AI as Analisa Engine
+
+    U->>FE: Input transaksi
+    FE->>KDB: save(col,id,data)
+    KDB->>LS: write cache + dirty flag
+    KDB->>FS: upsert dokumen (jika online)
+    FS-->>KDB: ack
+    KDB-->>FE: saved
+
+    U->>FE: Submit approval
+    FE->>KDB: update status pending L1/L2/L3
+    KDB->>FS: persist status/log approval
+
+    U->>FE: Approve final
+    FE->>KDB: sync/create linked jurnal
+    KDB->>FS: save jurnal + meta link transaksi
+
+    FE->>AI: run audit/duplicate/orphan/stale check
+    AI-->>FE: findings
+    U->>FE: edit/sync/delete sesuai finding
+    FE->>KDB: apply correction
+    KDB->>FS: persist correction
+    FE->>AI: re-run analysis
+    AI-->>FE: clean/remaining findings
+
+    U->>FE: run bank reconcile
+    FE->>AI: analyze selisih
+    AI-->>FE: reconcile findings
+    U->>FE: execute findings / fallback last resort
+    FE->>KDB: save final state
+    KDB->>FS: persist
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function downloadSvg(containerId, filename) {
+      const node = document.getElementById(containerId);
+      if (!node) return;
+      const svg = node.querySelector('svg');
+      if (!svg) {
+        alert('SVG belum siap. Tunggu diagram selesai render lalu coba lagi.');
+        return;
+      }
+      const serializer = new XMLSerializer();
+      const source = serializer.serializeToString(svg);
+      const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadMarkdown() {
+      const content = [
+        '# Diagram Backend Workflow Transaksi',
+        '',
+        '## Flow End-to-End',
+        '```mermaid',
+        document.getElementById('flow-diagram').textContent.trim(),
+        '```',
+        '',
+        '## Sequence Request-Response',
+        '```mermaid',
+        document.getElementById('seq-diagram').textContent.trim(),
+        '```'
+      ].join('\n');
+
+      const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'backend-workflow-transaksi.md';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

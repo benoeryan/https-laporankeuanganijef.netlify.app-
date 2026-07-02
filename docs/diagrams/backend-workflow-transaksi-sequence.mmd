@@ -1,0 +1,37 @@
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend App
+    participant KDB as KDB Layer
+    participant LS as localStorage
+    participant FS as Firestore
+    participant AI as Analisa Engine
+
+    U->>FE: Input transaksi
+    FE->>KDB: save(col,id,data)
+    KDB->>LS: write cache + dirty flag
+    KDB->>FS: upsert dokumen (jika online)
+    FS-->>KDB: ack
+    KDB-->>FE: saved
+
+    U->>FE: Submit approval
+    FE->>KDB: update status pending L1/L2/L3
+    KDB->>FS: persist status/log approval
+
+    U->>FE: Approve final
+    FE->>KDB: sync/create linked jurnal
+    KDB->>FS: save jurnal + meta link transaksi
+
+    FE->>AI: run audit/duplicate/orphan/stale check
+    AI-->>FE: findings
+    U->>FE: edit/sync/delete sesuai finding
+    FE->>KDB: apply correction
+    KDB->>FS: persist correction
+    FE->>AI: re-run analysis
+    AI-->>FE: clean/remaining findings
+
+    U->>FE: run bank reconcile
+    FE->>AI: analyze selisih
+    AI-->>FE: reconcile findings
+    U->>FE: execute findings / fallback last resort
+    FE->>KDB: save final state
+    KDB->>FS: persist
