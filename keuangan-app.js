@@ -3172,6 +3172,17 @@ function editAuditTransaksiLamaJurnal(jurnalId) {
   editJurnal(jurnalId);
 }
 
+async function hapusAuditTransaksiLamaJurnal(jurnalId) {
+  var jurnal = await KDB.getAll('jurnal');
+  var j = jurnal.find(function(x){ return x.id === jurnalId; });
+  if (!j) { showAlert('Jurnal tidak ditemukan.', 'warning'); return; }
+  if (!confirm('Hapus jurnal ini ke Tempat Sampah?\n\n' + (j.keterangan || '-') + '\nNominal: ' + fmtRp(j.totalDebit || 0))) return;
+  await moveJurnalToTrash(jurnalId);
+  showAlert('Jurnal dipindah ke Tempat Sampah.');
+  closeModalDirect();
+  setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
+}
+
 function filterAuditTransaksiLamaRows(tableId, query, kind) {
   var root = document.getElementById(tableId);
   if (!root) return;
@@ -3429,7 +3440,7 @@ async function jalankanAuditTransaksiLama() {
         + '<td class="audit-old-cell-wrap">' + (f.ket || '-') + '</td>'
         + '<td class="text-right">' + fmtRp(f.nominal) + '</td>'
         + '<td class="audit-old-cell-detail">' + f.detail + '</td>'
-        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> <button class="btn btn-xs btn-warning" onclick="editAuditTransaksiLamaJurnal(\'' + f.jurnalId + '\')">Edit</button> ' + actionBtn + '</td>'
+        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> <button class="btn btn-xs btn-warning" onclick="editAuditTransaksiLamaJurnal(\'' + f.jurnalId + '\')">Edit</button> <button class="btn btn-xs btn-danger" onclick="hapusAuditTransaksiLamaJurnal(\'' + f.jurnalId + '\')">Hapus</button> ' + actionBtn + '</td>'
         + '</tr>';
     }).join('');
 
