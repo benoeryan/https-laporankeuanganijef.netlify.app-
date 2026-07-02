@@ -387,12 +387,40 @@ function genId(prefix) {
 }
 
 function openModal(html, title) {
+  resetModalLayout();
   document.getElementById('modal-content').innerHTML = '<h3>' + title + '</h3>' + html;
   document.getElementById('modal-overlay').classList.add('open');
 }
 
+function resetModalLayout() {
+  var box = document.getElementById('modal-box');
+  if (!box) return;
+  box.style.maxWidth = '';
+  box.style.width = '';
+  box.style.maxHeight = '';
+  box.style.height = '';
+  box.style.padding = '';
+}
+
+function setModalLayout(mode) {
+  var box = document.getElementById('modal-box');
+  if (!box) return;
+  resetModalLayout();
+  if (mode === 'wide') {
+    box.style.maxWidth = '1180px';
+    box.style.width = '96vw';
+  } else if (mode === 'full') {
+    box.style.maxWidth = '96vw';
+    box.style.width = '96vw';
+    box.style.maxHeight = '94vh';
+    box.style.height = '94vh';
+    box.style.padding = '18px';
+  }
+}
+
 function closeModal(e) {
   if (!e || e.target === document.getElementById('modal-overlay')) {
+    resetModalLayout();
     document.getElementById('modal-overlay').classList.remove('open');
     // If data was updated while modal was open, refresh the current view
     if (window._kDataUpdated) {
@@ -405,6 +433,7 @@ function closeModal(e) {
 }
 
 function closeModalDirect() {
+  resetModalLayout();
   document.getElementById('modal-overlay').classList.remove('open');
   // If data was updated while modal was open, refresh the current view
   if (window._kDataUpdated) {
@@ -438,6 +467,15 @@ function switchTab(btn, tabId) {
 function filterTable(tableId, q) {
   document.querySelectorAll('#' + tableId + ' tbody tr').forEach(function(r) {
     r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function filterBankRecAnalysisRows(tableId, query, kind) {
+  var q = String(query || '').toLowerCase();
+  document.querySelectorAll('#' + tableId + ' tbody tr').forEach(function(r) {
+    var textOk = !q || r.textContent.toLowerCase().includes(q);
+    var kindOk = !kind || kind === 'all' || r.dataset.kind === kind;
+    r.style.display = textOk && kindOk ? '' : 'none';
   });
 }
 
@@ -7038,10 +7076,20 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
     var analisa = await getBankRecAnalysis(kode, saldoSistem, saldoAktual);
     showLoading(false);
     var findings = analisa.findings;
+    setTimeout(function() { setModalLayout('wide'); }, 0);
+    var summaryMap = { duplicate: 0, orphan: 0, stale: 0, wrong: 0, mixed: 0 };
+    findings.forEach(function(f) {
+      if (f.kind === 'duplicate') summaryMap.duplicate++;
+      else if (f.kind === 'orphan') summaryMap.orphan++;
+      else if (f.kind === 'wrong-bank') summaryMap.wrong++;
+      else if (f.kind === 'mixed-bank') summaryMap.mixed++;
+      else summaryMap.stale++;
+    });
     var rows = findings.map(function(f) {
       var badgeCls = f.severity === 'danger' ? 'badge-danger' : 'badge-warning';
       var actionLabel = (f.kind === 'duplicate' || f.kind === 'orphan') ? 'Hapus' : (f.kind === 'mixed-bank' ? 'Edit Jurnal' : 'Eksekusi');
-      return '<tr>'
+      var filterKind = (f.kind === 'duplicate' || f.kind === 'orphan') ? 'critical' : (f.kind === 'wrong-bank' ? 'wrong' : (f.kind === 'mixed-bank' ? 'mixed' : 'sync'));
+      return '<tr data-kind="' + filterKind + '">' 
         + '<td><span class="badge ' + badgeCls + '">' + f.title + '</span></td>'
         + '<td>' + fmtDate(f.tanggal) + '</td>'
         + '<td>' + (f.jurnalId || '-') + '</td>'
@@ -7056,13 +7104,30 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
       (j.lines||[]).forEach(function(l){ if(l.akun===kode){ d += parseFloat(l.debit)||0; k += parseFloat(l.kredit)||0; } });
       return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (j.keterangan||'-') + '</td><td class="text-green">' + (d ? fmtRp(d) : '-') + '</td><td class="text-red">' + (k ? fmtRp(k) : '-') + '</td></tr>';
     }).join('');
-    var html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'\')">Compact</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'wide\')">Wide</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'full\')">Full</button>'
+      + '</div>'
+      + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+      + '<input id="bankrec-analysis-search" placeholder="Cari jurnal/keterangan/ref..." style="padding:7px 10px;border:1px solid #d0d7e2;border-radius:8px;min-width:220px" oninput="filterBankRecAnalysisRows(\'bankrec-analysis-table\', this.value, (document.getElementById(\'bankrec-analysis-filter\')||{}).value || \"all\")">'
+      + '<select id="bankrec-analysis-filter" style="padding:7px 10px;border:1px solid #d0d7e2;border-radius:8px" onchange="filterBankRecAnalysisRows(\'bankrec-analysis-table\', (document.getElementById(\'bankrec-analysis-search\')||{}).value || \"\", this.value)">'
+      + '<option value="all">Semua Temuan (' + findings.length + ')</option>'
+      + '<option value="critical">Kritis (' + (summaryMap.duplicate + summaryMap.orphan) + ')</option>'
+      + '<option value="sync">Perlu Sync (' + summaryMap.stale + ')</option>'
+      + '<option value="wrong">Salah Akun (' + summaryMap.wrong + ')</option>'
+      + '<option value="mixed">Perlu Edit (' + summaryMap.mixed + ')</option>'
+      + '</select>'
+      + '</div>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
       + '<div style="background:#e3f2fd;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.72rem;color:#888">Saldo Sistem</div><div class="fw-bold" style="font-size:1.1rem;color:#1a237e">' + fmtRp(saldoSistem) + '</div></div>'
       + '<div style="background:#e8f5e9;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.72rem;color:#888">Saldo Aktual</div><div class="fw-bold" style="font-size:1.1rem;color:#2e7d32">' + fmtRp(saldoAktual) + '</div></div>'
       + '<div style="background:#ffebee;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.72rem;color:#888">Selisih</div><div class="fw-bold text-red" style="font-size:1.1rem">' + fmtRp(analisa.selisih) + '</div></div>'
       + '</div>'
       + (findings.length ? '<div class="alert alert-warning">Sistem menemukan <b>' + findings.length + '</b> transaksi/relasi yang perlu dibetulkan dulu. Saldo awal tidak dikoreksi langsung.</div>' : '<div class="alert alert-success">Tidak ada temuan transaksi yang jelas. Koreksi saldo awal boleh dipakai sebagai fallback terakhir.</div>')
-      + (findings.length ? '<div class="table-wrap" style="max-height:320px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Temuan</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '')
+      + (findings.length ? '<div class="table-wrap" style="max-height:44vh;overflow:auto;border:1px solid #edf1f7;border-radius:10px"><table id="bankrec-analysis-table" style="font-size:0.82rem;min-width:980px"><thead style="position:sticky;top:0;background:#fff;z-index:2"><tr><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Temuan</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '')
       + (analisa.pendingJurnal.length ? '<div style="margin-top:12px;background:#fff8e1;border-left:4px solid #ff9800;border-radius:8px;padding:12px"><div style="font-weight:700;color:#e65100;margin-bottom:8px">⏳ Transaksi 7 hari terakhir yang mungkin masih proses bank</div><div class="table-wrap" style="max-height:180px;overflow-y:auto"><table style="font-size:0.8rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>' + pendingRows + '</tbody></table></div></div>' : '')
       + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
       + (findings.length ? '' : '<button class="btn btn-warning" onclick="koreksiSaldoAwalBank(\'' + kode + '\',' + saldoSistem + ',' + saldoAktual + ');closeModalDirect()">🔧 Fallback Koreksi Saldo Awal</button>')
