@@ -503,6 +503,85 @@ function setBankRecGroupState(containerId, shouldOpen) {
   });
 }
 
+function exportBankRecAnalysis() {
+  var data = window._bankRecLatestAnalysis;
+  if (!data || !data.findings || !data.findings.length) {
+    showAlert('Belum ada hasil analisa yang bisa diexport.', 'warning');
+    return;
+  }
+  function esc(val) {
+    var s = String(val == null ? '' : val);
+    return s.replace(/[\r\n\t]/g, ' ').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+  }
+  function fmtNum(n) {
+    return parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif}td,th{border:1px solid #d8dee9;padding:5px 8px;font-size:10pt}th{background:#1a237e;color:#fff;font-weight:bold}.num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"}.section{background:#eef2ff;font-weight:bold;color:#1a237e}.meta{border:none;padding:2px 0}.note{font-size:9pt;color:#555}</style></head><body><table>';
+  html += '<tr><td colspan="7" class="meta"><h3 style="margin:0">Analisa Rekonsiliasi Bank</h3></td></tr>';
+  html += '<tr><td colspan="7" class="meta">Akun: <b>' + esc(data.akunNama || data.kode) + '</b> (' + esc(data.kode) + ')</td></tr>';
+  html += '<tr><td colspan="7" class="meta">Generated: ' + esc(new Date(data.generatedAt).toLocaleString('id-ID')) + '</td></tr>';
+  html += '<tr><th>Saldo Sistem</th><th>Saldo Aktual</th><th>Selisih</th><th>Total Temuan</th><th>Transaksi Pending</th><th colspan="2">Catatan</th></tr>';
+  html += '<tr><td class="num">' + fmtNum(data.saldoSistem) + '</td><td class="num">' + fmtNum(data.saldoAktual) + '</td><td class="num">' + fmtNum(data.selisih) + '</td><td>' + data.findings.length + '</td><td>' + (data.pendingJurnal || []).length + '</td><td colspan="2">Periksa temuan sebelum memakai fallback saldo awal.</td></tr>';
+  html += '<tr><th>Kategori</th><th>Jumlah</th><th>Total Nominal</th><th colspan="4">Ringkasan</th></tr>';
+  Object.keys(data.summary || {}).forEach(function(key) {
+    var info = data.summary[key];
+    if (!info || !info.count) return;
+    html += '<tr><td>' + esc(info.label) + '</td><td>' + info.count + '</td><td class="num">' + fmtNum(info.amount) + '</td><td colspan="4" class="note">' + esc(info.hint) + '</td></tr>';
+  });
+  html += '<tr class="section"><td colspan="7">Daftar Temuan</td></tr>';
+  html += '<tr><th>Kategori</th><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th></tr>';
+  data.findings.forEach(function(f) {
+    html += '<tr><td>' + esc((data.summary[f.filterKind] || {}).label || f.filterKind || '-') + '</td><td>' + esc(f.title) + '</td><td>' + esc(fmtDate(f.tanggal)) + '</td><td>' + esc(f.jurnalId || '-') + '</td><td>' + esc(f.ket || '-') + '</td><td class="num">' + fmtNum(f.nominal) + '</td><td>' + esc(f.detail || '-') + '</td></tr>';
+  });
+  if (data.pendingJurnal && data.pendingJurnal.length) {
+    html += '<tr class="section"><td colspan="7">Transaksi Pending 7 Hari Terakhir</td></tr>';
+    html += '<tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th><th colspan="2">Info</th></tr>';
+    data.pendingJurnal.slice(0, 20).forEach(function(j) {
+      html += '<tr><td>' + esc(fmtDate(j.tanggal)) + '</td><td>' + esc(j.noRef || j.id) + '</td><td>' + esc(j.keterangan || '-') + '</td><td class="num">' + fmtNum(j._bankDebit) + '</td><td class="num">' + fmtNum(j._bankKredit) + '</td><td colspan="2">Perlu cek mutasi bank jika belum tampil.</td></tr>';
+    });
+  }
+  html += '</table></body></html>';
+  var blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'bankrec_analysis_' + data.kode + '_' + today() + '.xls';
+  a.click();
+  URL.revokeObjectURL(url);
+  showAlert('Export analisa rekonsiliasi berhasil!');
+}
+
+function printBankRecAnalysis() {
+  var data = window._bankRecLatestAnalysis;
+  if (!data || !data.findings) {
+    showAlert('Belum ada hasil analisa yang bisa dicetak.', 'warning');
+    return;
+  }
+  var sections = [];
+  Object.keys(data.summary || {}).forEach(function(key) {
+    var info = data.summary[key];
+    if (!info || !info.count) return;
+    var rows = data.findings.filter(function(f) { return f.filterKind === key; }).map(function(f) {
+      return '<tr><td>' + escapeHtml(f.title) + '</td><td>' + escapeHtml(fmtDate(f.tanggal)) + '</td><td>' + escapeHtml(f.jurnalId || '-') + '</td><td>' + escapeHtml(f.ket || '-') + '</td><td style="text-align:right">' + fmtRp(f.nominal) + '</td><td>' + escapeHtml(f.detail || '-') + '</td></tr>';
+    }).join('');
+    sections.push('<div class="sec"><div class="sec-hdr"><div><div class="sec-title">' + escapeHtml(info.label) + '</div><div class="sec-hint">' + escapeHtml(info.hint) + '</div></div><div class="sec-chip">' + info.count + ' item | ' + fmtRp(info.amount) + '</div></div><table><thead><tr><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th></tr></thead><tbody>' + rows + '</tbody></table></div>');
+  });
+  var pendingHtml = '';
+  if (data.pendingJurnal && data.pendingJurnal.length) {
+    pendingHtml = '<div class="sec"><div class="sec-hdr"><div><div class="sec-title">Transaksi Pending 7 Hari Terakhir</div><div class="sec-hint">Mutasi ini mungkin belum final di rekening bank.</div></div><div class="sec-chip">' + data.pendingJurnal.length + ' item</div></div><table><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>' + data.pendingJurnal.slice(0, 20).map(function(j) {
+      return '<tr><td>' + escapeHtml(fmtDate(j.tanggal)) + '</td><td>' + escapeHtml(j.noRef || j.id) + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td style="text-align:right">' + (j._bankDebit ? fmtRp(j._bankDebit) : '-') + '</td><td style="text-align:right">' + (j._bankKredit ? fmtRp(j._bankKredit) : '-') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }
+  var css = 'body{font-family:Arial,sans-serif;background:#f5f7fb;padding:20px;color:#1f2937}.page{max-width:1100px;margin:0 auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 10px 35px rgba(15,23,42,.12)}.hdr{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}.ttl{font-size:1.5rem;font-weight:800;color:#1a237e}.sub{font-size:.86rem;color:#64748b;line-height:1.5}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}.card{padding:14px;border-radius:10px;border:1px solid #dbe4f0;background:#f8fbff}.lbl{font-size:.72rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em}.val{font-size:1.05rem;font-weight:800;margin-top:6px;color:#1a237e}.sec{margin-top:14px;border:1px solid #e5eaf3;border-radius:12px;overflow:hidden}.sec-hdr{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:12px 14px;background:linear-gradient(180deg,#f9fbff 0%,#eef4ff 100%)}.sec-title{font-weight:800;color:#1a237e}.sec-hint{font-size:.8rem;color:#64748b;margin-top:2px}.sec-chip{background:#e8eaf6;color:#1a237e;border-radius:999px;padding:6px 10px;font-size:.76rem;font-weight:700;white-space:nowrap}table{width:100%;border-collapse:collapse}th{background:#1a237e;color:#fff;padding:9px 10px;text-align:left;font-size:.76rem}td{padding:9px 10px;border-bottom:1px solid #eef2f7;font-size:.82rem;vertical-align:top}tr:nth-child(even) td{background:#fbfcfe}.actions{margin-top:18px}@media print{body{background:#fff;padding:0}.page{box-shadow:none;padding:0}button{display:none}}';
+  var w = window.open('', '_blank');
+  if (!w) {
+    showAlert('Popup print diblokir browser.', 'warning');
+    return;
+  }
+  w.document.write('<!DOCTYPE html><html><head><title>Analisa Rekonsiliasi ' + escapeHtml(data.kode) + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div><div class="ttl">Analisa Rekonsiliasi Bank</div><div class="sub">Akun: <b>' + escapeHtml(data.akunNama || data.kode) + '</b> (' + escapeHtml(data.kode) + ')<br>Dibuat: ' + escapeHtml(new Date(data.generatedAt).toLocaleString('id-ID')) + '</div></div><div class="sec-chip">' + data.findings.length + ' temuan</div></div><div class="grid"><div class="card"><div class="lbl">Saldo Sistem</div><div class="val">' + fmtRp(data.saldoSistem) + '</div></div><div class="card"><div class="lbl">Saldo Aktual</div><div class="val">' + fmtRp(data.saldoAktual) + '</div></div><div class="card"><div class="lbl">Selisih</div><div class="val">' + fmtRp(data.selisih) + '</div></div></div>' + sections.join('') + pendingHtml + '<div class="actions"><button onclick="window.print()" style="padding:10px 18px;border:none;border-radius:8px;background:#1a237e;color:#fff;cursor:pointer">Print</button></div></div></body></html>');
+  w.document.close();
+}
+
 function statusBadge(status) {
   const map = {
     'Draft':           'badge-neutral',
@@ -7103,6 +7182,12 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
     setTimeout(function() { setModalLayout(window.innerWidth <= 768 ? 'full' : 'wide'); }, 0);
     var summaryMap = { duplicate: 0, orphan: 0, stale: 0, wrong: 0, mixed: 0 };
     var groupedRows = { critical: [], sync: [], wrong: [], mixed: [] };
+    var summaryCards = {
+      critical: { label: 'Temuan Kritis', hint: 'Double entry atau jurnal yatim yang paling berpengaruh ke saldo.', count: 0, amount: 0 },
+      sync: { label: 'Perlu Sinkronisasi', hint: 'Data master dan jurnal perlu disejajarkan ulang.', count: 0, amount: 0 },
+      wrong: { label: 'Salah Akun Bank', hint: 'Jurnal menunjuk akun bank yang tidak sesuai dengan sumber data.', count: 0, amount: 0 },
+      mixed: { label: 'Perlu Review Manual', hint: 'Kasus campuran yang lebih aman dicek manual sebelum dieksekusi.', count: 0, amount: 0 }
+    };
     findings.forEach(function(f) {
       if (f.kind === 'duplicate') summaryMap.duplicate++;
       else if (f.kind === 'orphan') summaryMap.orphan++;
@@ -7113,6 +7198,10 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
       var badgeCls = f.severity === 'danger' ? 'badge-danger' : 'badge-warning';
       var actionLabel = (f.kind === 'duplicate' || f.kind === 'orphan') ? 'Hapus' : (f.kind === 'mixed-bank' ? 'Edit Jurnal' : 'Eksekusi');
       var filterKind = (f.kind === 'duplicate' || f.kind === 'orphan') ? 'critical' : (f.kind === 'wrong-bank' ? 'wrong' : (f.kind === 'mixed-bank' ? 'mixed' : 'sync'));
+      var editBtn = f.jurnalId ? ' <button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + f.jurnalId + '\');closeModalDirect()">Edit</button>' : '';
+      f.filterKind = filterKind;
+      summaryCards[filterKind].count += 1;
+      summaryCards[filterKind].amount += parseFloat(f.nominal) || 0;
       groupedRows[filterKind].push('<tr data-kind="' + filterKind + '">' 
         + '<td><span class="badge ' + badgeCls + '">' + f.title + '</span></td>'
         + '<td>' + fmtDate(f.tanggal) + '</td>'
@@ -7120,12 +7209,14 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
         + '<td class="bankrec-cell-wrap">' + (f.ket || '-') + '</td>'
         + '<td class="text-right">' + fmtRp(f.nominal) + '</td>'
         + '<td class="bankrec-table-cell-note">' + f.detail + '</td>'
-        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> <button class="btn btn-xs btn-warning" onclick="eksekusiTemuanBankRec(\'' + f.kind + '\',\'' + f.jurnalId + '\',\'' + (f.masterId || '') + '\',\'' + kode + '\',' + saldoSistem + ',' + saldoAktual + ')">' + actionLabel + '</button></td>'
+        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button>' + editBtn + ' <button class="btn btn-xs btn-warning" onclick="eksekusiTemuanBankRec(\'' + f.kind + '\',\'' + f.jurnalId + '\',\'' + (f.masterId || '') + '\',\'' + kode + '\',' + saldoSistem + ',' + saldoAktual + ')">' + actionLabel + '</button></td>'
         + '</tr>');
     });
     var pendingRows = analisa.pendingJurnal.slice(0,8).map(function(j) {
       var d=0,k=0;
       (j.lines||[]).forEach(function(l){ if(l.akun===kode){ d += parseFloat(l.debit)||0; k += parseFloat(l.kredit)||0; } });
+      j._bankDebit = d;
+      j._bankKredit = k;
       return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (j.keterangan||'-') + '</td><td class="text-green">' + (d ? fmtRp(d) : '-') + '</td><td class="text-red">' + (k ? fmtRp(k) : '-') + '</td></tr>';
     }).join('');
     function renderGroup(key, title, hint, openByDefault) {
@@ -7140,6 +7231,22 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
       + renderGroup('sync', 'Perlu Sinkronisasi', 'Data master dan jurnal perlu disejajarkan ulang.', true)
       + renderGroup('wrong', 'Salah Akun Bank', 'Jurnal menunjuk akun bank yang tidak sesuai dengan sumber data.', false)
       + renderGroup('mixed', 'Perlu Review Manual', 'Kasus campuran yang lebih aman dicek manual sebelum dieksekusi.', false);
+    window._bankRecLatestAnalysis = {
+      kode: kode,
+      akunNama: ((analisa.akun || {}).nama || kode),
+      saldoSistem: saldoSistem,
+      saldoAktual: saldoAktual,
+      selisih: analisa.selisih,
+      findings: findings.map(function(f) { return Object.assign({}, f); }),
+      summary: summaryCards,
+      pendingJurnal: analisa.pendingJurnal.slice(0, 20).map(function(j) { return Object.assign({}, j); }),
+      generatedAt: new Date().toISOString()
+    };
+    var categorySummaryHtml = Object.keys(summaryCards).map(function(key) {
+      var item = summaryCards[key];
+      if (!item.count) return '';
+      return '<div class="bankrec-mini-card"><div class="bankrec-mini-label">' + item.label + '</div><div class="bankrec-mini-value">' + item.count + ' item</div><div class="bankrec-mini-note">' + fmtRp(item.amount) + '</div></div>';
+    }).join('');
     var html = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
       + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
       + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'\')">Compact</button>'
@@ -7147,6 +7254,8 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
       + '<button class="btn btn-sm btn-outline" onclick="setModalLayout(\'full\')">Full</button>'
       + '<button class="btn btn-sm btn-outline" onclick="setBankRecGroupState(\'bankrec-analysis-root\', true)">Buka Semua</button>'
       + '<button class="btn btn-sm btn-outline" onclick="setBankRecGroupState(\'bankrec-analysis-root\', false)">Tutup Semua</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="exportBankRecAnalysis()">Export</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="printBankRecAnalysis()">Print</button>'
       + '</div>'
       + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
       + '<input id="bankrec-analysis-search" placeholder="Cari jurnal/keterangan/ref..." style="padding:7px 10px;border:1px solid #d0d7e2;border-radius:8px;min-width:220px" oninput="filterBankRecAnalysisRows(\'bankrec-analysis-root\', this.value, (document.getElementById(\'bankrec-analysis-filter\')||{}).value || \"all\")">'
@@ -7164,6 +7273,7 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
       + '<div class="bankrec-summary-card bankrec-summary-green"><div class="bankrec-summary-label">Saldo Aktual</div><div class="bankrec-summary-value">' + fmtRp(saldoAktual) + '</div></div>'
       + '<div class="bankrec-summary-card bankrec-summary-red"><div class="bankrec-summary-label">Selisih</div><div class="bankrec-summary-value text-red">' + fmtRp(analisa.selisih) + '</div></div>'
       + '</div>'
+      + (categorySummaryHtml ? '<div class="bankrec-mini-grid">' + categorySummaryHtml + '</div>' : '')
       + '<div id="bankrec-analysis-root" class="bankrec-analysis-shell">'
       + (findings.length ? '<div class="alert alert-warning">Sistem menemukan <b>' + findings.length + '</b> transaksi/relasi yang perlu dibetulkan dulu. Saldo awal tidak dikoreksi langsung.</div>' : '<div class="alert alert-success">Tidak ada temuan transaksi yang jelas. Koreksi saldo awal boleh dipakai sebagai fallback terakhir.</div>')
       + (findings.length ? groupedHtml : '')
@@ -7258,14 +7368,23 @@ async function viewBankRecDetail(kode, saldoSistem) {
     return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id).substring(0,20) + '</td><td>' + (j.keterangan||'-').substring(0,40) + '</td><td class="text-green">' + (d?fmtRp(d):'-') + '</td><td class="text-red">' + (k?fmtRp(k):'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + j.id + '\');closeModalDirect()">Detail</button></td></tr>';
   }).join('');
 
-  var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'
-    + '<div style="background:#e3f2fd;border-radius:8px;padding:14px;text-align:center"><div style="font-size:0.75rem;color:#888">Saldo Sistem</div><div class="fw-bold" style="font-size:1.2rem;color:#1a237e">' + fmtRp(saldoSistem) + '</div></div>'
-    + '<div style="background:#e8f5e9;border-radius:8px;padding:14px;text-align:center"><div style="font-size:0.75rem;color:#888">Saldo Aktual Rekening</div><div class="fw-bold" style="font-size:1.2rem;color:#2e7d32">' + (savedActual ? fmtRp(savedActual) : '<span style="color:#999">Belum diisi</span>') + '</div></div>'
+  var pendingNet = pendingDebit - pendingKredit;
+  var summaryDetail = '<div class="bankrec-summary-grid">'
+    + '<div class="bankrec-summary-card bankrec-summary-blue"><div class="bankrec-summary-label">Saldo Sistem</div><div class="bankrec-summary-value">' + fmtRp(saldoSistem) + '</div></div>'
+    + '<div class="bankrec-summary-card bankrec-summary-green"><div class="bankrec-summary-label">Saldo Aktual Rekening</div><div class="bankrec-summary-value">' + (savedActual ? fmtRp(savedActual) : '<span style="color:#999">Belum diisi</span>') + '</div></div>'
+    + '<div class="bankrec-summary-card bankrec-summary-red"><div class="bankrec-summary-label">Selisih</div><div class="bankrec-summary-value ' + (Math.abs(selisih)<1?'text-green':'text-red') + '">' + (savedActual ? fmtRp(selisih) : '-') + '</div></div>'
     + '</div>'
-    + (savedActual ? '<div style="text-align:center;padding:10px;background:' + (Math.abs(selisih)<1?'#e8f5e9':'#ffebee') + ';border-radius:8px;margin-bottom:14px"><b>Selisih: </b><span class="fw-bold ' + (Math.abs(selisih)<1?'text-green':'text-red') + '" style="font-size:1.1rem">' + fmtRp(selisih) + '</span></div>' : '')
+    + '<div class="bankrec-mini-grid">'
+    + '<div class="bankrec-mini-card"><div class="bankrec-mini-label">Saldo Awal</div><div class="bankrec-mini-value">' + fmtRp(saldoAwal) + '</div><div class="bankrec-mini-note">Setup tahun berjalan</div></div>'
+    + '<div class="bankrec-mini-card"><div class="bankrec-mini-label">Total Masuk</div><div class="bankrec-mini-value">' + fmtRp(totalDebit) + '</div><div class="bankrec-mini-note">Akumulasi debit bank</div></div>'
+    + '<div class="bankrec-mini-card"><div class="bankrec-mini-label">Total Keluar</div><div class="bankrec-mini-value">' + fmtRp(totalKredit) + '</div><div class="bankrec-mini-note">Akumulasi kredit bank</div></div>'
+    + '<div class="bankrec-mini-card"><div class="bankrec-mini-label">Pending 7 Hari</div><div class="bankrec-mini-value">' + fmtRp(pendingNet) + '</div><div class="bankrec-mini-note">Net dari ' + pendingJurnal.length + ' transaksi</div></div>'
+    + '</div>';
+
+  var html = summaryDetail
     + breakdownHtml
-    + '<div style="font-weight:600;margin-bottom:6px">20 Jurnal Terakhir:</div>'
-    + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th><th>Aksi</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 6px"><div style="font-weight:600">20 Jurnal Terakhir:</div><input placeholder="Cari ref/keterangan..." style="padding:7px 10px;border:1px solid #d0d7e2;border-radius:8px;min-width:220px" oninput="filterTable(\'bankrec-detail-table\', this.value)"></div>'
+    + '<div class="table-wrap" style="max-height:250px;overflow-y:auto"><table id="bankrec-detail-table" style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th><th>Aksi</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
     + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
     + (savedActual && Math.abs(selisih)>=1 ? '<button class="btn btn-warning" onclick="analisaKoreksiBank(\'' + kode + '\',' + saldoSistem + ',' + savedActual + ');closeModalDirect()">🔎 Analisa Dulu</button>' : '')
     + '<button class="btn btn-info" onclick="navigate(\'monitor-buku-besar\');closeModalDirect()">📚 Buku Besar</button>'
