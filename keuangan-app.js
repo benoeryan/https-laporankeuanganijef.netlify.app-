@@ -3000,303 +3000,304 @@ async function hapusJurnalTerpilih() {
   }
   await KDB.getAll('jurnal');
   showLoading(false);
-
-    function toggleAuditTransaksiLama(checked) {
-      document.querySelectorAll('.audit-old-chk').forEach(function(cb) { cb.checked = checked; });
-      updateAuditTransaksiLamaSelection();
-    }
-
-    function updateAuditTransaksiLamaSelection() {
-      var checked = document.querySelectorAll('.audit-old-chk:checked');
-      var countEl = document.getElementById('audit-old-count');
-      if (countEl) countEl.textContent = checked.length ? checked.length + ' dipilih' : '';
-    }
-
-    async function batchSyncAuditTransaksiLama() {
-      var checked = Array.from(document.querySelectorAll('.audit-old-chk:checked'));
-      if (!checked.length) { showAlert('Pilih minimal 1 item audit.', 'warning'); return; }
-      showLoading(true);
-      var pdList = await KDB.getAll('permohonan');
-      var dmList = await KDB.getAll('danamasuk');
-      var synced = 0;
-      var skipped = 0;
-      for (var i = 0; i < checked.length; i++) {
-        var parts = checked[i].value.split('::');
-        var kind = parts[0];
-        var jurnalId = parts[1];
-        var masterId = parts[2] || '';
-        try {
-          if (kind === 'stale-permohonan') {
-            var p = pdList.find(function(x) { return x.id === masterId; });
-            if (p) { await syncPermohonanLinkedJurnal(p); synced++; }
-            else skipped++;
-          } else if (kind === 'stale-danamasuk') {
-            var d = dmList.find(function(x) { return x.id === masterId; });
-            if (d) { await syncDanaMasukLinkedJurnal(d); synced++; }
-            else skipped++;
-          } else if (kind === 'wrong-bank') {
-            var result = await autoSyncBankAccountForJurnal(jurnalId);
-            if (result.ok) synced++;
-            else skipped++;
-          } else {
-            skipped++;
-          }
-        } catch (err) {
-          skipped++;
-        }
-      }
-      showLoading(false);
-      showAlert('Audit sync selesai. ' + synced + ' item diperbaiki' + (skipped ? ', ' + skipped + ' dilewati' : '') + '.');
-      closeModalDirect();
-      setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
-    }
-
-    async function batchHapusAuditTransaksiLama() {
-      var checked = Array.from(document.querySelectorAll('.audit-old-chk:checked'));
-      if (!checked.length) { showAlert('Pilih minimal 1 item audit.', 'warning'); return; }
-      if (!confirm('Hapus item audit yang dipilih ke Tempat Sampah?\n\nGunakan ini hanya untuk duplikat dan jurnal yatim yang sudah Anda review.')) return;
-      showLoading(true);
-      var jurnal = await KDB.getAll('jurnal');
-      var count = 0;
-      for (var i = 0; i < checked.length; i++) {
-        var parts = checked[i].value.split('::');
-        var kind = parts[0];
-        if (kind !== 'duplicate' && kind !== 'orphan') continue;
-        var id = parts[1];
-        var j = jurnal.find(function(x) { return x.id === id; });
-        if (!j) continue;
-        await KDB.save('jurnal_trash', id, Object.assign({}, j, { deletedAt: new Date().toISOString(), deletedBy: KU.username }));
-        await KDB.delete('jurnal', id);
-        count++;
-      }
-      showLoading(false);
-      showAlert(count + ' jurnal audit dipindah ke Tempat Sampah.');
-      closeModalDirect();
-      setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
-    }
-
-    async function jalankanAuditTransaksiLama() {
-      showLoading(true);
-      try {
-        var jurnal = await KDB.getAll('jurnal');
-        var pdList = await KDB.getAll('permohonan');
-        var dmList = await KDB.getAll('danamasuk');
-        var akunList = await getAkun();
-        var pdMap = {};
-        var dmMap = {};
-        pdList.forEach(function(p) { pdMap[p.id] = p; });
-        dmList.forEach(function(d) { dmMap[d.id] = d; });
-
-        var findings = [];
-        var duplicateMap = {};
-        jurnal.forEach(function(j) {
-          var key = getJurnalDuplicateKey(j);
-          if (!key) return;
-          if (!duplicateMap[key]) duplicateMap[key] = j;
-          else findings.push({
-            kind: 'duplicate',
-            jurnalId: j.id,
-            masterId: duplicateMap[key].id,
-            title: 'Duplikat jurnal',
-            severity: 'danger',
-            tanggal: j.tanggal,
-            ket: j.keterangan,
-            nominal: parseFloat(j.totalDebit) || 0,
-            detail: 'Mirip dengan jurnal ' + duplicateMap[key].id
-          });
-        });
-
-        jurnal.forEach(function(j) {
-          if (j.sumber === 'permohonan-dana' && j.meta && j.meta.permohonanId && !pdMap[j.meta.permohonanId]) {
-            findings.push({
-              kind: 'orphan',
-              jurnalId: j.id,
-              masterId: j.meta.permohonanId,
-              title: 'Jurnal yatim permohonan',
-              severity: 'danger',
-              tanggal: j.tanggal,
-              ket: j.keterangan,
-              nominal: parseFloat(j.totalDebit) || 0,
-              detail: 'Permohonan ' + j.meta.permohonanId + ' sudah tidak ada'
-            });
-          }
-          if (j.sumber === 'dana-masuk' && j.meta && j.meta.danaMasukId && !dmMap[j.meta.danaMasukId]) {
-            findings.push({
-              kind: 'orphan',
-              jurnalId: j.id,
-              masterId: j.meta.danaMasukId,
-              title: 'Jurnal yatim dana masuk',
-              severity: 'danger',
-              tanggal: j.tanggal,
-              ket: j.keterangan,
-              nominal: parseFloat(j.totalDebit) || 0,
-              detail: 'Dana masuk ' + j.meta.danaMasukId + ' sudah tidak ada'
-            });
-          }
-        });
-
-        pdList.forEach(function(p) {
-          if (!p.jurnalId) return;
-          var j = jurnal.find(function(x) { return x.id === p.jurnalId; });
-          if (!j) return;
-          var expectedDate = p.jatuhTempo || p.tanggal || '';
-          var expectedRef = p.noPOInvoice || p.id || '';
-          var expectedAmount = parseFloat(p.nominal) || 0;
-          var expectedDebit = p.akunDebit || '5-2200';
-          var expectedKredit = p.akunKredit || '1-1100';
-          var lineAkun = (j.lines || []).map(function(l) { return l.akun; });
-          var mismatch = j.tanggal !== expectedDate
-            || (j.noRef || '') !== expectedRef
-            || Math.abs((parseFloat(j.totalDebit) || 0) - expectedAmount) > 0.01
-            || lineAkun.indexOf(expectedDebit) === -1
-            || lineAkun.indexOf(expectedKredit) === -1;
-          if (mismatch) {
-            findings.push({
-              kind: 'stale-permohonan',
-              jurnalId: j.id,
-              masterId: p.id,
-              title: 'Link permohonan tidak sinkron',
-              severity: 'warning',
-              tanggal: j.tanggal,
-              ket: j.keterangan,
-              nominal: parseFloat(j.totalDebit) || 0,
-              detail: 'Perlu sinkron ulang dengan Permohonan ' + p.id
-            });
-          }
-        });
-
-        dmList.forEach(function(d) {
-          if (!d.jurnalId) return;
-          var j = jurnal.find(function(x) { return x.id === d.jurnalId; });
-          if (!j) return;
-          var expectedDate = d.tanggal || '';
-          var expectedRef = d.noRef || d.id || '';
-          var expectedAmount = parseFloat(d.nominal) || 0;
-          var expectedDebit = d.akunTerima || '1-1100';
-          var expectedKredit = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-')) ? d.kategori : '4-2000';
-          var lineAkun = (j.lines || []).map(function(l) { return l.akun; });
-          var mismatch = j.tanggal !== expectedDate
-            || (j.noRef || '') !== expectedRef
-            || Math.abs((parseFloat(j.totalDebit) || 0) - expectedAmount) > 0.01
-            || lineAkun.indexOf(expectedDebit) === -1
-            || lineAkun.indexOf(expectedKredit) === -1;
-          if (mismatch) {
-            findings.push({
-              kind: 'stale-danamasuk',
-              jurnalId: j.id,
-              masterId: d.id,
-              title: 'Link dana masuk tidak sinkron',
-              severity: 'warning',
-              tanggal: j.tanggal,
-              ket: j.keterangan,
-              nominal: parseFloat(j.totalDebit) || 0,
-              detail: 'Perlu sinkron ulang dengan Dana Masuk ' + d.id
-            });
-          }
-        });
-
-        jurnal.forEach(function(j) {
-          var meta = j.meta || {};
-          var targetAkun = findPreferredBankAccountCode(akunList, meta.namaBank, '1-1101-2');
-          if (!targetAkun || targetAkun === '1-1101-2') return;
-          var touchesMandiri = (j.lines || []).some(function(l) { return l.akun === '1-1101-2'; });
-          if (!touchesMandiri) return;
-          findings.push({
-            kind: 'wrong-bank',
-            jurnalId: j.id,
-            masterId: targetAkun,
-            title: 'Salah akun bank',
-            severity: 'warning',
-            tanggal: j.tanggal,
-            ket: j.keterangan,
-            nominal: parseFloat(j.totalDebit) || 0,
-            detail: 'Metadata bank mengarah ke akun ' + targetAkun
-          });
-        });
-
-        showLoading(false);
-
-        var summary = { duplicate: 0, orphan: 0, stale: 0, wrongBank: 0 };
-        findings.forEach(function(f) {
-          if (f.kind === 'duplicate') summary.duplicate++;
-          else if (f.kind === 'orphan') summary.orphan++;
-          else if (f.kind === 'wrong-bank') summary.wrongBank++;
-          else summary.stale++;
-        });
-
-        var cards = ''
-          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">'
-          + '<div style="background:#ffebee;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Duplikat</div><div class="fw-bold text-red" style="font-size:1.3rem">' + summary.duplicate + '</div></div>'
-          + '<div style="background:#fce4ec;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Orphan</div><div class="fw-bold text-red" style="font-size:1.3rem">' + summary.orphan + '</div></div>'
-          + '<div style="background:#fff8e1;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Link Tidak Sinkron</div><div class="fw-bold" style="font-size:1.3rem;color:#e65100">' + summary.stale + '</div></div>'
-          + '<div style="background:#e3f2fd;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Salah Akun Bank</div><div class="fw-bold text-blue" style="font-size:1.3rem">' + summary.wrongBank + '</div></div>'
-          + '</div>';
-
-        var rows = findings.map(function(f) {
-          var badgeCls = f.severity === 'danger' ? 'badge-danger' : 'badge-warning';
-          var actionBtn = '';
-          if (f.kind === 'duplicate' || f.kind === 'orphan') {
-            actionBtn = '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + f.jurnalId + '\')">Hapus</button>';
-          } else if (f.kind === 'wrong-bank') {
-            actionBtn = '<button class="btn btn-xs btn-primary" onclick="sinkronSelisihJurnal(\'' + f.jurnalId + '\')">Sinkron</button>';
-          } else {
-            actionBtn = '<button class="btn btn-xs btn-success" onclick="batchSyncAuditTransaksiLamaSingle(\'' + f.kind + '\',\'' + f.jurnalId + '\',\'' + f.masterId + '\')">Sync Link</button>';
-          }
-          return '<tr>'
-            + '<td><input type="checkbox" class="audit-old-chk" value="' + f.kind + '::' + f.jurnalId + '::' + (f.masterId || '') + '" onchange="updateAuditTransaksiLamaSelection()"></td>'
-            + '<td><span class="badge ' + badgeCls + '">' + f.title + '</span></td>'
-            + '<td>' + fmtDate(f.tanggal) + '</td>'
-            + '<td>' + (f.jurnalId || '-') + '</td>'
-            + '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (f.ket || '-') + '</td>'
-            + '<td class="text-right">' + fmtRp(f.nominal) + '</td>'
-            + '<td style="font-size:0.75rem;color:#666;max-width:220px">' + f.detail + '</td>'
-            + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> ' + actionBtn + '</td>'
-            + '</tr>';
-        }).join('');
-
-        var empty = '<div class="alert alert-success">Audit transaksi lama bersih. Tidak ditemukan jurnal ganda, yatim, salah akun bank, atau link transaksi yang tertinggal.</div>';
-        var html = '<div class="alert alert-info">Audit ini fokus membersihkan transaksi lama agar saldo sistem lebih stabil ke depan. Review item berisiko tinggi dulu: duplikat dan orphan.</div>'
-          + cards
-          + (findings.length ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
-            + '<label style="font-size:0.82rem"><input type="checkbox" onchange="toggleAuditTransaksiLama(this.checked)"> Pilih Semua</label>'
-            + '<button class="btn btn-sm btn-success" onclick="batchSyncAuditTransaksiLama()">🔄 Sync Terpilih</button>'
-            + '<button class="btn btn-sm btn-danger" onclick="batchHapusAuditTransaksiLama()">🗑️ Hapus Terpilih</button>'
-            + '<span id="audit-old-count" style="font-size:0.82rem;color:#666"></span>'
-            + '</div>'
-            + '<div class="table-wrap" style="max-height:420px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th style="width:28px"></th><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : empty)
-          + '<div style="margin-top:12px;font-size:0.78rem;color:#666">Gunakan sync untuk link transaksi yang tertinggal, dan hapus hanya setelah duplikat/orphan benar-benar terverifikasi.</div>';
-        openModal(html, '🧹 Audit Transaksi Lama');
-      } catch (err) {
-        showLoading(false);
-        showAlert('Audit transaksi lama gagal: ' + (err.message || err), 'danger');
-      }
-    }
-
-    async function batchSyncAuditTransaksiLamaSingle(kind, jurnalId, masterId) {
-      showLoading(true);
-      try {
-        if (kind === 'stale-permohonan') {
-          var pdList = await KDB.getAll('permohonan');
-          var p = pdList.find(function(x) { return x.id === masterId; });
-          if (p) await syncPermohonanLinkedJurnal(p);
-        } else if (kind === 'stale-danamasuk') {
-          var dmList = await KDB.getAll('danamasuk');
-          var d = dmList.find(function(x) { return x.id === masterId; });
-          if (d) await syncDanaMasukLinkedJurnal(d);
-        } else if (kind === 'wrong-bank') {
-          await autoSyncBankAccountForJurnal(jurnalId, masterId);
-        }
-        showLoading(false);
-        showAlert('Item audit berhasil disinkronkan.');
-        closeModalDirect();
-        setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
-      } catch (err) {
-        showLoading(false);
-        showAlert('Sinkron audit gagal: ' + (err.message || err), 'danger');
-      }
-    }
+  showAlert(ids.length + ' jurnal dipindahkan ke Tempat Sampah!', 'warning');
   navigate('jurnal-umum');
   setTimeout(reapplyJurnalFilter, 500);
+}
+
+function toggleAuditTransaksiLama(checked) {
+  document.querySelectorAll('.audit-old-chk').forEach(function(cb) { cb.checked = checked; });
+  updateAuditTransaksiLamaSelection();
+}
+
+function updateAuditTransaksiLamaSelection() {
+  var checked = document.querySelectorAll('.audit-old-chk:checked');
+  var countEl = document.getElementById('audit-old-count');
+  if (countEl) countEl.textContent = checked.length ? checked.length + ' dipilih' : '';
+}
+
+async function batchSyncAuditTransaksiLama() {
+  var checked = Array.from(document.querySelectorAll('.audit-old-chk:checked'));
+  if (!checked.length) { showAlert('Pilih minimal 1 item audit.', 'warning'); return; }
+  showLoading(true);
+  var pdList = await KDB.getAll('permohonan');
+  var dmList = await KDB.getAll('danamasuk');
+  var synced = 0;
+  var skipped = 0;
+  for (var i = 0; i < checked.length; i++) {
+    var parts = checked[i].value.split('::');
+    var kind = parts[0];
+    var jurnalId = parts[1];
+    var masterId = parts[2] || '';
+    try {
+      if (kind === 'stale-permohonan') {
+        var p = pdList.find(function(x) { return x.id === masterId; });
+        if (p) { await syncPermohonanLinkedJurnal(p); synced++; }
+        else skipped++;
+      } else if (kind === 'stale-danamasuk') {
+        var d = dmList.find(function(x) { return x.id === masterId; });
+        if (d) { await syncDanaMasukLinkedJurnal(d); synced++; }
+        else skipped++;
+      } else if (kind === 'wrong-bank') {
+        var result = await autoSyncBankAccountForJurnal(jurnalId);
+        if (result.ok) synced++;
+        else skipped++;
+      } else {
+        skipped++;
+      }
+    } catch (err) {
+      skipped++;
+    }
+  }
+  showLoading(false);
+  showAlert('Audit sync selesai. ' + synced + ' item diperbaiki' + (skipped ? ', ' + skipped + ' dilewati' : '') + '.');
+  closeModalDirect();
+  setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
+}
+
+async function batchHapusAuditTransaksiLama() {
+  var checked = Array.from(document.querySelectorAll('.audit-old-chk:checked'));
+  if (!checked.length) { showAlert('Pilih minimal 1 item audit.', 'warning'); return; }
+  if (!confirm('Hapus item audit yang dipilih ke Tempat Sampah?\n\nGunakan ini hanya untuk duplikat dan jurnal yatim yang sudah Anda review.')) return;
+  showLoading(true);
+  var jurnal = await KDB.getAll('jurnal');
+  var count = 0;
+  for (var i = 0; i < checked.length; i++) {
+    var parts = checked[i].value.split('::');
+    var kind = parts[0];
+    if (kind !== 'duplicate' && kind !== 'orphan') continue;
+    var id = parts[1];
+    var j = jurnal.find(function(x) { return x.id === id; });
+    if (!j) continue;
+    await KDB.save('jurnal_trash', id, Object.assign({}, j, { deletedAt: new Date().toISOString(), deletedBy: KU.username }));
+    await KDB.delete('jurnal', id);
+    count++;
+  }
+  showLoading(false);
+  showAlert(count + ' jurnal audit dipindah ke Tempat Sampah.');
+  closeModalDirect();
+  setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
+}
+
+async function jalankanAuditTransaksiLama() {
+  showLoading(true);
+  try {
+    var jurnal = await KDB.getAll('jurnal');
+    var pdList = await KDB.getAll('permohonan');
+    var dmList = await KDB.getAll('danamasuk');
+    var akunList = await getAkun();
+    var pdMap = {};
+    var dmMap = {};
+    pdList.forEach(function(p) { pdMap[p.id] = p; });
+    dmList.forEach(function(d) { dmMap[d.id] = d; });
+
+    var findings = [];
+    var duplicateMap = {};
+    jurnal.forEach(function(j) {
+      var key = getJurnalDuplicateKey(j);
+      if (!key) return;
+      if (!duplicateMap[key]) duplicateMap[key] = j;
+      else findings.push({
+        kind: 'duplicate',
+        jurnalId: j.id,
+        masterId: duplicateMap[key].id,
+        title: 'Duplikat jurnal',
+        severity: 'danger',
+        tanggal: j.tanggal,
+        ket: j.keterangan,
+        nominal: parseFloat(j.totalDebit) || 0,
+        detail: 'Mirip dengan jurnal ' + duplicateMap[key].id
+      });
+    });
+
+    jurnal.forEach(function(j) {
+      if (j.sumber === 'permohonan-dana' && j.meta && j.meta.permohonanId && !pdMap[j.meta.permohonanId]) {
+        findings.push({
+          kind: 'orphan',
+          jurnalId: j.id,
+          masterId: j.meta.permohonanId,
+          title: 'Jurnal yatim permohonan',
+          severity: 'danger',
+          tanggal: j.tanggal,
+          ket: j.keterangan,
+          nominal: parseFloat(j.totalDebit) || 0,
+          detail: 'Permohonan ' + j.meta.permohonanId + ' sudah tidak ada'
+        });
+      }
+      if (j.sumber === 'dana-masuk' && j.meta && j.meta.danaMasukId && !dmMap[j.meta.danaMasukId]) {
+        findings.push({
+          kind: 'orphan',
+          jurnalId: j.id,
+          masterId: j.meta.danaMasukId,
+          title: 'Jurnal yatim dana masuk',
+          severity: 'danger',
+          tanggal: j.tanggal,
+          ket: j.keterangan,
+          nominal: parseFloat(j.totalDebit) || 0,
+          detail: 'Dana masuk ' + j.meta.danaMasukId + ' sudah tidak ada'
+        });
+      }
+    });
+
+    pdList.forEach(function(p) {
+      if (!p.jurnalId) return;
+      var j = jurnal.find(function(x) { return x.id === p.jurnalId; });
+      if (!j) return;
+      var expectedDate = p.jatuhTempo || p.tanggal || '';
+      var expectedRef = p.noPOInvoice || p.id || '';
+      var expectedAmount = parseFloat(p.nominal) || 0;
+      var expectedDebit = p.akunDebit || '5-2200';
+      var expectedKredit = p.akunKredit || '1-1100';
+      var lineAkun = (j.lines || []).map(function(l) { return l.akun; });
+      var mismatch = j.tanggal !== expectedDate
+        || (j.noRef || '') !== expectedRef
+        || Math.abs((parseFloat(j.totalDebit) || 0) - expectedAmount) > 0.01
+        || lineAkun.indexOf(expectedDebit) === -1
+        || lineAkun.indexOf(expectedKredit) === -1;
+      if (mismatch) {
+        findings.push({
+          kind: 'stale-permohonan',
+          jurnalId: j.id,
+          masterId: p.id,
+          title: 'Link permohonan tidak sinkron',
+          severity: 'warning',
+          tanggal: j.tanggal,
+          ket: j.keterangan,
+          nominal: parseFloat(j.totalDebit) || 0,
+          detail: 'Perlu sinkron ulang dengan Permohonan ' + p.id
+        });
+      }
+    });
+
+    dmList.forEach(function(d) {
+      if (!d.jurnalId) return;
+      var j = jurnal.find(function(x) { return x.id === d.jurnalId; });
+      if (!j) return;
+      var expectedDate = d.tanggal || '';
+      var expectedRef = d.noRef || d.id || '';
+      var expectedAmount = parseFloat(d.nominal) || 0;
+      var expectedDebit = d.akunTerima || '1-1100';
+      var expectedKredit = d.kategori && (d.kategori.startsWith('4-') || d.kategori.startsWith('3-') || d.kategori.startsWith('1-')) ? d.kategori : '4-2000';
+      var lineAkun = (j.lines || []).map(function(l) { return l.akun; });
+      var mismatch = j.tanggal !== expectedDate
+        || (j.noRef || '') !== expectedRef
+        || Math.abs((parseFloat(j.totalDebit) || 0) - expectedAmount) > 0.01
+        || lineAkun.indexOf(expectedDebit) === -1
+        || lineAkun.indexOf(expectedKredit) === -1;
+      if (mismatch) {
+        findings.push({
+          kind: 'stale-danamasuk',
+          jurnalId: j.id,
+          masterId: d.id,
+          title: 'Link dana masuk tidak sinkron',
+          severity: 'warning',
+          tanggal: j.tanggal,
+          ket: j.keterangan,
+          nominal: parseFloat(j.totalDebit) || 0,
+          detail: 'Perlu sinkron ulang dengan Dana Masuk ' + d.id
+        });
+      }
+    });
+
+    jurnal.forEach(function(j) {
+      var meta = j.meta || {};
+      var targetAkun = findPreferredBankAccountCode(akunList, meta.namaBank, '1-1101-2');
+      if (!targetAkun || targetAkun === '1-1101-2') return;
+      var touchesMandiri = (j.lines || []).some(function(l) { return l.akun === '1-1101-2'; });
+      if (!touchesMandiri) return;
+      findings.push({
+        kind: 'wrong-bank',
+        jurnalId: j.id,
+        masterId: targetAkun,
+        title: 'Salah akun bank',
+        severity: 'warning',
+        tanggal: j.tanggal,
+        ket: j.keterangan,
+        nominal: parseFloat(j.totalDebit) || 0,
+        detail: 'Metadata bank mengarah ke akun ' + targetAkun
+      });
+    });
+
+    showLoading(false);
+
+    var summary = { duplicate: 0, orphan: 0, stale: 0, wrongBank: 0 };
+    findings.forEach(function(f) {
+      if (f.kind === 'duplicate') summary.duplicate++;
+      else if (f.kind === 'orphan') summary.orphan++;
+      else if (f.kind === 'wrong-bank') summary.wrongBank++;
+      else summary.stale++;
+    });
+
+    var cards = ''
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">'
+      + '<div style="background:#ffebee;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Duplikat</div><div class="fw-bold text-red" style="font-size:1.3rem">' + summary.duplicate + '</div></div>'
+      + '<div style="background:#fce4ec;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Orphan</div><div class="fw-bold text-red" style="font-size:1.3rem">' + summary.orphan + '</div></div>'
+      + '<div style="background:#fff8e1;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Link Tidak Sinkron</div><div class="fw-bold" style="font-size:1.3rem;color:#e65100">' + summary.stale + '</div></div>'
+      + '<div style="background:#e3f2fd;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Salah Akun Bank</div><div class="fw-bold text-blue" style="font-size:1.3rem">' + summary.wrongBank + '</div></div>'
+      + '</div>';
+
+    var rows = findings.map(function(f) {
+      var badgeCls = f.severity === 'danger' ? 'badge-danger' : 'badge-warning';
+      var actionBtn = '';
+      if (f.kind === 'duplicate' || f.kind === 'orphan') {
+        actionBtn = '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + f.jurnalId + '\')">Hapus</button>';
+      } else if (f.kind === 'wrong-bank') {
+        actionBtn = '<button class="btn btn-xs btn-primary" onclick="sinkronSelisihJurnal(\'' + f.jurnalId + '\')">Sinkron</button>';
+      } else {
+        actionBtn = '<button class="btn btn-xs btn-success" onclick="batchSyncAuditTransaksiLamaSingle(\'' + f.kind + '\',\'' + f.jurnalId + '\',\'' + f.masterId + '\')">Sync Link</button>';
+      }
+      return '<tr>'
+        + '<td><input type="checkbox" class="audit-old-chk" value="' + f.kind + '::' + f.jurnalId + '::' + (f.masterId || '') + '" onchange="updateAuditTransaksiLamaSelection()"></td>'
+        + '<td><span class="badge ' + badgeCls + '">' + f.title + '</span></td>'
+        + '<td>' + fmtDate(f.tanggal) + '</td>'
+        + '<td>' + (f.jurnalId || '-') + '</td>'
+        + '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (f.ket || '-') + '</td>'
+        + '<td class="text-right">' + fmtRp(f.nominal) + '</td>'
+        + '<td style="font-size:0.75rem;color:#666;max-width:220px">' + f.detail + '</td>'
+        + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> ' + actionBtn + '</td>'
+        + '</tr>';
+    }).join('');
+
+    var empty = '<div class="alert alert-success">Audit transaksi lama bersih. Tidak ditemukan jurnal ganda, yatim, salah akun bank, atau link transaksi yang tertinggal.</div>';
+    var html = '<div class="alert alert-info">Audit ini fokus membersihkan transaksi lama agar saldo sistem lebih stabil ke depan. Review item berisiko tinggi dulu: duplikat dan orphan.</div>'
+      + cards
+      + (findings.length ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+        + '<label style="font-size:0.82rem"><input type="checkbox" onchange="toggleAuditTransaksiLama(this.checked)"> Pilih Semua</label>'
+        + '<button class="btn btn-sm btn-success" onclick="batchSyncAuditTransaksiLama()">🔄 Sync Terpilih</button>'
+        + '<button class="btn btn-sm btn-danger" onclick="batchHapusAuditTransaksiLama()">🗑️ Hapus Terpilih</button>'
+        + '<span id="audit-old-count" style="font-size:0.82rem;color:#666"></span>'
+        + '</div>'
+        + '<div class="table-wrap" style="max-height:420px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th style="width:28px"></th><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : empty)
+      + '<div style="margin-top:12px;font-size:0.78rem;color:#666">Gunakan sync untuk link transaksi yang tertinggal, dan hapus hanya setelah duplikat/orphan benar-benar terverifikasi.</div>';
+    openModal(html, '🧹 Audit Transaksi Lama');
+  } catch (err) {
+    showLoading(false);
+    showAlert('Audit transaksi lama gagal: ' + (err.message || err), 'danger');
+  }
+}
+
+async function batchSyncAuditTransaksiLamaSingle(kind, jurnalId, masterId) {
+  showLoading(true);
+  try {
+    if (kind === 'stale-permohonan') {
+      var pdList = await KDB.getAll('permohonan');
+      var p = pdList.find(function(x) { return x.id === masterId; });
+      if (p) await syncPermohonanLinkedJurnal(p);
+    } else if (kind === 'stale-danamasuk') {
+      var dmList = await KDB.getAll('danamasuk');
+      var d = dmList.find(function(x) { return x.id === masterId; });
+      if (d) await syncDanaMasukLinkedJurnal(d);
+    } else if (kind === 'wrong-bank') {
+      await autoSyncBankAccountForJurnal(jurnalId, masterId);
+    }
+    showLoading(false);
+    showAlert('Item audit berhasil disinkronkan.');
+    closeModalDirect();
+    setTimeout(function() { jalankanAuditTransaksiLama(); }, 300);
+  } catch (err) {
+    showLoading(false);
+    showAlert('Sinkron audit gagal: ' + (err.message || err), 'danger');
+  }
 }
 
 // === Checkbox untuk PC Anomali di Analisis ===
