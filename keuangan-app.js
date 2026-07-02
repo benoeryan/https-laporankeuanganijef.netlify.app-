@@ -2204,7 +2204,7 @@ async function integrasiPermohonanDanaMasukKeJurnal() {
     var jurnalId = genId('JU');
     await KDB.save('jurnal', jurnalId, {
       id: jurnalId,
-      tanggal: p.tanggal || today(),
+      tanggal: p.jatuhTempo || p.tanggal || today(),
       keterangan: p.keterangan || ('Pembayaran - ' + p.namaPemohon),
       noRef: p.noPOInvoice || p.id,
       tipe: 'umum', sumber: 'permohonan-dana',
@@ -3202,12 +3202,17 @@ async function renderUtangPiutang() {
   const allDM = (await KDB.getAll('danamasuk')).filter(function(x){ return x.status && (x.status.startsWith('Pending') || x.status === STATUS.APPROVED); });
 
   // Convert PD to Utang entries
+  // bayar/sisa didasarkan pada jurnalId: jurnal hanya dibuat saat jatuh tempo tiba,
+  // sehingga APPROVED sebelum jatuh tempo belum tentu sudah dibayar.
   const pdAsUtang = allPD.map(function(p) {
-    return { id: 'pd_' + p.id, tipe: 'Utang', nama: p.namaPemohon + ' (' + (p.noPOInvoice||p.id) + ')', noDok: p.noPOInvoice||p.id, tanggal: p.tanggal, jatuhTempo: p.jatuhTempo, jumlah: parseFloat(p.nominal)||0, bayar: p.status === STATUS.APPROVED ? parseFloat(p.nominal)||0 : 0, sisa: p.status === STATUS.APPROVED ? 0 : parseFloat(p.nominal)||0, ket: p.keterangan, sumber: 'Permohonan Dana', readonly: true };
+    var sudahDibayar = p.status === STATUS.APPROVED && !!p.jurnalId;
+    return { id: 'pd_' + p.id, tipe: 'Utang', nama: p.namaPemohon + ' (' + (p.noPOInvoice||p.id) + ')', noDok: p.noPOInvoice||p.id, tanggal: p.tanggal, jatuhTempo: p.jatuhTempo, jumlah: parseFloat(p.nominal)||0, bayar: sudahDibayar ? parseFloat(p.nominal)||0 : 0, sisa: sudahDibayar ? 0 : parseFloat(p.nominal)||0, ket: p.keterangan, sumber: 'Permohonan Dana', readonly: true };
   });
   // Convert DM to Piutang entries
+  // bayar/sisa didasarkan pada jurnalId: jurnal hanya dibuat saat tanggal tiba.
   const dmAsPiutang = allDM.map(function(d) {
-    return { id: 'dm_' + d.id, tipe: 'Piutang', nama: d.sumber + ' (' + (d.noRef||d.id) + ')', noDok: d.noRef||d.id, tanggal: d.tanggal, jatuhTempo: d.tanggal, jumlah: parseFloat(d.nominal)||0, bayar: d.status === STATUS.APPROVED ? parseFloat(d.nominal)||0 : 0, sisa: d.status === STATUS.APPROVED ? 0 : parseFloat(d.nominal)||0, ket: d.keterangan, sumber: 'Dana Masuk', readonly: true };
+    var sudahDiterima = d.status === STATUS.APPROVED && !!d.jurnalId;
+    return { id: 'dm_' + d.id, tipe: 'Piutang', nama: d.sumber + ' (' + (d.noRef||d.id) + ')', noDok: d.noRef||d.id, tanggal: d.tanggal, jatuhTempo: d.tanggal, jumlah: parseFloat(d.nominal)||0, bayar: sudahDiterima ? parseFloat(d.nominal)||0 : 0, sisa: sudahDiterima ? 0 : parseFloat(d.nominal)||0, ket: d.keterangan, sumber: 'Dana Masuk', readonly: true };
   });
 
   const utang = list.filter(function(x){ return x.tipe === 'Utang'; }).concat(pdAsUtang);
@@ -3596,10 +3601,11 @@ document.addEventListener('click', function(e) {
 // [REMOVED] Old renderActualBayar/renderActualTerima — replaced by improved version below
 async function renderActualBayar() {
   var upList = (await KDB.getAll('utangpiutang')).filter(function(x){ return x.tipe === 'Utang' && parseFloat(x.bayar) > 0; });
-  // Actual: sudah di-approve layer 2+ ATAU dari import sheets (langsung dianggap approved)
+  // Actual: sudah Approved Final (jurnal dibuat) ATAU dari import sheets (langsung dianggap approved).
+  // Transaksi Pending L2/L3 belum memiliki jurnal sehingga belum memengaruhi saldo,
+  // dan tidak seharusnya masuk ke laporan "Actual".
   var pdList = (await KDB.getAll('permohonan')).filter(function(x){
-    return x.status === STATUS.APPROVED || x.status === STATUS.PENDING_L3 || x.status === STATUS.PENDING_L2
-      || (x.sumber === 'import-sheets');
+    return x.status === STATUS.APPROVED || (x.sumber === 'import-sheets');
   });
   // Juga ambil dari jurnal import-sheets langsung
   var jurnalImport = (await KDB.getAll('jurnal')).filter(function(j){ return j.sumber === 'import-sheets'; });
@@ -3636,10 +3642,10 @@ async function renderActualBayar() {
 }
 async function renderActualTerima() {
   var upList = (await KDB.getAll('utangpiutang')).filter(function(x){ return x.tipe === 'Piutang' && parseFloat(x.bayar) > 0; });
-  // Actual: sudah di-approve layer 2+ ATAU dari import sheets
+  // Actual: sudah Approved Final (jurnal dibuat) ATAU dari import sheets.
+  // Transaksi Pending L2/L3 belum memiliki jurnal sehingga belum memengaruhi saldo.
   var dmList = (await KDB.getAll('danamasuk')).filter(function(x){
-    return x.status === STATUS.APPROVED || x.status === STATUS.PENDING_L3 || x.status === STATUS.PENDING_L2
-      || (x.sumber === 'import-sheets');
+    return x.status === STATUS.APPROVED || (x.sumber === 'import-sheets');
   });
   // Scan ALL jurnal for pendapatan transactions (penerimaan)
   var allJurnal = await KDB.getAll('jurnal');
@@ -7574,7 +7580,7 @@ async function buatJurnalDariPermohonan(id) {
   const jurnalId = genId('JU');
   await KDB.save('jurnal', jurnalId, {
     id: jurnalId,
-    tanggal: p.tanggal || today(),
+    tanggal: p.jatuhTempo || p.tanggal || today(),
     keterangan: p.keterangan || ('Pembayaran - ' + p.namaPemohon),
     noRef: p.noPOInvoice || p.id,
     tipe: 'umum',
