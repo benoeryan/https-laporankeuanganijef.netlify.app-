@@ -145,6 +145,24 @@ textarea{resize:vertical;min-height:70px}
 .modal{background:white;border-radius:14px;padding:24px;width:100%;max-width:900px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
 .modal h3{color:#1a237e;margin-bottom:16px;font-size:1.05rem}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid #eee}
+.bankrec-analysis-shell{display:flex;flex-direction:column;gap:12px}
+.bankrec-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.bankrec-summary-card{padding:12px;border-radius:10px;text-align:center;border:1px solid #e5e7eb}
+.bankrec-summary-blue{background:#e3f2fd}
+.bankrec-summary-green{background:#e8f5e9}
+.bankrec-summary-red{background:#ffebee}
+.bankrec-summary-label{font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em}
+.bankrec-summary-value{font-size:1.08rem;font-weight:700;color:#1a237e;margin-top:4px}
+.bankrec-group{border:1px solid #e6ebf5;border-radius:12px;background:#fff;overflow:hidden}
+.bankrec-group summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;cursor:pointer;background:linear-gradient(180deg,#fbfcff 0%,#f4f7ff 100%)}
+.bankrec-group summary::-webkit-details-marker{display:none}
+.bankrec-group-title{font-weight:700;color:#1a237e;font-size:0.92rem}
+.bankrec-group-hint{font-size:0.78rem;color:#64748b;margin-top:2px}
+.bankrec-group-table{border-top:1px solid #edf1f7;max-height:42vh;overflow:auto}
+.bankrec-group .chip{white-space:nowrap}
+.bankrec-empty{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b}
+.bankrec-cell-wrap{max-width:240px;white-space:normal;word-break:break-word;line-height:1.35}
+.bankrec-table-cell-note{font-size:0.76rem;color:#666;max-width:260px;line-height:1.35}
 
 /* Searchable Select */
 .search-select-wrap{position:relative;width:100%}
@@ -219,9 +237,18 @@ textarea{resize:vertical;min-height:70px}
   .form-grid.cols3{grid-template-columns:1fr}
   .stats-row{grid-template-columns:1fr 1fr}
   .main-content{padding:12px}
+  .modal-overlay{padding:8px}
+  .modal{padding:16px;border-radius:12px;max-height:94vh}
+  .bankrec-summary-grid{grid-template-columns:1fr}
+  .bankrec-group summary{padding:12px;align-items:flex-start}
+  .bankrec-group .chip{font-size:0.7rem}
+  .bankrec-group-table{max-height:none}
+  .bankrec-cell-wrap,.bankrec-table-cell-note{max-width:none}
 }
 @media(max-width:480px){
   .stats-row{grid-template-columns:1fr}
+  .tbl-actions{flex-direction:column;align-items:stretch}
+  .btn-xs{justify-content:center}
 }
 
 /* UPLOAD AREA */
@@ -337,7 +364,7 @@ textarea{resize:vertical;min-height:70px}
 <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
 
 <script src="keuangan-firebase.js"></script>
-<script src="keuangan-app.js?v=20260702-3"></script>
+<script src="keuangan-app.js?v=20260702-4"></script>
 <script>
 function togglePwd(inputId, btn) {
   var inp = document.getElementById(inputId);
