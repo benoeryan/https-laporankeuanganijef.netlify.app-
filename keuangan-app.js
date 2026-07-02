@@ -911,6 +911,22 @@ async function getPettyCashSaldo() {
   return saldo;
 }
 
+function isKasBankAccount(akun) {
+  if (!akun) return false;
+  var nama = (akun.nama || '').toLowerCase();
+  var kategori = (akun.kategori || '').toLowerCase();
+  var kode = akun.kode || '';
+  if (nama.includes('kas') || nama.includes('bank') || nama.includes('petty') || nama.includes('giro')) return true;
+  if (kode.indexOf('1-11') === 0) return true;
+  return kategori === 'aset lancar' && (nama.includes('deposito') || nama.includes('setara kas'));
+}
+
+function getKasBankAccounts(akunList) {
+  var kasBank = (akunList || []).filter(isKasBankAccount);
+  if (kasBank.length) return kasBank;
+  return (akunList || []).filter(function(a) { return a.kategori === 'Aset Lancar'; });
+}
+
 // ===== DASHBOARD =====
 async function renderDashboard() {
   if (KU.role === 'nanda') return renderPortalAset();
@@ -925,7 +941,7 @@ async function renderDashboard() {
   // Saldo data
   const fd = await getFinancialData();
   const saldo = fd.saldo;
-  const kasAkun = fd.akun.filter(function(a){ return a.kategori === 'Aset Lancar'; });
+  const kasAkun = getKasBankAccounts(fd.akun);
 
   const totalDebit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalDebit)||0); }, 0);
   const totalKredit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalKredit)||0); }, 0);
@@ -997,7 +1013,10 @@ async function renderDashboard() {
     + '<div style="background:#f8fff8;border-radius:12px;padding:16px;border-left:3px solid #10b981;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
     + '<div style="font-size:0.75rem;color:#64748b">Pendapatan Hari Ini</div>'
     + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni) + '</div></div>';
-  const totalAsetLancar = kasAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const totalKasBank = kasAkun.reduce(function(s,a){
+    if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') return s + pcSaldoReal;
+    return s + (((saldo[a.kode]||{}).net)||0);
+  }, 0);
 
   // Compute total pendapatan and pengeluaran for primary KPI
   var totalPendapatanKPI = 0, totalPengeluaranKPI = 0;
@@ -1013,7 +1032,7 @@ async function renderDashboard() {
   return '<div class="page-title">🎯 Dashboard Keuangan</div>'
     + perusahaanBanner + pendingBanner
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
-    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalAsetLancar) + '</div><div class="lbl">Total Kas & Bank</div></div>'
+    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalKasBank) + '</div><div class="lbl">Total Kas & Bank</div></div>'
     + '<div class="stat-box ' + (labaRugi >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(labaRugi) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
     + '</div>'
     + '<div class="stats-row">'
@@ -1027,8 +1046,8 @@ async function renderDashboard() {
     + '<span class="text-muted" style="font-size:0.8rem">' + new Date().toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) + '</span></div>'
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">' + saldoCards + '</div>'
     + '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
-    + '<span class="text-muted" style="font-size:0.82rem">Total Aset Lancar</span>'
-    + '<span class="fw-bold text-blue" style="font-size:1.1rem">' + fmtRp(totalAsetLancar) + '</span>'
+    + '<span class="text-muted" style="font-size:0.82rem">Total Kas & Bank</span>'
+    + '<span class="fw-bold text-blue" style="font-size:1.1rem">' + fmtRp(totalKasBank) + '</span>'
     + '</div></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
     + '<div class="card"><div class="card-header"><h2>📝 Transaksi Terbaru</h2>' + (KU.role !== 'bod' ? '<button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button>' : '') + '</div>'
@@ -1067,7 +1086,7 @@ async function renderDashboardApprover() {
   const allDM = await KDB.getAll('danamasuk');
   const fd = await getFinancialData();
   const saldo = fd.saldo;
-  const kasAkun = fd.akun.filter(function(a){ return a.kategori === 'Aset Lancar'; });
+  const kasAkun = getKasBankAccounts(fd.akun);
 
   const totalDebit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalDebit)||0); }, 0);
   const totalKredit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalKredit)||0); }, 0);
@@ -1107,8 +1126,11 @@ async function renderDashboardApprover() {
     return n.includes('bni') || n.includes('mandiri') || n.includes('petty');
   });
   if (!dashKasAkun2.length) dashKasAkun2 = kasAkun.slice(0, 3);
+  var pcSaldoReal2 = await getPettyCashSaldo();
   const saldoCards = dashKasAkun2.map(function(a) {
-    const net = (saldo[a.kode] || {}).net || 0;
+    const net = ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3')
+      ? pcSaldoReal2
+      : ((saldo[a.kode] || {}).net || 0);
     const bg = net > 0 ? '#f8fff8' : net < 0 ? '#fff8f8' : '#f8f9ff';
     const border = net > 0 ? '#10b981' : net < 0 ? '#f43f5e' : '#1a237e';
     const cls = net > 0 ? 'text-green' : net < 0 ? 'text-red' : 'text-blue';
@@ -1123,7 +1145,10 @@ async function renderDashboardApprover() {
     + '<div style="background:#f8fff8;border-radius:12px;padding:16px;border-left:3px solid #10b981;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
     + '<div style="font-size:0.75rem;color:#64748b">Pendapatan Hari Ini</div>'
     + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni2) + '</div></div>';
-  const totalAsetLancar = kasAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  const totalKasBank2 = kasAkun.reduce(function(s,a){
+    if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') return s + pcSaldoReal2;
+    return s + (((saldo[a.kode]||{}).net)||0);
+  }, 0);
 
   const jurnalRows = recentJurnal.length
     ? recentJurnal.map(function(j){ return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.keterangan||'-') + '</td><td class="text-green">' + fmtRp(j.totalDebit) + '</td></tr>'; }).join('')
@@ -1152,7 +1177,7 @@ async function renderDashboardApprover() {
     + perusahaanBanner + pendingBanner
     // Primary KPI row
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
-    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalAsetLancar) + '</div><div class="lbl">Total Kas & Bank</div></div>'
+    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalKasBank2) + '</div><div class="lbl">Total Kas & Bank</div></div>'
     + '<div class="stat-box ' + (labaRugi2 >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(labaRugi2) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
     + '</div>'
     + '<div class="stats-row">'
@@ -1166,8 +1191,8 @@ async function renderDashboardApprover() {
     + '<span class="text-muted" style="font-size:0.8rem">' + new Date().toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) + '</span></div>'
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">' + saldoCards + '</div>'
     + '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
-    + '<span class="text-muted" style="font-size:0.82rem">Total Aset Lancar</span>'
-    + '<span class="fw-bold text-blue" style="font-size:1.1rem">' + fmtRp(totalAsetLancar) + '</span>'
+    + '<span class="text-muted" style="font-size:0.82rem">Total Kas & Bank</span>'
+    + '<span class="fw-bold text-blue" style="font-size:1.1rem">' + fmtRp(totalKasBank2) + '</span>'
     + '</div></div>'
     // Transaksi Terbaru + Status Approval
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
