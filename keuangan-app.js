@@ -4856,7 +4856,7 @@ async function renderSaldoHariIni() {
 }
 
 // ===== ANALISA SELISIH SALDO =====
-var _lastSaldoReal = parseFloat(localStorage.getItem('k_saldo_real_mandiri') || '0') || 0;
+var _lastSaldoReal = parseFloat(localStorage.getItem('k_saldo_real_mandiri')) || 0;
 async function analisaSelisihSaldo(skipPrompt) {
   var saldoReal = _lastSaldoReal;
   if (!skipPrompt || !saldoReal) {
