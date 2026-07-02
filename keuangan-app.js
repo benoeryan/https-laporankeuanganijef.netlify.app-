@@ -224,8 +224,13 @@ function getJurnalDuplicateKey(jurnal) {
   var ket = normalizeCompareText(jurnal.keterangan);
   var lineSig = getJurnalLineSignature(jurnal.lines);
   var stableText = ket ? ket.slice(0, 120) : '';
-  if (sourceSig) return [tanggal, amount.toFixed(2), 'src', sourceSig, ref || '-', stableText || '-', lineSig || '-'].join('|');
-  if (ref || stableText || lineSig) return [tanggal, amount.toFixed(2), 'ref', ref || '-', stableText || '-', lineSig || '-'].join('|');
+  var hasSource = !!sourceSig;
+  var hasRef = !!ref;
+  var hasLine = !!lineSig;
+  var hasText = !!stableText;
+  if (hasSource && (hasRef || hasLine) && hasText) return [tanggal, amount.toFixed(2), 'src', sourceSig, ref || '-', stableText, lineSig || '-'].join('|');
+  if (hasRef && hasLine && hasText) return [tanggal, amount.toFixed(2), 'ref', ref, stableText, lineSig].join('|');
+  if (hasLine && hasText) return [tanggal, amount.toFixed(2), 'line', stableText, lineSig].join('|');
   return '';
 }
 
@@ -6006,8 +6011,8 @@ async function cekDuplikatTransaksi(id) {
     return matchCount / baseWords.length;
   }
 
-  // Cari transaksi yang benar-benar mirip: nominal harus sejalan, atau struktur jurnalnya sama,
-  // lalu keterangan/tanggal/ref dipakai sebagai penguat. Jika nominal beda jauh, jangan langsung label duplikat.
+  // Cari transaksi yang benar-benar mirip: nominal harus sangat dekat, lalu ada penguat tambahan.
+  // Jika hanya mirip tanggal/keterangan tetapi nominal atau struktur tidak kuat, jangan label duplikat.
   var duplikats = [];
   var miripLain = [];
   jurnal.forEach(function(j) {
@@ -6023,7 +6028,8 @@ async function cekDuplikatTransaksi(id) {
     var jSourceSig = getJurnalSourceSignature(j);
     var jLineSig = getJurnalLineSignature(j.lines);
     var nominalGap = Math.abs(jNominal - targetNominal);
-    var nominalMatch = targetNominal > 0 && jNominal > 0 && nominalGap <= Math.max(500, targetNominal * 0.005);
+    var nominalMatch = targetNominal > 0 && jNominal > 0 && nominalGap <= Math.max(100, targetNominal * 0.001);
+    var nominalNear = targetNominal > 0 && jNominal > 0 && nominalGap <= Math.max(25000, targetNominal * 0.1);
     var refMatch = targetRef && jRef && targetRef === jRef;
     var lineMatch = targetLineSig && jLineSig && targetLineSig === jLineSig;
     var sourceMatch = targetSourceSig && jSourceSig && targetSourceSig === jSourceSig;
@@ -6046,8 +6052,8 @@ async function cekDuplikatTransaksi(id) {
       alasan.push('Nominal beda ' + fmtRp(nominalGap));
     }
 
-    // Cek keterangan mirip (minimal 60% kata yang cocok)
-    if (targetKetWords.length > 0 && ketRatio >= 0.6) {
+    // Cek keterangan mirip (minimal 70% kata yang cocok)
+    if (targetKetWords.length > 0 && ketRatio >= 0.7) {
       skor += Math.round(ketRatio * 2);
       alasan.push('Keterangan mirip (' + Math.round(ketRatio*100) + '%)');
     }
@@ -6068,13 +6074,12 @@ async function cekDuplikatTransaksi(id) {
       alasan.push('COA/detail baris sama');
     }
 
-    var cukupKuat = nominalMatch && (refMatch || lineMatch || sourceMatch);
-    var kandidatKuat = cukupKuat || (sourceMatch && lineMatch && nominalMatch) || (refMatch && lineMatch && nominalMatch);
+    var kandidatKuat = nominalMatch && (refMatch || lineMatch || sourceMatch) && (jKet === targetKet || ketRatio >= 0.7);
 
     // Hanya tampilkan yang benar-benar masuk kandidat duplikat
-    if (kandidatKuat && skor >= 5) {
+    if (kandidatKuat && skor >= 6) {
       duplikats.push({ jurnal: j, skor: skor, alasan: alasan });
-    } else if (!kandidatKuat && (jTgl === targetTgl || ketRatio >= 0.6 || jKet === targetKet)) {
+    } else if (!kandidatKuat && nominalNear && (jTgl === targetTgl || ketRatio >= 0.6 || jKet === targetKet)) {
       miripLain.push({ jurnal: j, skor: skor, alasan: alasan });
     }
   });
@@ -6131,7 +6136,7 @@ async function cekDuplikatTransaksi(id) {
 
   if (miripLain.length > 0) {
     html += '<div style="margin-top:12px;font-weight:700;color:#e65100">🟡 Transaksi yang mirip tapi belum cukup kuat untuk duplikat (' + miripLain.length + ')</div>';
-    html += '<div style="font-size:0.8rem;color:#666;margin-top:4px">Kategori ini sengaja dipisahkan agar nominal, ref, atau struktur jurnal yang beda tidak ikut terhapus.</div>';
+    html += '<div style="font-size:0.8rem;color:#666;margin-top:4px">Kategori ini hanya menampilkan nominal yang masih berdekatan. Jika selisih nominal terlalu jauh, transaksi tidak ditampilkan sebagai mirip.</div>';
     html += '<div style="max-height:220px;overflow-y:auto;margin-top:8px">';
     miripLain.slice(0, 5).forEach(function(d) {
       var j = d.jurnal;
