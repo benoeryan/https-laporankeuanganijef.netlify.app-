@@ -223,10 +223,10 @@ function getJurnalDuplicateKey(jurnal) {
   var ref = normalizeCompareRef(jurnal.noRef);
   var ket = normalizeCompareText(jurnal.keterangan);
   var lineSig = getJurnalLineSignature(jurnal.lines);
-  if (sourceSig) return [tanggal, amount.toFixed(2), 'src', sourceSig].join('|');
-  if (ref) return [tanggal, amount.toFixed(2), 'ref', ref, lineSig].join('|');
-  if (!ket || !lineSig) return '';
-  return [tanggal, amount.toFixed(2), 'ket', ket, lineSig].join('|');
+  var stableText = ket ? ket.slice(0, 120) : '';
+  if (sourceSig) return [tanggal, amount.toFixed(2), 'src', sourceSig, ref || '-', stableText || '-', lineSig || '-'].join('|');
+  if (ref || stableText || lineSig) return [tanggal, amount.toFixed(2), 'ref', ref || '-', stableText || '-', lineSig || '-'].join('|');
+  return '';
 }
 
 async function getStoredBankActualBalances(kodeList) {
@@ -5990,11 +5990,25 @@ async function cekDuplikatTransaksi(id) {
   var kasAkun = '1-1101-2';
   var targetNominal = parseFloat(target.totalDebit) || 0;
   var targetTgl = target.tanggal || '';
+  var targetRef = normalizeCompareRef(target.noRef);
   var targetKet = (target.keterangan || '').toLowerCase().trim();
   var targetKetWords = targetKet.split(/\s+/).filter(function(w){ return w.length > 3; });
+  var targetLineSig = getJurnalLineSignature(target.lines);
 
-  // Cari transaksi yang mirip: sama tanggal, atau sama nominal (yang menyentuh kas Mandiri), atau keterangan mirip
+  function getTextOverlapRatio(baseWords, otherText) {
+    if (!baseWords || !baseWords.length) return 0;
+    var normalized = normalizeCompareText(otherText);
+    var matchCount = 0;
+    baseWords.forEach(function(w) {
+      if (normalized.indexOf(w) >= 0) matchCount++;
+    });
+    return matchCount / baseWords.length;
+  }
+
+  // Cari transaksi yang benar-benar mirip: nominal harus sejalan, atau struktur jurnalnya sama,
+  // lalu keterangan/tanggal/ref dipakai sebagai penguat. Jika nominal beda jauh, jangan langsung label duplikat.
   var duplikats = [];
+  var miripLain = [];
   jurnal.forEach(function(j) {
     if (j.id === id) return; // skip diri sendiri
     var lines = j.lines || [];
@@ -6004,33 +6018,35 @@ async function cekDuplikatTransaksi(id) {
     var jNominal = parseFloat(j.totalDebit) || 0;
     var jKet = (j.keterangan || '').toLowerCase().trim();
     var jTgl = j.tanggal || '';
+    var jRef = normalizeCompareRef(j.noRef);
+    var jLineSig = getJurnalLineSignature(j.lines);
+    var nominalGap = Math.abs(jNominal - targetNominal);
+    var nominalMatch = targetNominal > 0 && jNominal > 0 && nominalGap <= Math.max(1000, targetNominal * 0.01);
+    var refMatch = targetRef && jRef && targetRef === jRef;
+    var lineMatch = targetLineSig && jLineSig && targetLineSig === jLineSig;
+    var ketRatio = getTextOverlapRatio(targetKetWords, jKet);
 
     var skor = 0;
     var alasan = [];
 
     // Cek tanggal sama
     if (jTgl && jTgl === targetTgl) {
-      skor += 3;
+      skor += 1;
       alasan.push('Tanggal sama');
     }
 
-    // Cek nominal sama
-    if (targetNominal > 0 && jNominal === targetNominal) {
+    // Cek nominal yang benar-benar sejalan
+    if (nominalMatch) {
       skor += 4;
-      alasan.push('Nominal sama');
+      alasan.push('Nominal sejalan');
+    } else if (targetNominal > 0 && jNominal > 0) {
+      alasan.push('Nominal beda ' + fmtRp(nominalGap));
     }
 
     // Cek keterangan mirip (minimal 50% kata yang cocok)
-    if (targetKetWords.length > 0) {
-      var matchCount = 0;
-      targetKetWords.forEach(function(w) {
-        if (jKet.indexOf(w) >= 0) matchCount++;
-      });
-      var ratio = matchCount / targetKetWords.length;
-      if (ratio >= 0.5) {
-        skor += Math.round(ratio * 3);
-        alasan.push('Keterangan mirip (' + Math.round(ratio*100) + '%)');
-      }
+    if (targetKetWords.length > 0 && ketRatio >= 0.5) {
+      skor += Math.round(ketRatio * 2);
+      alasan.push('Keterangan mirip (' + Math.round(ketRatio*100) + '%)');
     }
 
     // Cek keterangan persis sama
@@ -6039,14 +6055,29 @@ async function cekDuplikatTransaksi(id) {
       alasan.push('Keterangan persis sama');
     }
 
-    // Hanya tampilkan yang skor >= 4 (minimal nominal sama ATAU tanggal + keterangan mirip)
-    if (skor >= 4) {
+    if (refMatch) {
+      skor += 2;
+      alasan.push('Ref sama');
+    }
+
+    if (lineMatch) {
+      skor += 3;
+      alasan.push('COA/detail baris sama');
+    }
+
+    var cukupKuat = nominalMatch || refMatch || lineMatch;
+
+    // Hanya tampilkan yang benar-benar masuk kandidat duplikat
+    if (cukupKuat && skor >= 5) {
       duplikats.push({ jurnal: j, skor: skor, alasan: alasan });
+    } else if (!cukupKuat && (jTgl === targetTgl || ketRatio >= 0.5 || jKet === targetKet)) {
+      miripLain.push({ jurnal: j, skor: skor, alasan: alasan });
     }
   });
 
   // Sort by skor descending
   duplikats.sort(function(a, b) { return b.skor - a.skor; });
+  miripLain.sort(function(a, b) { return b.skor - a.skor; });
 
   // Build comparison view
   var html = '<div style="margin-bottom:14px;padding:12px;background:#e3f2fd;border-radius:8px;border-left:4px solid #1976d2">';
@@ -6090,6 +6121,22 @@ async function cekDuplikatTransaksi(id) {
       html += '<button class="btn btn-xs btn-info" onclick="editSelisihJurnal(\'' + j.id + '\')">Edit</button>';
       html += '<button class="btn btn-xs btn-success" onclick="tandaiBenarSelisih(\'' + j.id + '\')">Tandai Benar</button>';
       html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  if (miripLain.length > 0) {
+    html += '<div style="margin-top:12px;font-weight:700;color:#e65100">🟡 Transaksi yang mirip tetapi belum cukup kuat untuk dianggap duplikat (' + miripLain.length + ')</div>';
+    html += '<div style="font-size:0.8rem;color:#666;margin-top:4px">Biasanya beda nominal, ref, atau struktur baris COA sehingga lebih aman dianggap hanya mirip.</div>';
+    html += '<div style="max-height:220px;overflow-y:auto;margin-top:8px">';
+    miripLain.slice(0, 5).forEach(function(d) {
+      var j = d.jurnal;
+      html += '<div style="margin-bottom:8px;padding:10px 12px;background:#fff8e1;border-radius:8px;border-left:4px solid #ffb300">';
+      html += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + (j.noRef || j.id) + '</b><span style="font-size:0.75rem;color:#666">skor ' + d.skor + '</span></div>';
+      html += '<div style="font-size:0.8rem;color:#555;margin-top:4px">' + (j.keterangan || '-') + '</div>';
+      html += '<div style="font-size:0.8rem;color:#555">Nominal: ' + fmtRp(parseFloat(j.totalDebit)||0) + '</div>';
+      html += '<div style="font-size:0.75rem;color:#888;margin-top:4px">' + d.alasan.join(' | ') + '</div>';
+      html += '</div>';
     });
     html += '</div>';
   }
