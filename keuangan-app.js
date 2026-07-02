@@ -3166,6 +3166,24 @@ function updateAuditTransaksiLamaSelection() {
   if (countEl) countEl.textContent = checked.length ? checked.length + ' dipilih' : '';
 }
 
+function filterAuditTransaksiLamaRows(tableId, query, kind) {
+  var root = document.getElementById(tableId);
+  if (!root) return;
+  var q = String(query || '').toLowerCase();
+  var visible = 0;
+  root.querySelectorAll('tbody tr[data-kind]').forEach(function(r) {
+    var textOk = !q || r.textContent.toLowerCase().includes(q);
+    var kindOk = !kind || kind === 'all' || r.dataset.kind === kind;
+    var show = textOk && kindOk;
+    r.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  var visibleEl = document.getElementById('audit-old-visible-count');
+  if (visibleEl) visibleEl.textContent = visible ? visible + ' tampil' : '0 tampil';
+  var empty = document.getElementById('audit-old-empty');
+  if (empty) empty.style.display = visible ? 'none' : 'block';
+}
+
 async function batchSyncAuditTransaksiLama() {
   var checked = Array.from(document.querySelectorAll('.audit-old-chk:checked'));
   if (!checked.length) { showAlert('Pilih minimal 1 item audit.', 'warning'); return; }
@@ -3369,6 +3387,7 @@ async function jalankanAuditTransaksiLama() {
     });
 
     showLoading(false);
+    setTimeout(function() { setModalLayout(window.innerWidth <= 768 ? 'full' : 'wide'); }, 0);
 
     var summary = { duplicate: 0, orphan: 0, stale: 0, wrongBank: 0 };
     findings.forEach(function(f) {
@@ -3379,11 +3398,11 @@ async function jalankanAuditTransaksiLama() {
     });
 
     var cards = ''
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">'
-      + '<div style="background:#ffebee;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Duplikat</div><div class="fw-bold text-red" style="font-size:1.3rem">' + summary.duplicate + '</div></div>'
-      + '<div style="background:#fce4ec;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Orphan</div><div class="fw-bold text-red" style="font-size:1.3rem">' + summary.orphan + '</div></div>'
-      + '<div style="background:#fff8e1;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Link Tidak Sinkron</div><div class="fw-bold" style="font-size:1.3rem;color:#e65100">' + summary.stale + '</div></div>'
-      + '<div style="background:#e3f2fd;padding:12px;border-radius:8px"><div style="font-size:0.75rem;color:#888">Salah Akun Bank</div><div class="fw-bold text-blue" style="font-size:1.3rem">' + summary.wrongBank + '</div></div>'
+      + '<div class="audit-old-summary-grid">'
+      + '<div class="audit-old-card audit-old-card-danger"><div class="audit-old-card-label">Duplikat</div><div class="audit-old-card-value text-red">' + summary.duplicate + '</div></div>'
+      + '<div class="audit-old-card audit-old-card-pink"><div class="audit-old-card-label">Orphan</div><div class="audit-old-card-value text-red">' + summary.orphan + '</div></div>'
+      + '<div class="audit-old-card audit-old-card-warn"><div class="audit-old-card-label">Link Tidak Sinkron</div><div class="audit-old-card-value" style="color:#e65100">' + summary.stale + '</div></div>'
+      + '<div class="audit-old-card audit-old-card-info"><div class="audit-old-card-label">Salah Akun Bank</div><div class="audit-old-card-value text-blue">' + summary.wrongBank + '</div></div>'
       + '</div>';
 
     var rows = findings.map(function(f) {
@@ -3396,14 +3415,14 @@ async function jalankanAuditTransaksiLama() {
       } else {
         actionBtn = '<button class="btn btn-xs btn-success" onclick="batchSyncAuditTransaksiLamaSingle(\'' + f.kind + '\',\'' + f.jurnalId + '\',\'' + f.masterId + '\')">Sync Link</button>';
       }
-      return '<tr>'
+      return '<tr data-kind="' + f.kind + '">'
         + '<td><input type="checkbox" class="audit-old-chk" value="' + f.kind + '::' + f.jurnalId + '::' + (f.masterId || '') + '" onchange="updateAuditTransaksiLamaSelection()"></td>'
         + '<td><span class="badge ' + badgeCls + '">' + f.title + '</span></td>'
         + '<td>' + fmtDate(f.tanggal) + '</td>'
         + '<td>' + (f.jurnalId || '-') + '</td>'
-        + '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (f.ket || '-') + '</td>'
+        + '<td class="audit-old-cell-wrap">' + (f.ket || '-') + '</td>'
         + '<td class="text-right">' + fmtRp(f.nominal) + '</td>'
-        + '<td style="font-size:0.75rem;color:#666;max-width:220px">' + f.detail + '</td>'
+        + '<td class="audit-old-cell-detail">' + f.detail + '</td>'
         + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnal(\'' + f.jurnalId + '\');closeModalDirect()">View</button> ' + actionBtn + '</td>'
         + '</tr>';
     }).join('');
@@ -3411,15 +3430,34 @@ async function jalankanAuditTransaksiLama() {
     var empty = '<div class="alert alert-success">Audit transaksi lama bersih. Tidak ditemukan jurnal ganda, yatim, salah akun bank, atau link transaksi yang tertinggal.</div>';
     var html = '<div class="alert alert-info">Audit ini fokus membersihkan transaksi lama agar saldo sistem lebih stabil ke depan. Review item berisiko tinggi dulu: duplikat dan orphan.</div>'
       + cards
-      + (findings.length ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+      + (findings.length ? '<div class="audit-old-toolbar">'
+        + '<div class="audit-old-toolbar-left">'
         + '<label style="font-size:0.82rem"><input type="checkbox" onchange="toggleAuditTransaksiLama(this.checked)"> Pilih Semua</label>'
         + '<button class="btn btn-sm btn-success" onclick="batchSyncAuditTransaksiLama()">🔄 Sync Terpilih</button>'
         + '<button class="btn btn-sm btn-danger" onclick="batchHapusAuditTransaksiLama()">🗑️ Hapus Terpilih</button>'
-        + '<span id="audit-old-count" style="font-size:0.82rem;color:#666"></span>'
+        + '<span id="audit-old-count" class="text-muted"></span>'
         + '</div>'
-        + '<div class="table-wrap" style="max-height:420px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th style="width:28px"></th><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : empty)
+        + '<div class="audit-old-toolbar-right">'
+        + '<input id="audit-old-search" placeholder="Cari jurnal/keterangan/detail..." style="padding:7px 10px;border:1px solid #d0d7e2;border-radius:8px;min-width:220px" oninput="filterAuditTransaksiLamaRows(\'audit-old-table\', this.value, (document.getElementById(\'audit-old-kind\')||{}).value || \"all\")">'
+        + '<select id="audit-old-kind" style="padding:7px 10px;border:1px solid #d0d7e2;border-radius:8px" onchange="filterAuditTransaksiLamaRows(\'audit-old-table\', (document.getElementById(\'audit-old-search\')||{}).value || \"\", this.value)">'
+        + '<option value="all">Semua Temuan (' + findings.length + ')</option>'
+        + '<option value="duplicate">Duplikat (' + summary.duplicate + ')</option>'
+        + '<option value="orphan">Orphan (' + summary.orphan + ')</option>'
+        + '<option value="stale-permohonan">Link Permohonan</option>'
+        + '<option value="stale-danamasuk">Link Dana Masuk</option>'
+        + '<option value="wrong-bank">Salah Akun Bank (' + summary.wrongBank + ')</option>'
+        + '</select>'
+        + '<span id="audit-old-visible-count" class="text-muted"></span>'
+        + '</div>'
+        + '</div>'
+        + '<div id="audit-old-table" class="table-wrap audit-old-table-wrap"><table style="font-size:0.82rem;min-width:980px"><thead style="position:sticky;top:0;z-index:2"><tr><th style="width:28px"></th><th>Tipe</th><th>Tanggal</th><th>Jurnal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        + '<div id="audit-old-empty" class="empty-state bankrec-empty" style="display:none;padding:16px 12px">Tidak ada item audit yang cocok dengan filter saat ini.</div>' : empty)
       + '<div style="margin-top:12px;font-size:0.78rem;color:#666">Gunakan sync untuk link transaksi yang tertinggal, dan hapus hanya setelah duplikat/orphan benar-benar terverifikasi.</div>';
     openModal(html, '🧹 Audit Transaksi Lama');
+    setTimeout(function() {
+      updateAuditTransaksiLamaSelection();
+      filterAuditTransaksiLamaRows('audit-old-table', '', 'all');
+    }, 0);
   } catch (err) {
     showLoading(false);
     showAlert('Audit transaksi lama gagal: ' + (err.message || err), 'danger');
