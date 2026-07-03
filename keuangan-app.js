@@ -2982,14 +2982,25 @@ async function prosesRecoverLocalStorageTerpilih() {
 
   showLoading(true);
   var count = 0;
-  for (var i = 0; i < toRestore.length; i++) {
-    try {
-      var item = Object.assign({}, toRestore[i]);
-      delete item.isDuplicate;
-      await KDB.save('jurnal', item.id, item);
-      count++;
-    } catch(e) { console.warn('Recover error:', e); }
+  
+  // Update local individual keys and save to Firebase in parallel chunks
+  var batchSize = 30;
+  for (var i = 0; i < toRestore.length; i += batchSize) {
+    var chunk = toRestore.slice(i, i + batchSize);
+    var promises = chunk.map(async function(origItem) {
+      try {
+        var item = Object.assign({}, origItem);
+        delete item.isDuplicate;
+        await KDB.save('jurnal', item.id, item);
+        count++;
+      } catch(e) { console.warn('Recover error:', e); }
+    });
+    await Promise.all(promises);
   }
+
+  // Force clean up the cached Jurnal list in localStorage so it is guaranteed to re-fetch freshly
+  localStorage.removeItem('k_jurnal_all');
+
   showLoading(false);
   closeModalDirect();
   showAlert('Berhasil recover ' + count + ' jurnal dari localStorage ke Firebase!');
