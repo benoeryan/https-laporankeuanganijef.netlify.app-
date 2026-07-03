@@ -89,9 +89,11 @@ const KDB = {
     if (kfbReady) {
       try {
         await kfs.setDoc(kfs.doc(kdb, 'k_' + col, id), data);
-        // Clear dirty flag after successful Firebase write
-        localStorage.removeItem('k_' + col + '_dirty_' + id);
-        if (this._recentSaves[col]) delete this._recentSaves[col][id];
+        // Keep dirty flag for 3 seconds to protect against read-after-write lag in Firestore
+        setTimeout(function() {
+          localStorage.removeItem('k_' + col + '_dirty_' + id);
+          if (KDB._recentSaves[col]) delete KDB._recentSaves[col][id];
+        }, 3000);
       } catch(e) { console.warn(e); }
     }
   },

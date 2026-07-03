@@ -2984,7 +2984,9 @@ async function prosesRecoverLocalStorageTerpilih() {
   var count = 0;
   for (var i = 0; i < toRestore.length; i++) {
     try {
-      await KDB.save('jurnal', toRestore[i].id, toRestore[i]);
+      var item = Object.assign({}, toRestore[i]);
+      delete item.isDuplicate;
+      await KDB.save('jurnal', item.id, item);
       count++;
     } catch(e) { console.warn('Recover error:', e); }
   }
