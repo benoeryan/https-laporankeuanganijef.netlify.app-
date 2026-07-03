@@ -582,7 +582,7 @@ function printBankRecAnalysis() {
   });
   var pendingHtml = '';
   if (data.pendingJurnal && data.pendingJurnal.length) {
-    pendingHtml = '<div class="sec"><div class="sec-hdr"><div><div class="sec-title">Transaksi Pending 7 Hari Terakhir</div><div class="sec-hint">Mutasi ini mungkin belum final di rekening bank.</div></div><div class="sec-chip">' + data.pendingJurnal.length + ' item</div></div><table><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>' + data.pendingJurnal.slice(0, 20).map(function(j) {
+    pendingHtml = '<div class="sec"><div class="sec-hdr"><div><div class="sec-title">Transaksi Pending 7 Hari Terakhir</div><div class="sec-hint">Mutasi ini belum final di rekening bank.</div></div><div class="sec-chip">' + data.pendingJurnal.length + ' item</div></div><table><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>' + data.pendingJurnal.slice(0, 20).map(function(j) {
       return '<tr><td>' + escapeHtml(fmtDate(j.tanggal)) + '</td><td>' + escapeHtml(j.noRef || j.id) + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td style="text-align:right">' + (j._bankDebit ? fmtRp(j._bankDebit) : '-') + '</td><td style="text-align:right">' + (j._bankKredit ? fmtRp(j._bankKredit) : '-') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   }
@@ -2408,20 +2408,156 @@ async function hapusJurnal(id) {
 }
 
 // ===== TEMPAT SAMPAH & RESTORE =====
-async function lihatTrashJurnal() {
-  var trash = await KDB.getAll('jurnal_trash');
-  if (!trash.length) { showAlert('Tempat sampah kosong', 'info'); return; }
-  var rows = trash.sort(function(a,b){ return (b.deletedAt||'').localeCompare(a.deletedAt||''); }).slice(0,30).map(function(j) {
-    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td>' + fmtRp(j.totalDebit||0) + '</td><td>' + fmtDate(j.deletedAt) + '</td><td>' + (j.deletedBy||'-') + '</td>'
-      + '<td class="tbl-actions"><button class="btn btn-xs btn-success" onclick="restoreJurnal(\'' + j.id + '\')">♻️ Restore</button> <button class="btn btn-xs btn-danger" onclick="hapusPermanen(\'' + j.id + '\')">🗑️ Hapus Permanen</button></td></tr>';
+function getJurnalTotals(j) {
+  var totalDebit = parseFloat(j.totalDebit) || 0;
+  var totalKredit = parseFloat(j.totalKredit) || 0;
+  if ((!totalDebit && !totalKredit) && Array.isArray(j.lines) && j.lines.length) {
+    for (var i = 0; i < j.lines.length; i++) {
+      totalDebit += parseFloat(j.lines[i].debit) || 0;
+      totalKredit += parseFloat(j.lines[i].kredit) || 0;
+    }
+  }
+  return { debit: totalDebit, kredit: totalKredit };
+}
+
+function openJurnalPreviewModal(j, title, backButtonHtml) {
+  var lines = (j.lines || []).map(function(l) {
+    return '<tr><td>' + escapeHtml(l.akun || '-') + '</td><td>' + escapeHtml(l.ket || '-') + '</td><td class="text-green">' + ((parseFloat(l.debit) || 0) ? fmtRp(parseFloat(l.debit) || 0) : '-') + '</td><td class="text-red">' + ((parseFloat(l.kredit) || 0) ? fmtRp(parseFloat(l.kredit) || 0) : '-') + '</td></tr>';
   }).join('');
-  openModal('<div class="alert alert-info">Jurnal yang dihapus bisa di-restore kembali ke sistem.</div>'
-    + '<div class="table-wrap" style="max-height:400px;overflow-y:auto"><table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Nominal</th><th>Dihapus</th><th>Oleh</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-    + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:center">'
-    + '<button class="btn btn-success" onclick="restoreSemuaTrash()">♻️ Restore Semua (' + trash.length + ')</button>'
+  if (!lines) lines = '<tr><td colspan="4" class="text-center text-muted">Tidak ada detail baris jurnal</td></tr>';
+  var totals = getJurnalTotals(j);
+
+  openModal('<div class="form-grid">'
+    + '<div class="fg"><label>Tanggal</label><div class="chip">' + fmtDate(j.tanggal) + '</div></div>'
+    + '<div class="fg"><label>No. Ref</label><div class="chip">' + escapeHtml(j.noRef || j.id || '-') + '</div></div>'
+    + '<div class="fg"><label>Dibuat Oleh</label><div>' + escapeHtml(j.createdBy || '-') + '</div></div>'
+    + '<div class="fg"><label>Dihapus Oleh</label><div>' + escapeHtml(j.deletedBy || '-') + '</div></div>'
+    + '<div class="fg full"><label>Keterangan</label><div>' + escapeHtml(j.keterangan || '-') + '</div></div>'
+    + '</div><div class="table-wrap mt-12" style="max-height:44vh;overflow:auto"><table><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>' + lines + '</tbody>'
+    + '<tfoot><tr style="background:#f5f5ff"><td colspan="2"><b>Total</b></td><td class="text-green fw-bold">' + fmtRp(totals.debit) + '</td><td class="text-red fw-bold">' + fmtRp(totals.kredit) + '</td></tr></tfoot></table></div>'
+    + '<div class="modal-footer">' + (backButtonHtml || '') + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button></div>',
+    title || '👁️ Preview Jurnal');
+}
+
+function renderTrashJurnalList() {
+  var state = window._trashJurnalState;
+  if (!state) return;
+  var q = (state.query || '').toLowerCase();
+  var filtered = state.items.filter(function(j) {
+    var ref = (j.noRef || j.id || '').toLowerCase();
+    var ket = (j.keterangan || '').toLowerCase();
+    var by = (j.deletedBy || '').toLowerCase();
+    return !q || ref.indexOf(q) !== -1 || ket.indexOf(q) !== -1 || by.indexOf(q) !== -1;
+  });
+
+  var totalPage = Math.max(1, Math.ceil(filtered.length / state.perPage));
+  if (state.page > totalPage) state.page = totalPage;
+  if (state.page < 1) state.page = 1;
+  var startIdx = (state.page - 1) * state.perPage;
+  var pageItems = filtered.slice(startIdx, startIdx + state.perPage);
+
+  var rows = pageItems.map(function(j) {
+    var totals = getJurnalTotals(j);
+    return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + escapeHtml(j.noRef || j.id || '-') + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td class="text-green">' + fmtRp(totals.debit) + '</td><td class="text-red">' + fmtRp(totals.kredit) + '</td><td>' + fmtDate(j.deletedAt) + '</td><td>' + escapeHtml(j.deletedBy || '-') + '</td>'
+      + '<td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatJurnalTrash(\'' + j.id + '\')">👁️ View</button> <button class="btn btn-xs btn-success" onclick="restoreJurnal(\'' + j.id + '\')">♻️ Restore</button> <button class="btn btn-xs btn-danger" onclick="hapusPermanen(\'' + j.id + '\')">🗑️ Hapus</button></td></tr>';
+  }).join('');
+  if (!rows) rows = '<tr><td colspan="8" class="text-center text-muted">Tidak ada data yang cocok</td></tr>';
+
+  var tableWrap = document.getElementById('trash-jurnal-table-wrap');
+  if (tableWrap) {
+    tableWrap.style.maxHeight = state.listHeight + 'px';
+    tableWrap.style.overflow = 'auto';
+    tableWrap.innerHTML = '<table style="font-size:0.82rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Dihapus</th><th>Oleh</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  var summary = document.getElementById('trash-jurnal-summary');
+  if (summary) summary.textContent = 'Menampilkan ' + pageItems.length + ' dari ' + filtered.length + ' jurnal (total sampah: ' + state.items.length + ')';
+  var pageInfo = document.getElementById('trash-jurnal-page-info');
+  if (pageInfo) pageInfo.textContent = 'Halaman ' + state.page + ' / ' + totalPage;
+  var heightInfo = document.getElementById('trash-jurnal-height-label');
+  if (heightInfo) heightInfo.textContent = state.listHeight + 'px';
+
+  var prevBtn = document.getElementById('trash-jurnal-prev');
+  var nextBtn = document.getElementById('trash-jurnal-next');
+  if (prevBtn) prevBtn.disabled = state.page <= 1;
+  if (nextBtn) nextBtn.disabled = state.page >= totalPage;
+}
+
+function applyTrashJurnalSearch(val) {
+  if (!window._trashJurnalState) return;
+  window._trashJurnalState.query = val || '';
+  window._trashJurnalState.page = 1;
+  renderTrashJurnalList();
+}
+
+function applyTrashJurnalPerPage(val) {
+  if (!window._trashJurnalState) return;
+  window._trashJurnalState.perPage = Math.max(5, parseInt(val, 10) || 20);
+  window._trashJurnalState.page = 1;
+  renderTrashJurnalList();
+}
+
+function applyTrashJurnalHeight(val) {
+  if (!window._trashJurnalState) return;
+  window._trashJurnalState.listHeight = Math.max(260, parseInt(val, 10) || 420);
+  renderTrashJurnalList();
+}
+
+function changeTrashJurnalPage(step) {
+  if (!window._trashJurnalState) return;
+  window._trashJurnalState.page += step;
+  renderTrashJurnalList();
+}
+
+async function lihatJurnalTrash(id) {
+  var state = window._trashJurnalState;
+  var j = state && state.items ? state.items.find(function(x){ return x.id === id; }) : null;
+  if (!j) {
+    var trash = await KDB.getAll('jurnal_trash');
+    j = trash.find(function(x){ return x.id === id; });
+  }
+  if (!j) { showAlert('Data tidak ditemukan di tempat sampah', 'warning'); return; }
+  openJurnalPreviewModal(j, '👁️ View Jurnal di Tempat Sampah', '<button class="btn btn-outline" onclick="lihatTrashJurnal(true)">⬅ Kembali</button>');
+}
+
+async function lihatTrashJurnal(preserveState) {
+  if (!preserveState || !window._trashJurnalState || !window._trashJurnalState.items || !window._trashJurnalState.items.length) {
+    var trash = await KDB.getAll('jurnal_trash');
+    if (!trash.length) { showAlert('Tempat sampah kosong', 'info'); return; }
+    window._trashJurnalState = {
+      items: trash.sort(function(a, b) { return (b.deletedAt || '').localeCompare(a.deletedAt || ''); }),
+      query: '',
+      perPage: 20,
+      page: 1,
+      listHeight: 420
+    };
+  }
+
+  var state = window._trashJurnalState;
+  openModal('<div class="alert alert-info">Jurnal yang dihapus bisa di-restore kembali ke sistem. Gunakan <b>View</b> untuk cek detail dulu.</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+    + '<input id="trash-jurnal-search" type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan / user..." oninput="applyTrashJurnalSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
+    + '<select id="trash-jurnal-per-page" onchange="applyTrashJurnalPerPage(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px">'
+    + '<option value="10"' + (state.perPage === 10 ? ' selected' : '') + '>10/baris</option>'
+    + '<option value="20"' + (state.perPage === 20 ? ' selected' : '') + '>20/baris</option>'
+    + '<option value="30"' + (state.perPage === 30 ? ' selected' : '') + '>30/baris</option>'
+    + '<option value="50"' + (state.perPage === 50 ? ' selected' : '') + '>50/baris</option>'
+    + '</select>'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#555">Tinggi List'
+    + '<input id="trash-jurnal-height" type="range" min="260" max="640" step="20" value="' + state.listHeight + '" oninput="applyTrashJurnalHeight(this.value)">'
+    + '<span id="trash-jurnal-height-label" style="min-width:44px">' + state.listHeight + 'px</span></label>'
+    + '</div>'
+    + '<div id="trash-jurnal-summary" style="font-size:0.82rem;color:#555;margin-bottom:6px"></div>'
+    + '<div id="trash-jurnal-table-wrap" class="table-wrap" style="border:1px solid #edf1f7;border-radius:10px"></div>'
+    + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+    + '<div style="display:flex;gap:6px;align-items:center"><button id="trash-jurnal-prev" class="btn btn-sm btn-outline" onclick="changeTrashJurnalPage(-1)">← Prev</button><span id="trash-jurnal-page-info" style="font-size:0.82rem;color:#555"></span><button id="trash-jurnal-next" class="btn btn-sm btn-outline" onclick="changeTrashJurnalPage(1)">Next →</button></div>'
+    + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+    + '<button class="btn btn-success" onclick="restoreSemuaTrash()">♻️ Restore Semua (' + state.items.length + ')</button>'
     + '<button class="btn btn-danger" onclick="kosongkanTrash()">🗑️ Kosongkan Tempat Sampah</button>'
-    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button></div>',
-    '🗑️ Tempat Sampah Jurnal (' + trash.length + ')');
+    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button></div></div>',
+    '🗑️ Tempat Sampah Jurnal (' + state.items.length + ')');
+  setModalLayout('wide');
+  renderTrashJurnalList();
 }
 
 async function restoreJurnal(id) {
@@ -2479,6 +2615,152 @@ async function kosongkanTrash() {
 }
 
 // ===== RECOVER DATA DARI LOCALSTORAGE =====
+function renderRecoverLocalStorageList() {
+  var state = window._recoverLocalStorageState;
+  if (!state) return;
+  var q = (state.query || '').toLowerCase();
+  var filtered = state.items.filter(function(j) {
+    var ref = (j.noRef || j.id || '').toLowerCase();
+    var ket = (j.keterangan || '').toLowerCase();
+    return !q || ref.indexOf(q) !== -1 || ket.indexOf(q) !== -1;
+  });
+
+  var totalPage = Math.max(1, Math.ceil(filtered.length / state.perPage));
+  if (state.page > totalPage) state.page = totalPage;
+  if (state.page < 1) state.page = 1;
+  var startIdx = (state.page - 1) * state.perPage;
+  var pageItems = filtered.slice(startIdx, startIdx + state.perPage);
+
+  var rows = pageItems.map(function(j) {
+    var totals = getJurnalTotals(j);
+    var checked = state.selected[j.id] ? ' checked' : '';
+    return '<tr><td><input type="checkbox"' + checked + ' onchange="toggleRecoverLocalStorage(\'' + j.id + '\', this.checked)"></td><td>' + fmtDate(j.tanggal) + '</td><td>' + escapeHtml(j.noRef || j.id || '-') + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td class="text-green">' + fmtRp(totals.debit) + '</td><td class="text-red">' + fmtRp(totals.kredit) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatRecoverLocalStorageItem(\'' + j.id + '\')">👁️ View</button></td></tr>';
+  }).join('');
+  if (!rows) rows = '<tr><td colspan="7" class="text-center text-muted">Tidak ada data yang cocok</td></tr>';
+
+  var selectedCount = 0;
+  for (var id in state.selected) {
+    if (state.selected[id]) selectedCount++;
+  }
+
+  var tableWrap = document.getElementById('recover-ls-table-wrap');
+  if (tableWrap) {
+    tableWrap.style.maxHeight = state.listHeight + 'px';
+    tableWrap.style.overflow = 'auto';
+    tableWrap.innerHTML = '<table style="font-size:0.82rem"><thead><tr><th style="width:34px"><input type="checkbox" onchange="toggleAllRecoverLocalStorage(this.checked)"' + (selectedCount === state.items.length ? ' checked' : '') + '></th><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  var info = document.getElementById('recover-ls-summary');
+  if (info) info.textContent = 'Terpilih: ' + selectedCount + ' | Ditampilkan: ' + pageItems.length + ' dari ' + filtered.length + ' | Kandidat recover: ' + state.items.length;
+  var pageInfo = document.getElementById('recover-ls-page-info');
+  if (pageInfo) pageInfo.textContent = 'Halaman ' + state.page + ' / ' + totalPage;
+  var heightLabel = document.getElementById('recover-ls-height-label');
+  if (heightLabel) heightLabel.textContent = state.listHeight + 'px';
+
+  var prevBtn = document.getElementById('recover-ls-prev');
+  var nextBtn = document.getElementById('recover-ls-next');
+  if (prevBtn) prevBtn.disabled = state.page <= 1;
+  if (nextBtn) nextBtn.disabled = state.page >= totalPage;
+}
+
+function openRecoverLocalStorageModal() {
+  var state = window._recoverLocalStorageState;
+  if (!state) return;
+  openModal('<div class="alert alert-info">Ditemukan <b>' + state.items.length + '</b> jurnal di localStorage yang belum ada di database. Silakan review lalu pilih yang ingin di-recover.</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+    + '<input type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan..." oninput="stateRecoverLocalStorageSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
+    + '<select onchange="stateRecoverLocalStoragePerPage(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px">'
+    + '<option value="10"' + (state.perPage === 10 ? ' selected' : '') + '>10/baris</option>'
+    + '<option value="20"' + (state.perPage === 20 ? ' selected' : '') + '>20/baris</option>'
+    + '<option value="30"' + (state.perPage === 30 ? ' selected' : '') + '>30/baris</option>'
+    + '<option value="50"' + (state.perPage === 50 ? ' selected' : '') + '>50/baris</option>'
+    + '</select>'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#555">Tinggi List'
+    + '<input type="range" min="260" max="640" step="20" value="' + state.listHeight + '" oninput="stateRecoverLocalStorageHeight(this.value)">'
+    + '<span id="recover-ls-height-label" style="min-width:44px">' + state.listHeight + 'px</span></label>'
+    + '</div>'
+    + '<div id="recover-ls-summary" style="font-size:0.82rem;color:#555;margin-bottom:6px"></div>'
+    + '<div id="recover-ls-table-wrap" class="table-wrap" style="border:1px solid #edf1f7;border-radius:10px"></div>'
+    + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+    + '<div style="display:flex;gap:6px;align-items:center"><button id="recover-ls-prev" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(-1)">← Prev</button><span id="recover-ls-page-info" style="font-size:0.82rem;color:#555"></span><button id="recover-ls-next" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(1)">Next →</button></div>'
+    + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()">♻️ Recover Terpilih</button>'
+    + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button></div></div>',
+    '♻️ Recover Jurnal dari LocalStorage');
+  setModalLayout('wide');
+  renderRecoverLocalStorageList();
+}
+
+function stateRecoverLocalStorageSearch(val) {
+  if (!window._recoverLocalStorageState) return;
+  window._recoverLocalStorageState.query = val || '';
+  window._recoverLocalStorageState.page = 1;
+  renderRecoverLocalStorageList();
+}
+
+function stateRecoverLocalStoragePerPage(val) {
+  if (!window._recoverLocalStorageState) return;
+  window._recoverLocalStorageState.perPage = Math.max(5, parseInt(val, 10) || 20);
+  window._recoverLocalStorageState.page = 1;
+  renderRecoverLocalStorageList();
+}
+
+function stateRecoverLocalStorageHeight(val) {
+  if (!window._recoverLocalStorageState) return;
+  window._recoverLocalStorageState.listHeight = Math.max(260, parseInt(val, 10) || 400);
+  renderRecoverLocalStorageList();
+}
+
+function changeRecoverLocalStoragePage(step) {
+  if (!window._recoverLocalStorageState) return;
+  window._recoverLocalStorageState.page += step;
+  renderRecoverLocalStorageList();
+}
+
+function toggleRecoverLocalStorage(id, checked) {
+  if (!window._recoverLocalStorageState) return;
+  window._recoverLocalStorageState.selected[id] = !!checked;
+  renderRecoverLocalStorageList();
+}
+
+function toggleAllRecoverLocalStorage(checked) {
+  if (!window._recoverLocalStorageState) return;
+  var state = window._recoverLocalStorageState;
+  for (var i = 0; i < state.items.length; i++) {
+    state.selected[state.items[i].id] = !!checked;
+  }
+  renderRecoverLocalStorageList();
+}
+
+function lihatRecoverLocalStorageItem(id) {
+  var state = window._recoverLocalStorageState;
+  if (!state) return;
+  var j = state.items.find(function(x){ return x.id === id; });
+  if (!j) { showAlert('Data tidak ditemukan', 'warning'); return; }
+  openJurnalPreviewModal(j, '👁️ Preview Jurnal Recover', '<button class="btn btn-outline" onclick="openRecoverLocalStorageModal()">⬅ Kembali</button>');
+}
+
+async function prosesRecoverLocalStorageTerpilih() {
+  var state = window._recoverLocalStorageState;
+  if (!state) return;
+  var toRestore = state.items.filter(function(j){ return state.selected[j.id]; });
+  if (!toRestore.length) { showAlert('Pilih minimal 1 transaksi untuk recover', 'warning'); return; }
+  if (!confirm('Recover ' + toRestore.length + ' jurnal terpilih ke database?')) return;
+
+  showLoading(true);
+  var count = 0;
+  for (var i = 0; i < toRestore.length; i++) {
+    try {
+      await KDB.save('jurnal', toRestore[i].id, toRestore[i]);
+      count++;
+    } catch(e) { console.warn('Recover error:', e); }
+  }
+  showLoading(false);
+  closeModalDirect();
+  showAlert('Berhasil recover ' + count + ' jurnal dari localStorage ke Firebase!');
+  navigate('jurnal-umum');
+}
+
 async function recoverDariLocalStorage() {
   // Kumpulkan semua jurnal dari localStorage individual keys
   var recovered = [];
@@ -2508,19 +2790,20 @@ async function recoverDariLocalStorage() {
 
   if (toRestore.length === 0) { showAlert('Semua data di localStorage sudah ada di database. Tidak perlu recover.', 'info'); return; }
 
-  if (!confirm('Ditemukan ' + toRestore.length + ' jurnal di localStorage yang TIDAK ada di database.\n\n(Dari total ' + recovered.length + ' jurnal di cache)\n\nRestore semua ke Firebase?')) return;
-
-  showLoading(true);
-  var count = 0;
+  var selected = {};
   for (var i = 0; i < toRestore.length; i++) {
-    try {
-      await KDB.save('jurnal', toRestore[i].id, toRestore[i]);
-      count++;
-    } catch(e) { console.warn('Recover error:', e); }
+    selected[toRestore[i].id] = true;
   }
-  showLoading(false);
-  showAlert('Berhasil recover ' + count + ' jurnal dari localStorage ke Firebase!');
-  navigate('jurnal-umum');
+  window._recoverLocalStorageState = {
+    items: toRestore.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); }),
+    selected: selected,
+    query: '',
+    perPage: 20,
+    page: 1,
+    listHeight: 420,
+    totalRecoveredInCache: recovered.length
+  };
+  openRecoverLocalStorageModal();
 }
 
 // ===== INTEGRASI BATCH: Permohonan Dana & Dana Masuk → Jurnal =====
@@ -3822,11 +4105,9 @@ async function simpanEditJurnal(id) {
   showAlert('Jurnal ' + id + ' berhasil diperbarui! Akun: ' + newLines.map(function(l){return l.akun;}).join(', '));
   if (window._returnToAnalisa) {
     window._returnToAnalisa = false;
-    // Tandai transaksi yang sudah diedit sebagai "benar" agar tidak muncul lagi di analisa selisih
+    // Tandai transaksi yang sudah diedit sebagai resolved agar sinkron lintas-device.
     if (window._editedSelisihId) {
-      var marked = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
-      if (marked.indexOf(window._editedSelisihId) < 0) marked.push(window._editedSelisihId);
-      localStorage.setItem('k_selisih_benar', JSON.stringify(marked));
+      await markAnalysisIssuesResolved('saldo-selisih', [window._editedSelisihId]);
       window._editedSelisihId = null;
     }
     setTimeout(function(){ analisaSelisihSaldo(true); }, 800);
@@ -5746,6 +6027,175 @@ async function renderSaldoHariIni() {
 
 // ===== ANALISA SELISIH SALDO =====
 var _lastSaldoReal = 0;
+var ANALYSIS_RESOLVED_SETTING_KEY = 'analysis_resolved_issues';
+
+function _analysisIssueKey(module, id) {
+  return String(module || 'general') + ':' + String(id || '-');
+}
+
+function getVerifierDeviceLabel() {
+  var ua = (navigator.userAgent || '').toLowerCase();
+  if (ua.indexOf('android') >= 0) return 'Android';
+  if (ua.indexOf('iphone') >= 0 || ua.indexOf('ipad') >= 0 || ua.indexOf('ios') >= 0) return 'iOS';
+  if (ua.indexOf('windows') >= 0) return 'Windows';
+  if (ua.indexOf('mac os') >= 0 || ua.indexOf('macintosh') >= 0) return 'macOS';
+  if (ua.indexOf('linux') >= 0) return 'Linux';
+  return 'Unknown Device';
+}
+
+function fmtDateTime(ts) {
+  if (!ts) return '-';
+  try {
+    return new Date(ts).toLocaleString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return String(ts);
+  }
+}
+
+function applyAnalysisVerificationHistoryFilter() {
+  var range = ((document.getElementById('analysis-history-range') || {}).value || 'all');
+  var userFilter = (((document.getElementById('analysis-history-user') || {}).value || '') + '').trim().toLowerCase();
+  var rows = document.querySelectorAll('#analysis-history-body tr');
+  var now = Date.now();
+  var fromTs = 0;
+  if (range === 'today') {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    fromTs = d.getTime();
+  } else if (range === '7d') {
+    fromTs = now - (7 * 24 * 60 * 60 * 1000);
+  } else if (range === '30d') {
+    fromTs = now - (30 * 24 * 60 * 60 * 1000);
+  }
+
+  var visible = 0;
+  rows.forEach(function(row) {
+    var ts = parseInt(row.getAttribute('data-ts') || '0', 10);
+    var user = (row.getAttribute('data-user') || '').toLowerCase();
+    var okRange = (range === 'all') || (ts >= fromTs);
+    var okUser = !userFilter || user.indexOf(userFilter) >= 0;
+    var show = okRange && okUser;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  var counter = document.getElementById('analysis-history-count');
+  if (counter) counter.textContent = visible + ' item tampil';
+}
+
+function resetAnalysisVerificationHistoryFilter() {
+  var rangeEl = document.getElementById('analysis-history-range');
+  var userEl = document.getElementById('analysis-history-user');
+  if (rangeEl) rangeEl.value = 'all';
+  if (userEl) userEl.value = '';
+  applyAnalysisVerificationHistoryFilter();
+}
+
+function buildAnalysisVerificationHistoryHtml(map, module, maxItems) {
+  var rows = [];
+  Object.keys(map || {}).forEach(function(key) {
+    var item = map[key] || {};
+    if (item.module !== module || item.status !== 'resolved') return;
+    rows.push(item);
+  });
+  rows.sort(function(a, b) {
+    return (b.resolvedAt || '').localeCompare(a.resolvedAt || '');
+  });
+  if (!rows.length) {
+    return '<div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;font-size:0.8rem;color:#64748b">Belum ada riwayat verifikasi error.</div>';
+  }
+
+  var limit = maxItems || 12;
+  var listHtml = rows.slice(0, limit).map(function(r) {
+    var ts = Date.parse(r.resolvedAt || '') || 0;
+    var usr = String(r.resolvedBy || '-').toLowerCase();
+    return '<tr data-ts="' + ts + '" data-user="' + escapeHtml(usr) + '">' 
+      + '<td style="font-family:monospace">' + escapeHtml(r.id || '-') + '</td>'
+      + '<td>' + escapeHtml(r.resolvedBy || '-') + '</td>'
+      + '<td>' + escapeHtml(r.resolvedDevice || '-') + '</td>'
+      + '<td>' + fmtDateTime(r.resolvedAt) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  return '<div style="margin-top:12px">'
+    + '<div style="font-weight:700;color:#1a237e;margin-bottom:6px">📜 Riwayat Verifikasi Error</div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<select id="analysis-history-range" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:7px" onchange="applyAnalysisVerificationHistoryFilter()">'
+    + '<option value="all">Semua Periode</option>'
+    + '<option value="today">Hari Ini</option>'
+    + '<option value="7d">7 Hari</option>'
+    + '<option value="30d">30 Hari</option>'
+    + '</select>'
+    + '<input id="analysis-history-user" placeholder="Filter verifier..." style="padding:6px 10px;border:1px solid #d1d5db;border-radius:7px;min-width:160px" oninput="applyAnalysisVerificationHistoryFilter()">'
+    + '<button class="btn btn-xs btn-outline" onclick="resetAnalysisVerificationHistoryFilter()">Reset</button>'
+    + '<span id="analysis-history-count" style="font-size:0.75rem;color:#6b7280">' + Math.min(rows.length, limit) + ' item tampil</span>'
+    + '</div>'
+    + '<div class="table-wrap" style="max-height:200px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px">'
+    + '<table style="width:100%;font-size:0.78rem"><thead><tr style="background:#f8fafc"><th>ID Jurnal</th><th>Verifier</th><th>Perangkat</th><th>Waktu</th></tr></thead><tbody id="analysis-history-body">'
+    + listHtml
+    + '</tbody></table></div>'
+    + (rows.length > limit ? '<div style="font-size:0.75rem;color:#6b7280;margin-top:4px">Menampilkan ' + limit + ' dari ' + rows.length + ' riwayat verifikasi terbaru.</div>' : '')
+    + '</div>';
+}
+
+async function getResolvedAnalysisIssueMap() {
+  var map = await KDB.getSetting(ANALYSIS_RESOLVED_SETTING_KEY, {});
+  if (!map || typeof map !== 'object' || Array.isArray(map)) map = {};
+
+  // One-time migration from legacy localStorage marker.
+  var legacy = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
+  if (legacy.length > 0) {
+    var changed = false;
+    legacy.forEach(function(id) {
+      if (!id) return;
+      var key = _analysisIssueKey('saldo-selisih', id);
+      if (!map[key]) {
+        map[key] = {
+          module: 'saldo-selisih',
+          id: id,
+          status: 'resolved',
+          resolvedAt: new Date().toISOString(),
+          resolvedBy: (KU && KU.username) ? KU.username : 'system',
+          resolvedDevice: getVerifierDeviceLabel()
+        };
+        changed = true;
+      }
+    });
+    if (changed) await KDB.saveSetting(ANALYSIS_RESOLVED_SETTING_KEY, map);
+    localStorage.removeItem('k_selisih_benar');
+  }
+  return map;
+}
+
+async function markAnalysisIssuesResolved(module, ids) {
+  var list = (ids || []).filter(function(id) { return !!id && id !== '-'; });
+  if (!list.length) return;
+  var map = await getResolvedAnalysisIssueMap();
+  list.forEach(function(id) {
+    map[_analysisIssueKey(module, id)] = {
+      module: module,
+      id: id,
+      status: 'resolved',
+      resolvedAt: new Date().toISOString(),
+      resolvedBy: (KU && KU.username) ? KU.username : 'system',
+      resolvedDevice: getVerifierDeviceLabel()
+    };
+  });
+  await KDB.saveSetting(ANALYSIS_RESOLVED_SETTING_KEY, map);
+}
+
+function isAnalysisIssueResolved(map, module, id) {
+  if (!id || id === '-') return false;
+  var item = map[_analysisIssueKey(module, id)];
+  return !!(item && item.status === 'resolved');
+}
+
 async function analisaSelisihSaldo(skipPrompt) {
   var kasAkun = '1-1101-2'; // Kas dan Bank Mandiri
   var actualBalances = await getStoredBankActualBalances([kasAkun]);
@@ -5766,7 +6216,7 @@ async function analisaSelisihSaldo(skipPrompt) {
   var saldoSistem = (fd.saldo[kasAkun] || {}).net || 0;
   var selisih = saldoSistem - saldoReal;
 
-  // Analisa penyebab selisih
+  // Deteksi penyebab selisih
   var issues = [];
 
   // 1. Cek jurnal yang debit DAN kredit ke akun yang sama (double entry salah)
@@ -5823,7 +6273,7 @@ async function analisaSelisihSaldo(skipPrompt) {
       if ((l.akun||'').startsWith('5-') && (parseFloat(l.debit)||0) > 0 && (parseFloat(l.debit)||0) <= 500000) hasBebanKecil = true;
       if (l.akun === kasAkun && (parseFloat(l.kredit)||0) > 0 && (parseFloat(l.kredit)||0) <= 500000) kreditMandiri += parseFloat(l.kredit)||0;
     });
-    // Kalau ada beban kecil (<=500rb) yang kredit langsung dari Mandiri, mungkin seharusnya dari PC
+    // Flag transaksi kecil (<=500rb) yang langsung kredit dari Mandiri sebagai kandidat salah akun.
     // Hanya flag jika sumbernya bukan import-sheets (karena itu memang dari bank)
     if (hasBebanKecil && kreditMandiri > 0 && j.sumber !== 'import-sheets') {
       pcKreditDariMandiri += kreditMandiri;
@@ -5845,24 +6295,21 @@ async function analisaSelisihSaldo(skipPrompt) {
       // Tambahkan transaksi pertama jika belum ditambahkan
       if (!addedFirst[key]) {
         var first = seenData[key];
-        issues.push({ tipe: '🔄 Kemungkinan duplikat', id: first.id, tanggal: first.tanggal, ket: first.keterangan, nominal: parseFloat(first.totalDebit)||0, detail: 'Sama dengan jurnal ' + j.id });
+        issues.push({ tipe: '🔄 Duplikat jurnal terdeteksi', id: first.id, tanggal: first.tanggal, ket: first.keterangan, nominal: parseFloat(first.totalDebit)||0, detail: 'Duplikat dengan jurnal ' + j.id });
         addedFirst[key] = true;
       }
       // Tambahkan transaksi kedua/selanjutnya
-      issues.push({ tipe: '🔄 Kemungkinan duplikat', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Sama dengan jurnal ' + seen[key] });
+      issues.push({ tipe: '🔄 Duplikat jurnal terdeteksi', id: j.id, tanggal: j.tanggal, ket: j.keterangan, nominal: parseFloat(j.totalDebit)||0, detail: 'Duplikat dengan jurnal ' + seen[key] });
     } else {
       seen[key] = j.id;
       seenData[key] = j;
     }
   });
 
-  // 4. Cek saldo awal
+  // 4. Ambil saldo awal sebagai baseline laporan (bukan error otomatis)
   var tahun = new Date().getFullYear();
   var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahun, {});
   var saldoAwalMandiri = parseFloat(saldoAwalData[kasAkun]) || 0;
-  if (saldoAwalMandiri > 0) {
-    issues.push({ tipe: 'ℹ️ Saldo Awal', id: '-', tanggal: tahun + '-01-01', ket: 'Saldo Awal yang di-set', nominal: saldoAwalMandiri, detail: 'Pastikan sesuai dengan saldo real per 1 Januari ' + tahun });
-  }
 
   // 5. Cek jurnal yatim (orphan) - jurnals linked to deleted permohonan/dana masuk
   var allPD = await KDB.getAll('permohonan');
@@ -5938,7 +6385,7 @@ async function analisaSelisihSaldo(skipPrompt) {
     html += '<div style="margin:12px 0;padding:10px 14px;background:#fff3e0;border-radius:8px;border-left:4px solid #ff9800;font-size:0.82rem">'
       + '<b>💵 Dampak Petty Cash ke saldo Mandiri:</b><br>'
       + (pcDebitKeMandiri > 0 ? '• Jurnal PC yang debit ke Mandiri (tidak wajar): <b class="text-red">' + fmtRp(pcDebitKeMandiri) + '</b><br>' : '')
-      + (pcKreditDariMandiri > 0 ? '• Pengeluaran kecil (≤500rb) langsung kredit Mandiri (mungkin harusnya dari PC): <b>' + fmtRp(pcKreditDariMandiri) + '</b><br>' : '')
+        + (pcKreditDariMandiri > 0 ? '• Transaksi kecil (≤500rb) yang langsung kredit Mandiri: <b>' + fmtRp(pcKreditDariMandiri) + '</b><br>' : '')
       + '</div>';
   }
 
@@ -5952,23 +6399,37 @@ async function analisaSelisihSaldo(skipPrompt) {
       + '</div>';
   }
 
-  // Filter issues yang sudah ditandai "benar"
-  var markedBenar = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
-  issues = issues.filter(function(issue) { return markedBenar.indexOf(issue.id) < 0; });
+  // Tandai issue yang sudah diverifikasi lintas-device.
+  var resolvedMap = await getResolvedAnalysisIssueMap();
+  issues = issues.map(function(issue) {
+    var item = resolvedMap[_analysisIssueKey('saldo-selisih', issue.id)] || null;
+    return Object.assign({}, issue, {
+      _resolved: !!(item && item.status === 'resolved'),
+      _resolvedBy: item ? (item.resolvedBy || '-') : '-',
+      _resolvedAt: item ? (item.resolvedAt || '') : '',
+      _resolvedDevice: item ? (item.resolvedDevice || '-') : '-'
+    });
+  });
+
+  var unresolvedCount = issues.filter(function(issue) { return !issue._resolved; }).length;
+  var resolvedCount = issues.filter(function(issue) { return !!issue._resolved; }).length;
 
   if (issues.length) {
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
-      + '<div style="font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' potensi masalah:</div>'
+      + '<div style="font-weight:600;color:#c62828">🔍 Ditemukan ' + issues.length + ' error transaksi terdeteksi:</div>'
       + '<div style="display:flex;gap:6px;align-items:center">'
       + '<label style="font-size:0.78rem;cursor:pointer"><input type="checkbox" id="selisih-chk-all" onchange="toggleSelisihCheckAll(this.checked)"> Pilih Semua</label>'
+      + '<label style="font-size:0.78rem;cursor:pointer"><input type="checkbox" id="selisih-show-resolved" onchange="applySelisihIssueVisibility()"> Tampilkan yang sudah diverifikasi</label>'
       + '<button class="btn btn-xs btn-success" onclick="batchBenarSelisih()">✓ Benar Semua Terpilih</button>'
       + '<button class="btn btn-xs btn-danger" onclick="batchHapusSelisih()">🗑️ Hapus Semua Terpilih</button>'
       + '</div></div>';
-    html += '<div style="max-height:400px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th style="width:28px"><input type="checkbox" id="selisih-chk-all2" onchange="toggleSelisihCheckAll(this.checked)"></th><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Aksi</th></tr></thead><tbody>';
+    html += '<div style="font-size:0.77rem;color:#6b7280;margin-bottom:6px">Aktif: ' + unresolvedCount + ' item | Sudah diverifikasi: ' + resolvedCount + ' item</div>';
+    html += '<div style="max-height:400px;overflow-y:auto"><table style="width:100%;font-size:0.78rem;border-collapse:collapse"><thead><tr style="background:#f5f5f5"><th style="width:28px"><input type="checkbox" id="selisih-chk-all2" onchange="toggleSelisihCheckAll(this.checked)"></th><th>Tipe</th><th>Tanggal</th><th>Keterangan</th><th>Nominal</th><th>Detail</th><th>Status Verifikasi</th><th>Aksi</th></tr></thead><tbody>';
     issues.forEach(function(issue) {
-      var chkHtml = (issue.id && issue.id !== '-') ? '<input type="checkbox" class="selisih-chk" value="' + issue.id + '">' : '';
+      var isResolved = !!issue._resolved;
+      var chkHtml = (!isResolved && issue.id && issue.id !== '-') ? '<input type="checkbox" class="selisih-chk" value="' + issue.id + '">' : '';
       var aksiHtml = '';
-      if (issue.id && issue.id !== '-') {
+      if (!isResolved && issue.id && issue.id !== '-') {
         aksiHtml = '<div style="display:flex;gap:3px;flex-wrap:wrap">'
           + '<button class="btn btn-xs btn-info" onclick="editSelisihJurnal(\'' + issue.id + '\')">Edit</button>'
           + '<button class="btn btn-xs btn-warning" onclick="koreksiSelisihJurnal(\'' + issue.id + '\')">Koreksi</button>'
@@ -5977,10 +6438,16 @@ async function analisaSelisihSaldo(skipPrompt) {
           + '<button class="btn btn-xs btn-danger" onclick="hapusSelisihJurnal(\'' + issue.id + '\')">Hapus</button>'
           + '<button class="btn btn-xs" style="background:#9c27b0;color:#fff" onclick="cekDuplikatTransaksi(\'' + issue.id + '\')">Cek Duplikat</button>'
           + '</div>';
+      } else if (isResolved) {
+        aksiHtml = '<span class="badge badge-success">Sudah Diverifikasi</span>';
       }
-      html += '<tr style="border-bottom:1px solid #eee"><td>' + chkHtml + '</td><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666;max-width:140px">' + (issue.detail||'') + '</td><td>' + aksiHtml + '</td></tr>';
+      var statusHtml = isResolved
+        ? '<span class="badge badge-success">✅ Diverifikasi</span><div style="font-size:0.7rem;color:#666;margin-top:3px">oleh ' + escapeHtml(issue._resolvedBy || '-') + '<br>' + fmtDateTime(issue._resolvedAt) + '<br>' + escapeHtml(issue._resolvedDevice || '-') + '</div>'
+        : '<span class="badge badge-warning">Belum Diverifikasi</span>';
+      html += '<tr class="selisih-row" data-resolved="' + (isResolved ? '1' : '0') + '" style="border-bottom:1px solid #eee"><td>' + chkHtml + '</td><td>' + issue.tipe + '</td><td>' + (issue.tanggal||'-') + '</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">' + (issue.ket||'-') + '</td><td class="text-right">' + fmtRp(issue.nominal) + '</td><td style="font-size:0.72rem;color:#666;max-width:140px">' + (issue.detail||'') + '</td><td style="min-width:170px">' + statusHtml + '</td><td>' + aksiHtml + '</td></tr>';
     });
     html += '</tbody></table></div>';
+    html += '<div id="selisih-visible-info" style="font-size:0.75rem;color:#6b7280;margin-top:6px"></div>';
 
     // Tombol koreksi saldo sekaligus
     html += '<div style="margin-top:12px;padding:10px 14px;background:#e8f5e9;border-radius:8px;border-left:4px solid #4caf50">'
@@ -5988,8 +6455,10 @@ async function analisaSelisihSaldo(skipPrompt) {
       + '<button class="btn btn-sm btn-warning" onclick="koreksiSaldoMandiri(' + selisih + ')" style="margin-left:8px">🔧 Buat Jurnal Koreksi Selisih ' + fmtRp(Math.abs(selisih)) + '</button>'
       + '</div>';
   } else {
-    html += '<div class="alert alert-success">Tidak ditemukan masalah yang jelas. Selisih mungkin dari transaksi yang belum dicatat di sistem.</div>';
+    html += '<div class="alert alert-success">Tidak ada error transaksi yang terdeteksi. Jika selisih masih ada, cek mutasi bank yang belum tercatat sebelum koreksi saldo.</div>';
   }
+
+  html += buildAnalysisVerificationHistoryHtml(resolvedMap, 'saldo-selisih', 15);
 
   html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;font-size:0.8rem;color:#666">'
     + '<b>Tips mengatasi selisih:</b><ul style="margin:4px 0;padding-left:20px">'
@@ -6000,6 +6469,10 @@ async function analisaSelisihSaldo(skipPrompt) {
     + '</ul></div>';
 
   openModal(html, '🔍 Analisa Selisih Saldo Bank Mandiri');
+  setTimeout(function() {
+    applySelisihIssueVisibility();
+    applyAnalysisVerificationHistoryFilter();
+  }, 0);
 }
 
 // Edit jurnal dari modal analisa — setelah selesai edit, kembali ke modal analisa
@@ -6011,14 +6484,30 @@ async function editSelisihJurnal(id) {
   editJurnal(id);
 }
 
-// Tandai jurnal sebagai "benar" (bukan masalah) — simpan ke localStorage agar tidak muncul lagi
-function tandaiBenarSelisih(id) {
-  var marked = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
-  if (marked.indexOf(id) < 0) marked.push(id);
-  localStorage.setItem('k_selisih_benar', JSON.stringify(marked));
-  showAlert('Ditandai sebagai benar — tidak akan muncul lagi di analisa selisih.');
+// Tandai jurnal sebagai "sudah diverifikasi" dan sinkron lintas-device.
+async function tandaiBenarSelisih(id) {
+  await markAnalysisIssuesResolved('saldo-selisih', [id]);
+  showAlert('Ditandai sudah diverifikasi dan disinkronkan ke semua perangkat.');
   closeModalDirect();
   setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
+}
+
+function applySelisihIssueVisibility() {
+  var showResolved = !!((document.getElementById('selisih-show-resolved') || {}).checked);
+  var rows = document.querySelectorAll('.selisih-row');
+  var visible = 0;
+  var hiddenResolved = 0;
+  rows.forEach(function(row) {
+    var isResolved = row.getAttribute('data-resolved') === '1';
+    var show = showResolved || !isResolved;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+    if (!show && isResolved) hiddenResolved++;
+  });
+  var info = document.getElementById('selisih-visible-info');
+  if (info) {
+    info.textContent = 'Menampilkan ' + visible + ' item' + (hiddenResolved > 0 ? ' • ' + hiddenResolved + ' item diverifikasi disembunyikan' : '');
+  }
 }
 
 function toggleSelisihCheckAll(checked) {
@@ -6029,16 +6518,14 @@ function toggleSelisihCheckAll(checked) {
   if (all2) all2.checked = checked;
 }
 
-function batchBenarSelisih() {
+async function batchBenarSelisih() {
   var checked = document.querySelectorAll('.selisih-chk:checked');
   if (!checked.length) { showAlert('Pilih minimal 1 item!', 'warning'); return; }
   if (!confirm('⚠️ KONFIRMASI\n\nAnda akan menandai ' + checked.length + ' transaksi sebagai BENAR.\n\nPastikan Anda sudah mengecek kembali seluruh transaksi yang dipilih dan yakin bahwa data tersebut sudah sesuai.\n\nLanjutkan?')) return;
-  var marked = JSON.parse(localStorage.getItem('k_selisih_benar') || '[]');
-  checked.forEach(function(cb) {
-    if (marked.indexOf(cb.value) < 0) marked.push(cb.value);
-  });
-  localStorage.setItem('k_selisih_benar', JSON.stringify(marked));
-  showAlert(checked.length + ' transaksi ditandai sebagai benar.');
+  var ids = [];
+  checked.forEach(function(cb) { ids.push(cb.value); });
+  await markAnalysisIssuesResolved('saldo-selisih', ids);
+  showAlert(checked.length + ' transaksi ditandai sudah diverifikasi dan disinkronkan.');
   closeModalDirect();
   setTimeout(function(){ analisaSelisihSaldo(true); }, 300);
 }
@@ -7575,11 +8062,11 @@ async function analisaKoreksiBank(kode, saldoSistem, saldoAktual) {
       + '</div>'
       + (categorySummaryHtml ? '<div class="bankrec-mini-grid">' + categorySummaryHtml + '</div>' : '')
       + '<div id="bankrec-analysis-root" class="bankrec-analysis-shell">'
-      + (findings.length ? '<div class="alert alert-warning">Sistem menemukan <b>' + findings.length + '</b> transaksi/relasi yang perlu dibetulkan dulu. Saldo awal tidak dikoreksi langsung.</div>' : '<div class="alert alert-success">Tidak ada temuan transaksi yang jelas. Koreksi saldo awal boleh dipakai sebagai fallback terakhir.</div>')
+      + (findings.length ? '<div class="alert alert-warning">Sistem menemukan <b>' + findings.length + '</b> error transaksi/relasi yang perlu dibetulkan dulu. Saldo awal tidak dikoreksi langsung.</div>' : '<div class="alert alert-success">Tidak ada error transaksi terdeteksi. Koreksi saldo awal boleh dipakai sebagai fallback terakhir.</div>')
       + (findings.length ? groupedHtml : '')
       + '<div id="bankrec-analysis-empty" class="empty-state bankrec-empty" style="display:none;padding:18px 12px">Tidak ada temuan yang cocok dengan filter saat ini.</div>'
       + '</div>'
-      + (analisa.pendingJurnal.length ? '<div style="margin-top:12px;background:#fff8e1;border-left:4px solid #ff9800;border-radius:8px;padding:12px"><div style="font-weight:700;color:#e65100;margin-bottom:8px">⏳ Transaksi 7 hari terakhir yang mungkin masih proses bank</div><div class="table-wrap" style="max-height:180px;overflow-y:auto"><table style="font-size:0.8rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>' + pendingRows + '</tbody></table></div></div>' : '')
+      + (analisa.pendingJurnal.length ? '<div style="margin-top:12px;background:#fff8e1;border-left:4px solid #ff9800;border-radius:8px;padding:12px"><div style="font-weight:700;color:#e65100;margin-bottom:8px">⏳ Transaksi 7 hari terakhir dengan status pending bank</div><div class="table-wrap" style="max-height:180px;overflow-y:auto"><table style="font-size:0.8rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>' + pendingRows + '</tbody></table></div></div>' : '')
       + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
       + (findings.length ? '' : '<button class="btn btn-warning" onclick="koreksiSaldoAwalBank(\'' + kode + '\',' + saldoSistem + ',' + saldoAktual + ');closeModalDirect()">🔧 Fallback Koreksi Saldo Awal</button>')
       + '<button class="btn btn-info" onclick="viewBankRecDetail(\'' + kode + '\',' + saldoSistem + ');closeModalDirect()">📚 Lihat Detail Rekening</button>'
@@ -7617,7 +8104,7 @@ async function viewBankRecDetail(kode, saldoSistem) {
     });
   });
 
-  // Deteksi jurnal "pending" — 7 hari terakhir yang mungkin belum masuk bank
+  // Deteksi jurnal "pending" — 7 hari terakhir berstatus belum final di bank
   var now = new Date();
   var weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
   var weekAgoStr = weekAgo.toISOString().split('T')[0];
@@ -7642,14 +8129,14 @@ async function viewBankRecDetail(kode, saldoSistem) {
       + '<tr><td><b>Saldo Aktual Rekening</b></td><td class="text-right fw-bold text-green">' + fmtRp(savedActual) + '</td></tr>'
       + '<tr style="background:#ffebee"><td><b>Selisih</b></td><td class="text-right fw-bold text-red">' + fmtRp(selisih) + '</td></tr>'
       + '</tbody></table>'
-      + '<div style="margin-top:10px;font-size:0.82rem;color:#555"><b>Kemungkinan penyebab:</b><ul style="margin:4px 0 0 16px;line-height:1.8">'
+      + '<div style="margin-top:10px;font-size:0.82rem;color:#555"><b>Penyebab utama yang terverifikasi:</b><ul style="margin:4px 0 0 16px;line-height:1.8">'
       + (selisih > 0 ? '<li>Ada jurnal dana masuk yang belum realisasi di rekening (pending transfer)</li><li>Saldo awal yang di-set terlalu besar</li><li>Jurnal salah akun (harusnya akun lain)</li>' : '<li>Ada transaksi masuk di bank yang belum dijurnal</li><li>Saldo awal terlalu kecil</li>')
       + '</ul></div></div>';
 
     // Jurnal pending (7 hari terakhir)
     if (pendingJurnal.length > 0) {
       breakdownHtml += '<div style="margin:10px 0;padding:12px;background:#e3f2fd;border-radius:8px;border-left:4px solid #1976d2">'
-        + '<div style="font-weight:700;color:#1565c0;margin-bottom:6px">⏳ Kemungkinan Pending — Jurnal 7 Hari Terakhir (' + pendingJurnal.length + ' transaksi)</div>'
+        + '<div style="font-weight:700;color:#1565c0;margin-bottom:6px">⏳ Status Pending Bank — Jurnal 7 Hari Terakhir (' + pendingJurnal.length + ' transaksi)</div>'
         + '<div style="font-size:0.82rem;margin-bottom:6px">Debit (masuk): <b class="text-green">' + fmtRp(pendingDebit) + '</b> | Kredit (keluar): <b class="text-red">' + fmtRp(pendingKredit) + '</b> | Net: <b>' + fmtRp(pendingDebit - pendingKredit) + '</b></div>'
         + '<div class="table-wrap" style="max-height:150px;overflow-y:auto"><table style="font-size:0.8rem"><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead><tbody>'
         + pendingJurnal.slice(0,10).map(function(j) {
@@ -7657,7 +8144,7 @@ async function viewBankRecDetail(kode, saldoSistem) {
           return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id).substring(0,15) + '</td><td>' + (j.keterangan||'-').substring(0,30) + '</td><td class="text-green">' + (d?fmtRp(d):'-') + '</td><td class="text-red">' + (k?fmtRp(k):'-') + '</td></tr>';
         }).join('')
         + '</tbody></table></div>'
-        + '<div style="font-size:0.78rem;color:#666;margin-top:4px">Transaksi ini mungkin belum masuk/keluar di rekening bank karena masih dalam proses.</div></div>';
+        + '<div style="font-size:0.78rem;color:#666;margin-top:4px">Transaksi ini belum masuk/keluar di rekening bank karena masih dalam proses settlement.</div></div>';
     }
   }
 
@@ -7885,7 +8372,7 @@ async function hapusJurnalOnlyTerpilih() {
   var ids = [];
   checked.forEach(function(chk){ ids.push(chk.value); });
   if (ids.length === 0) { showAlert('Centang dulu transaksi yang mau dihapus', 'warning'); return; }
-  if (!confirm('Hapus ' + ids.length + ' jurnal yang dipilih?\n\nJurnal ini ada di sistem tapi tidak ada di mutasi bank.\nKemungkinan salah input.\n\nTindakan TIDAK BISA DIBATALKAN!')) return;
+  if (!confirm('Hapus ' + ids.length + ' jurnal yang dipilih?\n\nJurnal ini ada di sistem tapi tidak ada di mutasi bank.\nTerindikasi salah input.\n\nTindakan TIDAK BISA DIBATALKAN!')) return;
   showLoading(true);
   for (var i = 0; i < ids.length; i++) { await KDB.delete('jurnal', ids[i]); }
   await KDB.getAll('jurnal');
@@ -10287,7 +10774,7 @@ async function callOpenRouterChat(msg, apiKey) {
       + '1. Jika user bertanya/minta ANALISA → JAWAB dengan analisa dari data yang tersedia. JANGAN langsung menawarkan aksi.\n'
       + '2. Jika user EKSPLISIT minta aksi (buatkan jurnal, sinkronkan, hapus, fix, koreksi) → baru tambahkan ACTION.\n'
       + '3. JANGAN PERNAH menyarankan sinkronisasi petty cash kecuali user SECARA SPESIFIK minta soal petty cash.\n'
-      + '4. Jika user tanya soal selisih bank/mandiri/BNI → analisa dari data saldo akun yang tersedia, jelaskan kemungkinan penyebab.\n'
+      + '4. Jika user tanya soal selisih bank/mandiri/BNI → analisa dari data saldo akun yang tersedia, jelaskan penyebab utama yang terverifikasi.\n'
       + '5. Jawab SESUAI dengan apa yang ditanya. Jangan melenceng ke topik lain.\n'
       + '6. PAHAMI KONTEKS dari history chat sebelumnya. Jika user merujuk ke pesan/pertanyaan sebelumnya, gunakan konteks itu.\n\n'
       + 'KOSA KATA PERINTAH EKSEKUSI (jika user pakai kata-kata ini, artinya minta aksi):\n'
@@ -10305,7 +10792,7 @@ async function callOpenRouterChat(msg, apiKey) {
       + 'KNOWLEDGE BASE - CARA ANALISA SELISIH BANK:\n'
       + '- Saldo di Posisi Saldo Hari Ini = saldo_awal + semua jurnal (debit - kredit)\n'
       + '- Saldo di Buku Besar = sama (saldo awal + jurnal)\n'
-      + '- Jika selisih antara sistem vs aktual bank: penyebab kemungkinan:\n'
+      + '- Jika selisih antara sistem vs aktual bank: penyebab utama yang perlu diverifikasi:\n'
       + '  a) Saldo awal di-set terlalu besar/kecil → koreksi di Setup Saldo Awal\n'
       + '  b) Ada jurnal yang tercatat tapi belum realisasi di bank (pending)\n'
       + '  c) Ada transaksi di bank yang belum dijurnal\n'
@@ -10929,7 +11416,7 @@ async function runAIAnalysis() {
       var hiddenRows = duplicates.length > 10 ? duplicates.slice(10).map(function(d) { return '<tr class="dup-hidden-row" style="display:none;background:#fff8e1"><td><input type="checkbox" class="dup-chk" value="' + d.id2 + '" onchange="updateDupSelection()"></td><td>' + fmtDate(d.tanggal) + '</td><td>' + (d.ref||'-') + '</td><td>' + (d.ket||'-') + '</td><td>' + fmtRp(d.jumlah) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="tampilkanPasanganDuplikat(\'' + d.id1 + '\',\'' + d.id2 + '\')">👁️ Bandingkan</button> <button class="btn btn-xs btn-danger" onclick="hapusDuplikatJurnal(\'' + d.id2 + '\',\'' + d.id1 + '\')">Hapus Duplikat</button></td></tr>'; }).join('') : '';
       var showAllBtn = duplicates.length > 10 ? '<tr id="dup-show-all-row"><td colspan="6" style="text-align:center;padding:8px"><button class="btn btn-sm btn-outline" onclick="tampilkanSemuaDuplikat()">📋 Tampilkan Semua (' + duplicates.length + ' data duplikat)</button></td></tr>' : '';
 
-      warnings.push({ severity: 'warning', title: '⚠️ Kemungkinan Duplikasi (' + duplicates.length + ' pasang)', 
+      warnings.push({ severity: 'warning', title: '❌ Duplikasi Terdeteksi (' + duplicates.length + ' pasang)', 
         actionButtons: '<button class="btn btn-danger btn-sm" onclick="hapusSemuaDuplikat()">🗑️ Hapus Semua Duplikat (' + duplicates.length + ')</button>'
           + ' <button class="btn btn-danger btn-sm" onclick="hapusDuplikatTerpilih()" id="btn-hapus-dup-sel" style="display:none">🗑️ Hapus Terpilih</button>'
           + ' <button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button>'
@@ -10960,7 +11447,7 @@ async function runAIAnalysis() {
     if (totalPendapatan > 0) {
       var rasio = ((totalBeban / totalPendapatan) * 100).toFixed(1);
       if (parseFloat(rasio) > 120) {
-        warnings.push({ severity: 'danger', title: '💡 Beban Jauh Melebihi Pendapatan (Rasio ' + rasio + '%)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'lap-labarugi\')">📊 Lihat Laba Rugi</button> <button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal</button>', detail: '<p>Total Beban: <b class="text-red">' + fmtRp(totalBeban) + '</b></p><p>Total Pendapatan: <b class="text-green">' + fmtRp(totalPendapatan) + '</b></p><p>Rasio Beban/Pendapatan: <b>' + rasio + '%</b></p><p><b>Kemungkinan penyebab:</b></p><ul style="margin:4px 0 0 20px;font-size:0.85rem"><li>Pendapatan belum semua diinput ke Dana Masuk / Jurnal</li><li>Beban dari periode sebelumnya masih terbawa (belum tutup buku)</li><li>Terdapat transaksi petty cash yang belum terintegrasi jurnal</li></ul>', group: 'anomali' });
+        warnings.push({ severity: 'danger', title: '💡 Beban Jauh Melebihi Pendapatan (Rasio ' + rasio + '%)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'lap-labarugi\')">📊 Lihat Laba Rugi</button> <button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal</button>', detail: '<p>Total Beban: <b class="text-red">' + fmtRp(totalBeban) + '</b></p><p>Total Pendapatan: <b class="text-green">' + fmtRp(totalPendapatan) + '</b></p><p>Rasio Beban/Pendapatan: <b>' + rasio + '%</b></p><p><b>Penyebab utama yang perlu diverifikasi:</b></p><ul style="margin:4px 0 0 20px;font-size:0.85rem"><li>Pendapatan belum semua diinput ke Dana Masuk / Jurnal</li><li>Beban dari periode sebelumnya masih terbawa (belum tutup buku)</li><li>Terdapat transaksi petty cash yang belum terintegrasi jurnal</li></ul>', group: 'anomali' });
       } else if (parseFloat(rasio) > 100) {
         info.push('ℹ️ Beban sedikit melebihi pendapatan (rasio ' + rasio + '%) — normal jika masih awal periode');
       } else {
@@ -11288,7 +11775,7 @@ async function runAIAnalysis() {
     var todayStr = new Date().toISOString().slice(0,10);
     var futureJournals = allJurnal.filter(function(j) { return j.tanggal && j.tanggal > todayStr; });
     if (futureJournals.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanggal Masa Depan (' + futureJournals.length + ')', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button>', detail: futureJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Aksi</th>', group: 'anomali', recommendation: 'Jurnal dengan tanggal masa depan mungkin salah input. Periksa dan perbaiki jika diperlukan.' });
+      warnings.push({ severity: 'warning', title: '⚠️ Jurnal Tanggal Masa Depan (' + futureJournals.length + ')', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button>', detail: futureJournals.slice(0,10).map(function(j) { return '<tr><td>' + fmtDate(j.tanggal) + '</td><td>' + (j.noRef||j.id) + '</td><td>' + (j.keterangan||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editJurnal(\'' + j.id + '\')">Edit</button></td></tr>'; }).join(''), isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Aksi</th>', group: 'anomali', recommendation: 'Jurnal dengan tanggal masa depan terindikasi salah input. Periksa dan perbaiki jika diperlukan.' });
     }
     var datedJournals = allJurnal.filter(function(j) { return j.tanggal; }).sort(function(a,b) { return (a.tanggal||'').localeCompare(b.tanggal||''); });
     var largeGaps = [];
