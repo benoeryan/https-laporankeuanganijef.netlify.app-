@@ -2685,6 +2685,90 @@ async function renderJurnalTrashPage() {
 }
 
 // ===== RECOVER DATA DARI LOCALSTORAGE =====
+function collectRecoverLocalStorageItems() {
+  var itemMap = {};
+
+  function upsertItem(data, source) {
+    if (!data || !data.id || !data.tanggal) return;
+    var id = String(data.id);
+    var normalized = Object.assign({}, data, {
+      id: id,
+      _recoverSource: source,
+      _recoverStorageKey: source === 'trash' ? ('k_jurnal_trash_' + id) : ('k_jurnal_' + id)
+    });
+    var existing = itemMap[id];
+    if (!existing || source === 'trash') {
+      itemMap[id] = normalized;
+    }
+  }
+
+  for (var i = 0; i < localStorage.length; i++) {
+    var key = localStorage.key(i);
+    if (!key) continue;
+
+    if (key.indexOf('k_jurnal_dirty_') === 0 || key.indexOf('k_jurnal_trash_dirty_') === 0) {
+      continue;
+    }
+
+    if (key.indexOf('k_jurnal_trash_') === 0 && key !== 'k_jurnal_trash_all') {
+      try {
+        upsertItem(JSON.parse(localStorage.getItem(key)), 'trash');
+      } catch(e) {}
+      continue;
+    }
+
+    if (key.indexOf('k_jurnal_') === 0 && key !== 'k_jurnal_all' && key !== 'k_jurnal_trash_all') {
+      try {
+        upsertItem(JSON.parse(localStorage.getItem(key)), 'jurnal');
+      } catch(e) {}
+    }
+  }
+
+  return Object.keys(itemMap).map(function(id) { return itemMap[id]; });
+}
+
+async function buildRecoverLocalStorageState() {
+  var recovered = collectRecoverLocalStorageItems();
+  var existing = await KDB.getAll('jurnal');
+  var trash = await KDB.getAll('jurnal_trash');
+  var selected = {};
+
+  var items = recovered.map(function(item) {
+    var j = Object.assign({}, item);
+    var jId = String(j.id).toLowerCase();
+    var jNoRef = String(j.noRef || '').toLowerCase();
+
+    var exists = existing.some(function(ex) {
+      return String(ex.id).toLowerCase() === jId ||
+             (jNoRef && ex.noRef && String(ex.noRef).toLowerCase() === jNoRef && ex.tanggal === j.tanggal);
+    });
+    var inTrash = j._recoverSource === 'trash' || trash.some(function(tr) {
+      return String(tr.id).toLowerCase() === jId ||
+             (jNoRef && tr.noRef && String(tr.noRef).toLowerCase() === jNoRef && tr.tanggal === j.tanggal);
+    });
+
+    j.isDuplicate = exists;
+    j.isInTrash = inTrash;
+    if (!exists) {
+      selected[j.id] = true;
+    }
+    return j;
+  }).filter(function(j) {
+    return !j.isDuplicate || j.isInTrash;
+  }).sort(function(a, b) {
+    return String(b.tanggal || '').localeCompare(String(a.tanggal || ''));
+  });
+
+  return {
+    items: items,
+    selected: selected,
+    query: '',
+    perPage: 20,
+    page: 1,
+    listHeight: 420
+  };
+}
+
 function renderRecoverLocalStorageList() {
   var state = window._recoverLocalStorageState;
   if (!state) return;
@@ -2707,10 +2791,10 @@ function renderRecoverLocalStorageList() {
       var checkboxCol = '<td><input type="checkbox"' + checked + ' onchange="toggleRecoverLocalStorage(\'' + j.id + '\', this.checked)"></td>';
     
       var refCol = escapeHtml(j.noRef || j.id || '-');
-      if (j.isDuplicate) {
-        refCol += ' <span style="color:#2e7d32;font-weight:bold" title="Sudah Sinkron di Database">✅</span>';
-      } else if (j.isInTrash) {
+      if (j.isInTrash) {
         refCol += ' <span style="color:#d32f2f;font-weight:bold" title="Ada di Tempat Sampah">🗑️</span>';
+      } else if (j.isDuplicate) {
+        refCol += ' <span style="color:#2e7d32;font-weight:bold" title="Sudah Sinkron di Database">✅</span>';
       }
 
       var actions = '<button class="btn btn-xs btn-info" onclick="lihatRecoverLocalStorageItem(\'' + j.id + '\')">👁️ View</button> '
@@ -2732,12 +2816,11 @@ function renderRecoverLocalStorageList() {
 
     var info = document.getElementById('recover-ls-summary');
     var totalCount = state.items.length;
-    var candidates = state.items.filter(function(x){ return !x.isDuplicate && !x.isInTrash; });
+    var candidates = state.items.filter(function(x){ return !x.isDuplicate; });
     var candCount = candidates.length;
     var trashCount = state.items.filter(function(x){ return x.isInTrash; }).length;
-    var syncCount = totalCount - candCount - trashCount;
     var totalSelectedCount = state.items.filter(function(x){ return state.selected[x.id]; }).length;
-    if (info) info.textContent = 'Terpilih: ' + totalSelectedCount + ' | Kandidat Recover: ' + candCount + ' | Sudah Sinkron: ' + syncCount + ' | Tempat Sampah: ' + trashCount + ' | Total LocalStorage: ' + totalCount;
+    if (info) info.textContent = 'Terpilih: ' + totalSelectedCount + ' | Kandidat Recover: ' + candCount + ' | Dari Tempat Sampah: ' + trashCount + ' | Total Ditampilkan: ' + totalCount;
 
     var pageInfo = document.getElementById('recover-ls-page-info');
     if (pageInfo) pageInfo.textContent = 'Halaman ' + state.page + ' / ' + totalPage;
@@ -2753,7 +2836,7 @@ function renderRecoverLocalStorageList() {
 function openRecoverLocalStorageModal() {
   var state = window._recoverLocalStorageState;
   if (!state) return;
-  openModal('<div class="alert alert-info">Menampilkan semua data jurnal di localStorage. Jurnal yang belum ada di database ditandai dengan kotak centang dan bisa di-recover.</div>'
+  openModal('<div class="alert alert-info">Menampilkan data jurnal lokal yang belum sinkron atau masih ada di Tempat Sampah. Data yang selesai di-recover akan kembali ke Jurnal.</div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
     + '<input type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan..." oninput="stateRecoverLocalStorageSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
     + '<select onchange="stateRecoverLocalStoragePerPage(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px">'
@@ -2928,17 +3011,28 @@ async function simpanEditRecoverLocalStorageItem(id) {
   var updated = Object.assign({}, j, { tanggal: newTgl, noRef: newRef, keterangan: newKet, lines: newLines, totalDebit: totalD, totalKredit: totalK });
 
   // 1. Update individual key di localStorage
-  var individualKey = 'k_jurnal_' + id;
-  if (localStorage.getItem(individualKey)) {
-    localStorage.setItem(individualKey, JSON.stringify(updated));
+  var jurnalKey = 'k_jurnal_' + id;
+  var trashKey = 'k_jurnal_trash_' + id;
+  if (localStorage.getItem(jurnalKey)) {
+    localStorage.setItem(jurnalKey, JSON.stringify(updated));
   }
-  // 2. Update k_jurnal_all cache array di localStorage
+  if (localStorage.getItem(trashKey)) {
+    localStorage.setItem(trashKey, JSON.stringify(updated));
+  }
+
+  // 2. Update cache array di localStorage
   try {
     var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
     var foundIndex = allCache.findIndex(function(x) { return x.id === id; });
     if (foundIndex !== -1) {
       allCache[foundIndex] = updated;
       localStorage.setItem('k_jurnal_all', JSON.stringify(allCache));
+    }
+    var trashCache = JSON.parse(localStorage.getItem('k_jurnal_trash_all') || '[]');
+    var trashIndex = trashCache.findIndex(function(x) { return x.id === id; });
+    if (trashIndex !== -1) {
+      trashCache[trashIndex] = updated;
+      localStorage.setItem('k_jurnal_trash_all', JSON.stringify(trashCache));
     }
   } catch(e) {}
 
@@ -2962,16 +3056,22 @@ async function hapusRecoverLocalStorageItem(id) {
   if (!confirm('Apakah Anda yakin ingin menghapus jurnal ini dari localStorage? Tindakan ini tidak dapat dibatalkan.')) return;
   
   // 1. Hapus dari individual key di localStorage
-  var individualKey = 'k_jurnal_' + id;
-  localStorage.removeItem(individualKey);
+  localStorage.removeItem('k_jurnal_' + id);
+  localStorage.removeItem('k_jurnal_trash_' + id);
 
-  // 2. Hapus dari k_jurnal_all cache array di localStorage
+  // 2. Hapus dari cache array di localStorage
   try {
     var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
     var foundIndex = allCache.findIndex(function(x) { return x.id === id; });
     if (foundIndex !== -1) {
       allCache.splice(foundIndex, 1);
       localStorage.setItem('k_jurnal_all', JSON.stringify(allCache));
+    }
+    var trashCache = JSON.parse(localStorage.getItem('k_jurnal_trash_all') || '[]');
+    var trashIndex = trashCache.findIndex(function(x) { return x.id === id; });
+    if (trashIndex !== -1) {
+      trashCache.splice(trashIndex, 1);
+      localStorage.setItem('k_jurnal_trash_all', JSON.stringify(trashCache));
     }
   } catch(e) {}
 
@@ -3013,7 +3113,19 @@ async function prosesRecoverLocalStorageTerpilih() {
 
         delete item.isDuplicate;
         delete item.isInTrash;
+        delete item._recoverSource;
+        delete item._recoverStorageKey;
+        delete item.deletedAt;
+        delete item.deletedBy;
         await KDB.save('jurnal', item.id, item);
+        localStorage.removeItem('k_jurnal_trash_' + item.id);
+
+        // Also remove from state list in memory so it doesn't show up anymore
+        if (state) {
+          state.items = state.items.filter(function(x) { return x.id !== item.id; });
+          delete state.selected[item.id];
+        }
+
         count++;
       } catch(e) { console.warn('Recover error:', e); }
     });
@@ -3031,122 +3143,27 @@ async function prosesRecoverLocalStorageTerpilih() {
 }
 
 async function recoverDariLocalStorage() {
-  // Kumpulkan semua jurnal dari localStorage individual keys
-  var recovered = [];
-  for (var i = 0; i < localStorage.length; i++) {
-    var key = localStorage.key(i);
-    if (key && key.startsWith('k_jurnal_') && key !== 'k_jurnal_all' && key !== 'k_jurnal_trash_all') {
-      try {
-        var data = JSON.parse(localStorage.getItem(key));
-        if (data && data.id && data.tanggal) recovered.push(data);
-      } catch(e) {}
-    }
+  window._recoverLocalStorageState = await buildRecoverLocalStorageState();
+  if (!window._recoverLocalStorageState.items.length) {
+    showAlert('Tidak ada data jurnal lokal yang perlu di-recover.', 'warning');
+    return;
   }
-  // Juga cek k_jurnal_all
-  try {
-    var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
-    allCache.forEach(function(j) {
-      if (j && j.id && !recovered.find(function(r){ return r.id === j.id; })) recovered.push(j);
-    });
-  } catch(e) {}
-
-  if (recovered.length === 0) { showAlert('Tidak ada data jurnal di localStorage untuk di-recover', 'warning'); return; }
-
-  // Bandingkan dengan yang ada di Firebase
-  var existing = await KDB.getAll('jurnal');
-  var trash = await KDB.getAll('jurnal_trash');
-  var sortedItems = recovered.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
-  
-  var selected = {};
-  sortedItems.forEach(function(j) {
-    var jId = String(j.id).toLowerCase();
-    var exists = existing.some(function(ex) {
-      return String(ex.id).toLowerCase() === jId || 
-             (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
-    });
-    var inTrash = trash.some(function(tr) {
-      return String(tr.id).toLowerCase() === jId ||
-             (tr.noRef && String(tr.noRef).toLowerCase() === String(j.noRef).toLowerCase() && tr.tanggal === j.tanggal);
-    });
-    j.isDuplicate = exists;
-    j.isInTrash = inTrash;
-    if (!exists && !inTrash) {
-      selected[j.id] = true;
-    }
-  });
-
-  window._recoverLocalStorageState = {
-    items: sortedItems,
-    selected: selected,
-    query: '',
-    perPage: 20,
-    page: 1,
-    listHeight: 420
-  };
   openRecoverLocalStorageModal();
 }
 
 async function renderJurnalRecoverPage() {
-  // Kumpulkan semua jurnal dari localStorage individual keys
-  var recovered = [];
-  for (var i = 0; i < localStorage.length; i++) {
-    var key = localStorage.key(i);
-    if (key && key.startsWith('k_jurnal_') && key !== 'k_jurnal_all' && key !== 'k_jurnal_trash_all') {
-      try {
-        var data = JSON.parse(localStorage.getItem(key));
-        if (data && data.id && data.tanggal) recovered.push(data);
-      } catch(e) {}
-    }
-  }
-  // Juga cek k_jurnal_all
-  try {
-    var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
-    allCache.forEach(function(j) {
-      if (j && j.id && !recovered.find(function(r){ return r.id === j.id; })) recovered.push(j);
-    });
-  } catch(e) {}
+  window._recoverLocalStorageState = await buildRecoverLocalStorageState();
 
-  if (recovered.length === 0) {
+  if (!window._recoverLocalStorageState.items.length) {
     return '<div class="page-title">♻️ Recover Jurnal</div>'
-      + '<div class="alert alert-warning">Tidak ada data jurnal di localStorage untuk di-recover.</div>';
+      + '<div class="alert alert-warning">Tidak ada data jurnal lokal yang perlu di-recover.</div>';
   }
-
-  // Bandingkan dengan yang ada di Firebase
-  var existing = await KDB.getAll('jurnal');
-  var trash = await KDB.getAll('jurnal_trash');
-  var sortedItems = recovered.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
-  
-  var selected = {};
-  sortedItems.forEach(function(j) {
-    var jId = String(j.id).toLowerCase();
-    var exists = existing.some(function(ex) {
-      return String(ex.id).toLowerCase() === jId || 
-             (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
-    });
-    var inTrash = trash.some(function(tr) {
-      return String(tr.id).toLowerCase() === jId ||
-             (tr.noRef && String(tr.noRef).toLowerCase() === String(j.noRef).toLowerCase() && tr.tanggal === j.tanggal);
-    });
-    j.isDuplicate = exists;
-    j.isInTrash = inTrash;
-    if (!exists && !inTrash) {
-      selected[j.id] = true;
-    }
-  });
-
-  window._recoverLocalStorageState = {
-    items: sortedItems,
-    selected: selected,
-    query: '',
-    perPage: 20,
-    page: 1,
-    listHeight: 400
-  };
 
   var state = window._recoverLocalStorageState;
+  state.listHeight = 400;
 
   return '<div class="page-title">♻️ Recover Jurnal</div>'
-    + '<div class="alert alert-info">Menampilkan semua data jurnal di localStorage. Jurnal yang belum ada di database ditandai dengan kotak centang dan bisa di-recover.</div>'
+    + '<div class="alert alert-info">Menampilkan data jurnal lokal yang belum sinkron atau masih ada di Tempat Sampah. Data yang selesai di-recover akan kembali ke Jurnal.</div>'
     + '<div class="card">'
     + '<div class="card-header"><h2>Daftar Jurnal di LocalStorage (' + state.items.length + ')</h2>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
