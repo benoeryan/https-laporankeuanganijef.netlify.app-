@@ -3620,12 +3620,12 @@ function buildEvidenContentHtml(resolved) {
         + linkBtn;
     }
     return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Link</span></div>'
-      + '<div class="alert alert-info" style="margin:0;word-break:break-all">' + safeRaw + '</div>'
+      + '<div style="margin:0;word-break:break-all;background:#f5f7ff;border:1px solid #dbe3ff;border-radius:8px;padding:8px 10px;font-size:0.84rem;color:#1a237e">' + safeRaw + '</div>'
       + linkBtn;
   }
 
-  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '</div>'
-    + '<div class="alert alert-info" style="margin:0;word-break:break-all">' + safeRaw + '</div>';
+  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Referensi</span></div>'
+    + '<div style="margin:0;word-break:break-all;background:#f5f7ff;border:1px solid #dbe3ff;border-radius:8px;padding:8px 10px;font-size:0.84rem;color:#1a237e">' + safeRaw + '</div>';
 }
 
 async function resolveJurnalEvidenValue(value, sourceLabel) {
@@ -3666,7 +3666,11 @@ async function resolveJurnalEvidenValue(value, sourceLabel) {
       isPdf: /\.pdf(\?.*)?$/i.test(lower)
     };
   }
-  return null;
+  return {
+    sourceLabel: sourceLabel,
+    value: raw,
+    kind: 'text'
+  };
 }
 
 async function buildEditJurnalEvidenHtml(j) {
@@ -3717,13 +3721,11 @@ async function buildEditJurnalEvidenHtml(j) {
     htmlItems.push('<div style="border:1px solid #e3e7ef;border-radius:8px;padding:8px;background:#fafbff">' + buildEvidenContentHtml(resolved) + '</div>');
   }
 
-  if (!htmlItems.length) {
-    return '<div class="alert alert-warning mt-12" style="margin-bottom:0">Belum ada eviden terlampir pada jurnal ini.</div>';
-  }
-
   return '<div class="mt-12" style="padding:10px;border:1px solid #dbe3ff;border-radius:10px;background:#f8faff">'
     + '<div style="font-weight:700;color:#1a237e;margin-bottom:8px">📎 Eviden Terlampir</div>'
-    + '<div style="display:grid;gap:8px">' + htmlItems.join('') + '</div>'
+    + (htmlItems.length
+      ? '<div style="display:grid;gap:8px">' + htmlItems.join('') + '</div>'
+      : '<div style="font-size:0.83rem;color:#666;padding:8px 10px;border:1px dashed #cbd5e1;border-radius:8px;background:#fff">Belum ada eviden terlampir pada jurnal ini.</div>')
     + '</div>';
 }
 
@@ -3843,6 +3845,7 @@ async function lihatJurnal(id) {
   const jurnal = await KDB.getAll('jurnal');
   const j = jurnal.find(function(x){ return x.id === id; });
   if (!j) return;
+  var evidenHtml = await buildEditJurnalEvidenHtml(j);
   const lines = (j.lines || []).map(function(l) {
     return '<tr><td>' + l.akun + '</td><td>' + (l.ket||'-') + '</td><td class="text-green">' + (l.debit ? fmtRp(l.debit) : '-') + '</td><td class="text-red">' + (l.kredit ? fmtRp(l.kredit) : '-') + '</td></tr>';
   }).join('');
@@ -3850,7 +3853,7 @@ async function lihatJurnal(id) {
     + '<div class="fg"><label>Tanggal</label><div class="chip">' + fmtDate(j.tanggal) + '</div></div>'
     + '<div class="fg"><label>No. Ref</label><div class="chip">' + (j.noRef||'-') + '</div></div>'
     + '<div class="fg full"><label>Keterangan</label><div>' + j.keterangan + '</div></div>'
-    + '</div><div class="table-wrap mt-12"><table><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>' + lines + '</tbody>'
+    + '</div>' + evidenHtml + '<div class="table-wrap mt-12"><table><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>' + lines + '</tbody>'
     + '<tfoot><tr style="background:#f5f5ff"><td colspan="2"><b>Total</b></td><td class="text-green fw-bold">' + fmtRp(j.totalDebit) + '</td><td class="text-red fw-bold">' + fmtRp(j.totalKredit) + '</td></tr></tfoot></table></div>'
     + '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
     + (hasRole('leader') ? '<button class="btn btn-danger" onclick="closeModalDirect();hapusJurnal(\'' + id + '\')">🗑️ Hapus Jurnal Ini</button>' : '')
