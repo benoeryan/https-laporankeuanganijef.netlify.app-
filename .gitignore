@@ -5,3 +5,9 @@ Thumbs.db
 .continue/
 .kiro/
 .vscode/
+
+# Local Netlify folder
+.netlify
+
+.vercel
+.env*
