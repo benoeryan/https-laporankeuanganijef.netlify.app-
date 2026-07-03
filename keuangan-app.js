@@ -2693,49 +2693,53 @@ function renderRecoverLocalStorageList() {
 
   var rows = pageItems.map(function(j) {
     var totals = getJurnalTotals(j);
-    var checkboxCol = '';
-    if (j.isDuplicate) {
-      checkboxCol = '<td><span style="color:#2e7d32;font-size:1.1rem;display:inline-block;text-align:center;width:100%" title="Sudah Sinkron">✅</span></td>';
-    } else {
       var checked = state.selected[j.id] ? ' checked' : '';
-      checkboxCol = '<td><input type="checkbox"' + checked + ' onchange="toggleRecoverLocalStorage(\'' + j.id + '\', this.checked)"></td>';
+      var checkboxCol = '<td><input type="checkbox"' + checked + ' onchange="toggleRecoverLocalStorage(\'' + j.id + '\', this.checked)"></td>';
+    
+      var refCol = escapeHtml(j.noRef || j.id || '-');
+      if (j.isDuplicate) {
+        refCol += ' <span style="color:#2e7d32;font-weight:bold" title="Sudah Sinkron di Database">✅</span>';
     }
-    return '<tr>' + checkboxCol + '<td>' + fmtDate(j.tanggal) + '</td><td>' + escapeHtml(j.noRef || j.id || '-') + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td class="text-green">' + fmtRp(totals.debit) + '</td><td class="text-red">' + fmtRp(totals.kredit) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatRecoverLocalStorageItem(\'' + j.id + '\')">👁️ View</button></td></tr>';
-  }).join('');
-  if (!rows) rows = '<tr><td colspan="7" class="text-center text-muted">Tidak ada data yang cocok</td></tr>';
 
-  var candidates = state.items.filter(function(x){ return !x.isDuplicate; });
-  var selectedCandidatesCount = candidates.filter(function(x){ return state.selected[x.id]; }).length;
-  var isAllSelected = candidates.length > 0 && selectedCandidatesCount === candidates.length;
+      var actions = '<button class="btn btn-xs btn-info" onclick="lihatRecoverLocalStorageItem(\'' + j.id + '\')">👁️ View</button> '
+        + '<button class="btn btn-xs btn-warning" onclick="editRecoverLocalStorageItem(\'' + j.id + '\')">✏️ Edit</button> '
+        + '<button class="btn btn-xs btn-danger" onclick="hapusRecoverLocalStorageItem(\'' + j.id + '\')">🗑️ Hapus</button>';
 
-  var tableWrap = document.getElementById('recover-ls-table-wrap');
-  if (tableWrap) {
-    tableWrap.style.maxHeight = state.listHeight + 'px';
-    tableWrap.style.overflow = 'auto';
-    tableWrap.innerHTML = '<table style="font-size:0.82rem"><thead><tr><th style="width:34px">' + (candidates.length > 0 ? '<input type="checkbox" onchange="toggleAllRecoverLocalStorage(this.checked)"' + (isAllSelected ? ' checked' : '') + '>' : '') + '</th><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      return '<tr>' + checkboxCol + '<td>' + fmtDate(j.tanggal) + '</td><td>' + refCol + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td class="text-green">' + fmtRp(totals.debit) + '</td><td class="text-red">' + fmtRp(totals.kredit) + '</td><td class="tbl-actions">' + actions + '</td></tr>';
+    }).join('');
+    if (!rows) rows = '<tr><td colspan="7" class="text-center text-muted">Tidak ada data yang cocok</td></tr>';
+
+    var isAllSelected = filtered.length > 0 && filtered.every(function(x){ return state.selected[x.id]; });
+
+    var tableWrap = document.getElementById('recover-ls-table-wrap');
+    if (tableWrap) {
+      tableWrap.style.maxHeight = state.listHeight + 'px';
+      tableWrap.style.overflow = 'auto';
+      tableWrap.innerHTML = '<table style="font-size:0.82rem"><thead><tr><th style="width:34px">' + (filtered.length > 0 ? '<input type="checkbox" onchange="toggleAllRecoverLocalStorage(this.checked)"' + (isAllSelected ? ' checked' : '') + '>' : '') + '</th><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    var info = document.getElementById('recover-ls-summary');
+    var totalCount = state.items.length;
+    var candidates = state.items.filter(function(x){ return !x.isDuplicate; });
+    var candCount = candidates.length;
+    var syncCount = totalCount - candCount;
+    var totalSelectedCount = state.items.filter(function(x){ return state.selected[x.id]; }).length;
+    if (info) info.textContent = 'Terpilih: ' + totalSelectedCount + ' | Kandidat Recover: ' + candCount + ' | Sudah Sinkron: ' + syncCount + ' | Total LocalStorage: ' + totalCount;
+
+    var pageInfo = document.getElementById('recover-ls-page-info');
+    if (pageInfo) pageInfo.textContent = 'Halaman ' + state.page + ' / ' + totalPage;
+    var heightLabel = document.getElementById('recover-ls-height-label');
+    if (heightLabel) heightLabel.textContent = state.listHeight + 'px';
+
+    var prevBtn = document.getElementById('recover-ls-prev');
+    var nextBtn = document.getElementById('recover-ls-next');
+    if (prevBtn) prevBtn.disabled = state.page <= 1;
+    if (nextBtn) nextBtn.disabled = state.page >= totalPage;
   }
-
-  var info = document.getElementById('recover-ls-summary');
-  var totalCount = state.items.length;
-  var candCount = candidates.length;
-  var syncCount = totalCount - candCount;
-  if (info) info.textContent = 'Terpilih: ' + selectedCandidatesCount + ' | Kandidat Recover: ' + candCount + ' | Sudah Sinkron: ' + syncCount + ' | Total LocalStorage: ' + totalCount;
-
-  var pageInfo = document.getElementById('recover-ls-page-info');
-  if (pageInfo) pageInfo.textContent = 'Halaman ' + state.page + ' / ' + totalPage;
-  var heightLabel = document.getElementById('recover-ls-height-label');
-  if (heightLabel) heightLabel.textContent = state.listHeight + 'px';
-
-  var prevBtn = document.getElementById('recover-ls-prev');
-  var nextBtn = document.getElementById('recover-ls-next');
-  if (prevBtn) prevBtn.disabled = state.page <= 1;
-  if (nextBtn) nextBtn.disabled = state.page >= totalPage;
-}
 
 function openRecoverLocalStorageModal() {
   var state = window._recoverLocalStorageState;
   if (!state) return;
-  var candidateCount = state.items.filter(function(j){ return !j.isDuplicate; }).length;
   openModal('<div class="alert alert-info">Menampilkan semua data jurnal di localStorage. Jurnal yang belum ada di database ditandai dengan kotak centang dan bisa di-recover.</div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
     + '<input type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan..." oninput="stateRecoverLocalStorageSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
@@ -2754,7 +2758,7 @@ function openRecoverLocalStorageModal() {
     + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     + '<div style="display:flex;gap:6px;align-items:center"><button id="recover-ls-prev" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(-1)">← Prev</button><span id="recover-ls-page-info" style="font-size:0.82rem;color:#555"></span><button id="recover-ls-next" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(1)">Next →</button></div>'
     + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
-    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()" ' + (candidateCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : '') + '>♻️ Recover Terpilih</button>'
+    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()">♻️ Recover Terpilih</button>'
     + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button></div></div>',
     '♻️ Recover Jurnal dari LocalStorage');
   setModalLayout('wide');
@@ -2796,8 +2800,14 @@ function toggleRecoverLocalStorage(id, checked) {
 function toggleAllRecoverLocalStorage(checked) {
   if (!window._recoverLocalStorageState) return;
   var state = window._recoverLocalStorageState;
-  for (var i = 0; i < state.items.length; i++) {
-    state.selected[state.items[i].id] = !!checked;
+  var q = (state.query || '').toLowerCase();
+  var filtered = state.items.filter(function(j) {
+    var ref = String(j.noRef || j.id || '').toLowerCase();
+    var ket = String(j.keterangan || '').toLowerCase();
+    return !q || ref.indexOf(q) !== -1 || ket.indexOf(q) !== -1;
+  });
+  for (var i = 0; i < filtered.length; i++) {
+    state.selected[filtered[i].id] = !!checked;
   }
   renderRecoverLocalStorageList();
 }
@@ -2809,6 +2819,158 @@ function lihatRecoverLocalStorageItem(id) {
   if (!j) { showAlert('Data tidak ditemukan', 'warning'); return; }
   var backBtn = (currentSection === 'jurnal-recover') ? '<button class="btn btn-outline" onclick="closeModalDirect()">⬅ Kembali</button>' : '<button class="btn btn-outline" onclick="openRecoverLocalStorageModal()">⬅ Kembali</button>';
   openJurnalPreviewModal(j, '👁️ Preview Jurnal Recover', backBtn);
+}
+
+async function editRecoverLocalStorageItem(id) {
+  var state = window._recoverLocalStorageState;
+  if (!state) return;
+  var j = state.items.find(function(x){ return x.id === id; });
+  if (!j) { showAlert('Data tidak ditemukan', 'warning'); return; }
+  
+  var akunOpts = await getAkunOptions();
+  var linesHtml = (j.lines || []).map(function(l, i) {
+    return '<tr>'
+      + '<td><select class="erl-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts.replace('value="' + l.akun + '"', 'value="' + l.akun + '" selected') + '</select></td>'
+      + '<td><input class="erl-ket" value="' + (l.ket||'') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px"></td>'
+      + '<td><input class="erl-debit" type="text" inputmode="decimal" value="' + (l.debit ? formatNominalValue(l.debit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditRecoverLSTotal()"></td>'
+      + '<td><input class="erl-kredit" type="text" inputmode="decimal" value="' + (l.kredit ? formatNominalValue(l.kredit) : '0') + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditRecoverLSTotal()"></td>'
+      + '<td><button class="btn btn-xs btn-danger" onclick="this.closest(\'tr\').remove();updateEditRecoverLSTotal()">✕</button></td>'
+      + '</tr>';
+  }).join('');
+  
+  var curD = 0, curK = 0;
+  (j.lines||[]).forEach(function(l){ curD += l.debit||0; curK += l.kredit||0; });
+  var balanceStatus = Math.abs(curD - curK) < 0.01 ? '<span style="color:#2e7d32">✅ Balance</span>' : '<span style="color:#c62828">❌ Selisih: ' + fmtRp(Math.abs(curD-curK)) + '</span>';
+
+  openModal('<div class="form-grid">'
+    + '<div class="fg"><label>Tanggal</label><input type="date" id="erl-tgl" value="' + (j.tanggal||'') + '"></div>'
+    + '<div class="fg"><label>No. Referensi</label><input id="erl-ref" value="' + (j.noRef||j.ref||'') + '"></div>'
+    + '<div class="fg full"><label>Keterangan</label><input id="erl-ket-main" value="' + (j.keterangan||'') + '"></div>'
+    + '</div>'
+    + '<div class="table-wrap mt-12"><table style="font-size:0.83rem"><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit (Rp)</th><th>Kredit (Rp)</th><th></th></tr></thead><tbody id="erl-lines-body">' + linesHtml + '</tbody></table></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'
+    + '<button class="btn btn-outline btn-sm" onclick="addEditRecoverLSLine()">+ Tambah Baris</button>'
+    + '<div id="erl-total" style="font-size:0.85rem">' + balanceStatus + ' | Debit: ' + fmtRp(curD) + ' | Kredit: ' + fmtRp(curK) + '</div>'
+    + '</div>'
+    + '<div class="modal-footer"><button class="btn btn-outline" onclick="openRecoverLocalStorageModalOrClose()">Batal</button><button class="btn btn-primary" onclick="simpanEditRecoverLocalStorageItem(\'' + id + '\')">Simpan Perubahan</button></div>',
+    'Edit Jurnal LocalStorage: ' + (j.noRef||j.id));
+  
+  window._erlAkunOpts = akunOpts;
+}
+
+function openRecoverLocalStorageModalOrClose() {
+  if (currentSection === 'jurnal-recover') {
+    closeModalDirect();
+    renderRecoverLocalStorageList();
+  } else {
+    openRecoverLocalStorageModal();
+  }
+}
+
+function addEditRecoverLSLine() {
+  var tbody = document.getElementById('erl-lines-body');
+  if (!tbody) return;
+  var akunOpts = window._erlAkunOpts || '';
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td><select class="erl-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts + '</select></td>'
+    + '<td><input class="erl-ket" value="" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" placeholder="Keterangan"></td>'
+    + '<td><input class="erl-debit" type="text" inputmode="decimal" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditRecoverLSTotal()"></td>'
+    + '<td><input class="erl-kredit" type="text" inputmode="decimal" value="0" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px" oninput="formatNominalInput(this);updateEditRecoverLSTotal()"></td>'
+    + '<td><button class="btn btn-xs btn-danger" onclick="this.closest(\'tr\').remove();updateEditRecoverLSTotal()">✕</button></td>';
+  tbody.appendChild(tr);
+  updateEditRecoverLSTotal();
+}
+
+function updateEditRecoverLSTotal() {
+  var d = 0, k = 0;
+  document.querySelectorAll('.erl-debit').forEach(function(el){ d += parseNominal(el.value); });
+  document.querySelectorAll('.erl-kredit').forEach(function(el){ k += parseNominal(el.value); });
+  var el = document.getElementById('erl-total');
+  if (!el) return;
+  var balanceStatus = Math.abs(d - k) < 0.01 ? '<span style="color:#2e7d32">✅ Balance</span>' : '<span style="color:#c62828">❌ Selisih: ' + fmtRp(Math.abs(d-k)) + '</span>';
+  el.innerHTML = balanceStatus + ' | Debit: <b>' + fmtRp(d) + '</b> | Kredit: <b>' + fmtRp(k) + '</b>';
+}
+
+async function simpanEditRecoverLocalStorageItem(id) {
+  var state = window._recoverLocalStorageState;
+  if (!state) return;
+  var jIndex = state.items.findIndex(function(x){ return x.id === id; });
+  if (jIndex === -1) return;
+  var j = state.items[jIndex];
+
+  var newTgl = (document.getElementById('erl-tgl') || {}).value || j.tanggal;
+  var newRef = (document.getElementById('erl-ref') || {}).value || j.noRef;
+  var newKet = (document.getElementById('erl-ket-main') || {}).value || j.keterangan;
+  var newLines = [];
+  var totalD = 0, totalK = 0;
+  document.querySelectorAll('.erl-akun').forEach(function(el, i) {
+    var akun = el.value;
+    var ket = document.querySelectorAll('.erl-ket')[i] ? document.querySelectorAll('.erl-ket')[i].value : '';
+    var debit = parseNominal(document.querySelectorAll('.erl-debit')[i] ? document.querySelectorAll('.erl-debit')[i].value : 0);
+    var kredit = parseNominal(document.querySelectorAll('.erl-kredit')[i] ? document.querySelectorAll('.erl-kredit')[i].value : 0);
+    if (akun) { newLines.push({ akun: akun, ket: ket, debit: debit, kredit: kredit }); totalD += debit; totalK += kredit; }
+  });
+  if (newLines.length < 1) { showAlert('Minimal 1 baris jurnal!', 'danger'); return; }
+  
+  var updated = Object.assign({}, j, { tanggal: newTgl, noRef: newRef, keterangan: newKet, lines: newLines, totalDebit: totalD, totalKredit: totalK });
+
+  // 1. Update individual key di localStorage
+  var individualKey = 'k_jurnal_' + id;
+  if (localStorage.getItem(individualKey)) {
+    localStorage.setItem(individualKey, JSON.stringify(updated));
+  }
+  // 2. Update k_jurnal_all cache array di localStorage
+  try {
+    var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
+    var foundIndex = allCache.findIndex(function(x) { return x.id === id; });
+    if (foundIndex !== -1) {
+      allCache[foundIndex] = updated;
+      localStorage.setItem('k_jurnal_all', JSON.stringify(allCache));
+    }
+  } catch(e) {}
+
+  // 3. Bandingkan dengan Firebase untuk update isDuplicate
+  var existing = await KDB.getAll('jurnal');
+  var jId = String(id).toLowerCase();
+  var exists = existing.some(function(ex) {
+    return String(ex.id).toLowerCase() === jId || 
+           (ex.noRef && String(ex.noRef).toLowerCase() === String(newRef).toLowerCase() && ex.tanggal === newTgl);
+  });
+  updated.isDuplicate = exists;
+
+  // 4. Update memory state
+  state.items[jIndex] = updated;
+
+  showAlert('Jurnal di localStorage berhasil diperbarui!');
+  openRecoverLocalStorageModalOrClose();
+}
+
+async function hapusRecoverLocalStorageItem(id) {
+  if (!confirm('Apakah Anda yakin ingin menghapus jurnal ini dari localStorage? Tindakan ini tidak dapat dibatalkan.')) return;
+  
+  // 1. Hapus dari individual key di localStorage
+  var individualKey = 'k_jurnal_' + id;
+  localStorage.removeItem(individualKey);
+
+  // 2. Hapus dari k_jurnal_all cache array di localStorage
+  try {
+    var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
+    var foundIndex = allCache.findIndex(function(x) { return x.id === id; });
+    if (foundIndex !== -1) {
+      allCache.splice(foundIndex, 1);
+      localStorage.setItem('k_jurnal_all', JSON.stringify(allCache));
+    }
+  } catch(e) {}
+
+  // 3. Hapus dari memory state
+  if (window._recoverLocalStorageState) {
+    var state = window._recoverLocalStorageState;
+    state.items = state.items.filter(function(x) { return x.id !== id; });
+    delete state.selected[id];
+  }
+
+  showAlert('Jurnal berhasil dihapus dari localStorage!');
+  renderRecoverLocalStorageList();
 }
 
 async function prosesRecoverLocalStorageTerpilih() {
@@ -2934,7 +3096,6 @@ async function renderJurnalRecoverPage() {
   };
 
   var state = window._recoverLocalStorageState;
-  var candidateCount = state.items.filter(function(j){ return !j.isDuplicate; }).length;
 
   return '<div class="page-title">♻️ Recover Jurnal</div>'
     + '<div class="alert alert-info">Menampilkan semua data jurnal di localStorage. Jurnal yang belum ada di database ditandai dengan kotak centang dan bisa di-recover.</div>'
@@ -2958,7 +3119,7 @@ async function renderJurnalRecoverPage() {
     + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     + '<div style="display:flex;gap:6px;align-items:center"><button id="recover-ls-prev" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(-1)">← Prev</button><span id="recover-ls-page-info" style="font-size:0.82rem;color:#555"></span><button id="recover-ls-next" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(1)">Next →</button></div>'
     + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
-    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()" ' + (candidateCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : '') + '>♻️ Recover Terpilih</button>'
+    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()">♻️ Recover Terpilih</button>'
     + '</div></div>'
     + '</div>';
 }
