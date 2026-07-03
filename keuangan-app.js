@@ -3670,18 +3670,39 @@ async function resolveJurnalEvidenValue(value, sourceLabel) {
 }
 
 async function buildEditJurnalEvidenHtml(j) {
+  var jurnalRef = (j.noRef || j.ref || '').trim();
   var evidenCandidates = [];
-  if (j.noRef) evidenCandidates.push({ label: 'No. Referensi', value: j.noRef });
+  if (jurnalRef) evidenCandidates.push({ label: 'No. Referensi', value: jurnalRef });
 
+  var permohonanList = null;
+  var danaMasukList = null;
   if (j.meta && j.meta.permohonanId) {
-    var permohonan = await KDB.getAll('permohonan');
-    var p = permohonan.find(function(x) { return x.id === j.meta.permohonanId; });
+    permohonanList = await KDB.getAll('permohonan');
+    var p = permohonanList.find(function(x) { return x.id === j.meta.permohonanId; });
     if (p && p.buktiDokumen) evidenCandidates.push({ label: 'Permohonan Dana', value: p.buktiDokumen });
   }
   if (j.meta && j.meta.danaMasukId) {
-    var danaMasuk = await KDB.getAll('danamasuk');
-    var d = danaMasuk.find(function(x) { return x.id === j.meta.danaMasukId; });
+    danaMasukList = await KDB.getAll('danamasuk');
+    var d = danaMasukList.find(function(x) { return x.id === j.meta.danaMasukId; });
     if (d && d.buktiDokumen) evidenCandidates.push({ label: 'Dana Masuk', value: d.buktiDokumen });
+  }
+  // Fallback untuk data lama yang belum punya meta relasi:
+  // cari eviden dari transaksi sumber via jurnalId / noRef.
+  if ((j.sumber === 'permohonan-dana' || !j.meta || !j.meta.permohonanId)) {
+    if (!permohonanList) permohonanList = await KDB.getAll('permohonan');
+    var pByRef = permohonanList.find(function(x) {
+      return (x.jurnalId && x.jurnalId === j.id)
+        || (jurnalRef && normalizeCompareRef(x.noPOInvoice || x.id) === normalizeCompareRef(jurnalRef));
+    });
+    if (pByRef && pByRef.buktiDokumen) evidenCandidates.push({ label: 'Permohonan Dana (Auto Match)', value: pByRef.buktiDokumen });
+  }
+  if ((j.sumber === 'dana-masuk' || !j.meta || !j.meta.danaMasukId)) {
+    if (!danaMasukList) danaMasukList = await KDB.getAll('danamasuk');
+    var dByRef = danaMasukList.find(function(x) {
+      return (x.jurnalId && x.jurnalId === j.id)
+        || (jurnalRef && normalizeCompareRef(x.noRef || x.id) === normalizeCompareRef(jurnalRef));
+    });
+    if (dByRef && dByRef.buktiDokumen) evidenCandidates.push({ label: 'Dana Masuk (Auto Match)', value: dByRef.buktiDokumen });
   }
 
   var seen = {};
@@ -3728,7 +3749,7 @@ async function editJurnal(id) {
 
   openModal('<div class="form-grid">'
     + '<div class="fg"><label>Tanggal</label><input type="date" id="ej-tgl" value="' + (j.tanggal||'') + '"></div>'
-    + '<div class="fg"><label>No. Referensi</label><input id="ej-ref" value="' + (j.noRef||'') + '"></div>'
+    + '<div class="fg"><label>No. Referensi</label><input id="ej-ref" value="' + (j.noRef||j.ref||'') + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="ej-ket-main" value="' + (j.keterangan||'') + '"></div>'
     + '</div>'
     + evidenHtml
