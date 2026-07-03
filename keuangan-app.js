@@ -2735,7 +2735,8 @@ function renderRecoverLocalStorageList() {
 function openRecoverLocalStorageModal() {
   var state = window._recoverLocalStorageState;
   if (!state) return;
-  openModal('<div class="alert alert-info">Ditemukan <b>' + state.items.length + '</b> jurnal di localStorage yang belum ada di database. Silakan review lalu pilih yang ingin di-recover.</div>'
+  var candidateCount = state.items.filter(function(j){ return !j.isDuplicate; }).length;
+  openModal('<div class="alert alert-info">Menampilkan semua data jurnal di localStorage. Jurnal yang belum ada di database ditandai dengan kotak centang dan bisa di-recover.</div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
     + '<input type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan..." oninput="stateRecoverLocalStorageSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
     + '<select onchange="stateRecoverLocalStoragePerPage(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px">'
@@ -2753,7 +2754,7 @@ function openRecoverLocalStorageModal() {
     + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     + '<div style="display:flex;gap:6px;align-items:center"><button id="recover-ls-prev" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(-1)">← Prev</button><span id="recover-ls-page-info" style="font-size:0.82rem;color:#555"></span><button id="recover-ls-next" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(1)">Next →</button></div>'
     + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
-    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()">♻️ Recover Terpilih</button>'
+    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()" ' + (candidateCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : '') + '>♻️ Recover Terpilih</button>'
     + '<button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button></div></div>',
     '♻️ Recover Jurnal dari LocalStorage');
   setModalLayout('wide');
@@ -2908,26 +2909,23 @@ async function renderJurnalRecoverPage() {
 
   // Bandingkan dengan yang ada di Firebase
   var existing = await KDB.getAll('jurnal');
-  var toRestore = recovered.filter(function(j) {
+  var sortedItems = recovered.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
+  
+  var selected = {};
+  sortedItems.forEach(function(j) {
     var jId = String(j.id).toLowerCase();
     var exists = existing.some(function(ex) {
       return String(ex.id).toLowerCase() === jId || 
              (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
     });
-    return !exists;
+    j.isDuplicate = exists;
+    if (!exists) {
+      selected[j.id] = true;
+    }
   });
 
-  if (toRestore.length === 0) {
-    return '<div class="page-title">♻️ Recover Jurnal</div>'
-      + '<div class="alert alert-info">Semua data di localStorage sudah ada di database. Tidak perlu recover.</div>';
-  }
-
-  var selected = {};
-  for (var i = 0; i < toRestore.length; i++) {
-    selected[toRestore[i].id] = true;
-  }
   window._recoverLocalStorageState = {
-    items: toRestore.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); }),
+    items: sortedItems,
     selected: selected,
     query: '',
     perPage: 20,
@@ -2936,10 +2934,12 @@ async function renderJurnalRecoverPage() {
   };
 
   var state = window._recoverLocalStorageState;
+  var candidateCount = state.items.filter(function(j){ return !j.isDuplicate; }).length;
+
   return '<div class="page-title">♻️ Recover Jurnal</div>'
-    + '<div class="alert alert-info">Ditemukan <b>' + state.items.length + '</b> jurnal di localStorage yang belum ada di database. Silakan review lalu pilih yang ingin di-recover.</div>'
+    + '<div class="alert alert-info">Menampilkan semua data jurnal di localStorage. Jurnal yang belum ada di database ditandai dengan kotak centang dan bisa di-recover.</div>'
     + '<div class="card">'
-    + '<div class="card-header"><h2>Kandidat Recover dari LocalStorage</h2>'
+    + '<div class="card-header"><h2>Daftar Jurnal di LocalStorage (' + state.items.length + ')</h2>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     + '<input type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan..." oninput="stateRecoverLocalStorageSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
     + '<select onchange="stateRecoverLocalStoragePerPage(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px">'
@@ -2958,7 +2958,7 @@ async function renderJurnalRecoverPage() {
     + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     + '<div style="display:flex;gap:6px;align-items:center"><button id="recover-ls-prev" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(-1)">← Prev</button><span id="recover-ls-page-info" style="font-size:0.82rem;color:#555"></span><button id="recover-ls-next" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(1)">Next →</button></div>'
     + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
-    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()">♻️ Recover Terpilih</button>'
+    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()" ' + (candidateCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : '') + '>♻️ Recover Terpilih</button>'
     + '</div></div>'
     + '</div>';
 }
