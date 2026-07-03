@@ -3577,11 +3577,164 @@ async function batchBuatJurnalPCTerpilih() {
   runAIAnalysis();
 }
 
+function isLikelyUrl(val) {
+  if (!val) return false;
+  var txt = String(val).trim().toLowerCase();
+  return txt.startsWith('http://') || txt.startsWith('https://') || txt.indexOf('drive.google') >= 0 || txt.indexOf('docs.google') >= 0;
+}
+
+function buildEvidenContentHtml(resolved) {
+  if (!resolved || !resolved.value) return '';
+  var safeRaw = escapeHtml(resolved.value);
+  var sourceBadge = '<span class="chip" style="font-size:0.72rem;background:#e8eaf6;color:#1a237e">' + escapeHtml(resolved.sourceLabel || 'Eviden') + '</span>';
+  if (resolved.kind === 'upload') {
+    var mime = resolved.mime || '';
+    var name = escapeHtml(resolved.name || 'File Upload');
+    if (mime.indexOf('image/') === 0) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">' + name + '</span></div>'
+        + '<img src="' + safeRaw + '" alt="' + name + '" style="max-width:100%;max-height:260px;border:1px solid #ddd;border-radius:8px">';
+    }
+    if (mime.indexOf('pdf') >= 0) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">' + name + '</span></div>'
+        + '<iframe src="' + safeRaw + '" style="width:100%;height:280px;border:1px solid #ddd;border-radius:8px" title="Preview ' + name + '"></iframe>';
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">' + name + '</span></div>'
+      + '<div class="alert alert-info" style="margin:0">File upload tersimpan. <b>Kode:</b> ' + safeRaw + '</div>';
+  }
+
+  if (resolved.kind === 'url') {
+    var linkBtn = '<div style="margin-top:8px"><a href="' + safeRaw + '" target="_blank" rel="noopener" class="btn btn-xs btn-info">🔗 Buka Eviden</a></div>';
+    if (resolved.isDrive && resolved.drivePreviewUrl) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Google Drive</span></div>'
+        + '<iframe src="' + escapeHtml(resolved.drivePreviewUrl) + '" style="width:100%;height:280px;border:1px solid #ddd;border-radius:8px" allowfullscreen></iframe>'
+        + linkBtn;
+    }
+    if (resolved.isImage) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Gambar</span></div>'
+        + '<img src="' + safeRaw + '" alt="Eviden" style="max-width:100%;max-height:260px;border:1px solid #ddd;border-radius:8px">'
+        + linkBtn;
+    }
+    if (resolved.isPdf) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">PDF</span></div>'
+        + '<iframe src="' + safeRaw + '" style="width:100%;height:280px;border:1px solid #ddd;border-radius:8px"></iframe>'
+        + linkBtn;
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Link</span></div>'
+      + '<div style="margin:0;word-break:break-all;background:#f5f7ff;border:1px solid #dbe3ff;border-radius:8px;padding:8px 10px;font-size:0.84rem;color:#1a237e">' + safeRaw + '</div>'
+      + linkBtn;
+  }
+
+  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Referensi</span></div>'
+    + '<div style="margin:0;word-break:break-all;background:#f5f7ff;border:1px solid #dbe3ff;border-radius:8px;padding:8px 10px;font-size:0.84rem;color:#1a237e">' + safeRaw + '</div>';
+}
+
+async function resolveJurnalEvidenValue(value, sourceLabel) {
+  var raw = String(value || '').trim();
+  if (!raw) return null;
+  if (raw.indexOf('bukti_') === 0) {
+    var buktiData = await KDB.getSetting(raw, null);
+    if (buktiData && buktiData.data) {
+      return {
+        sourceLabel: sourceLabel,
+        value: buktiData.data,
+        kind: 'upload',
+        mime: buktiData.type || '',
+        name: buktiData.name || raw,
+        key: raw
+      };
+    }
+  }
+  if (raw.indexOf('data:image') === 0 || raw.indexOf('data:application/pdf') === 0) {
+    return {
+      sourceLabel: sourceLabel,
+      value: raw,
+      kind: 'upload',
+      mime: raw.indexOf('data:image') === 0 ? 'image/base64' : 'application/pdf',
+      name: 'Data URI'
+    };
+  }
+  if (isLikelyUrl(raw)) {
+    var lower = raw.toLowerCase();
+    var driveMatch = raw.match(/\/d\/([^\/\?]+)/);
+    return {
+      sourceLabel: sourceLabel,
+      value: raw,
+      kind: 'url',
+      isDrive: !!driveMatch,
+      drivePreviewUrl: driveMatch ? ('https://drive.google.com/file/d/' + driveMatch[1] + '/preview') : '',
+      isImage: /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(lower),
+      isPdf: /\.pdf(\?.*)?$/i.test(lower)
+    };
+  }
+  return {
+    sourceLabel: sourceLabel,
+    value: raw,
+    kind: 'text'
+  };
+}
+
+async function buildEditJurnalEvidenHtml(j) {
+  var jurnalRef = (j.noRef || j.ref || '').trim();
+  var evidenCandidates = [];
+  if (jurnalRef) evidenCandidates.push({ label: 'No. Referensi', value: jurnalRef });
+
+  var permohonanList = null;
+  var danaMasukList = null;
+  if (j.meta && j.meta.permohonanId) {
+    permohonanList = await KDB.getAll('permohonan');
+    var p = permohonanList.find(function(x) { return x.id === j.meta.permohonanId; });
+    if (p && p.buktiDokumen) evidenCandidates.push({ label: 'Permohonan Dana', value: p.buktiDokumen });
+  }
+  if (j.meta && j.meta.danaMasukId) {
+    danaMasukList = await KDB.getAll('danamasuk');
+    var d = danaMasukList.find(function(x) { return x.id === j.meta.danaMasukId; });
+    if (d && d.buktiDokumen) evidenCandidates.push({ label: 'Dana Masuk', value: d.buktiDokumen });
+  }
+  // Fallback untuk data lama yang belum punya meta relasi:
+  // cari eviden dari transaksi sumber via jurnalId / noRef.
+  if ((j.sumber === 'permohonan-dana' || !j.meta || !j.meta.permohonanId)) {
+    if (!permohonanList) permohonanList = await KDB.getAll('permohonan');
+    var pByRef = permohonanList.find(function(x) {
+      return (x.jurnalId && x.jurnalId === j.id)
+        || (jurnalRef && normalizeCompareRef(x.noPOInvoice || x.id) === normalizeCompareRef(jurnalRef));
+    });
+    if (pByRef && pByRef.buktiDokumen) evidenCandidates.push({ label: 'Permohonan Dana (Auto Match)', value: pByRef.buktiDokumen });
+  }
+  if ((j.sumber === 'dana-masuk' || !j.meta || !j.meta.danaMasukId)) {
+    if (!danaMasukList) danaMasukList = await KDB.getAll('danamasuk');
+    var dByRef = danaMasukList.find(function(x) {
+      return (x.jurnalId && x.jurnalId === j.id)
+        || (jurnalRef && normalizeCompareRef(x.noRef || x.id) === normalizeCompareRef(jurnalRef));
+    });
+    if (dByRef && dByRef.buktiDokumen) evidenCandidates.push({ label: 'Dana Masuk (Auto Match)', value: dByRef.buktiDokumen });
+  }
+
+  var seen = {};
+  var htmlItems = [];
+  for (var i = 0; i < evidenCandidates.length; i++) {
+    var cand = evidenCandidates[i];
+    var dedupKey = String(cand.value || '').trim();
+    if (!dedupKey || seen[dedupKey]) continue;
+    seen[dedupKey] = true;
+    var resolved = await resolveJurnalEvidenValue(cand.value, cand.label);
+    if (!resolved) continue;
+    htmlItems.push('<div style="border:1px solid #e3e7ef;border-radius:8px;padding:8px;background:#fafbff">' + buildEvidenContentHtml(resolved) + '</div>');
+  }
+
+  return '<div class="mt-12" style="padding:10px;border:1px solid #dbe3ff;border-radius:10px;background:#f8faff">'
+    + '<div style="font-weight:700;color:#1a237e;margin-bottom:8px">📎 Eviden Terlampir</div>'
+    + (htmlItems.length
+      ? '<div style="display:grid;gap:8px">' + htmlItems.join('') + '</div>'
+      : '<div style="font-size:0.83rem;color:#666;padding:8px 10px;border:1px dashed #cbd5e1;border-radius:8px;background:#fff">Belum ada eviden terlampir pada jurnal ini.</div>')
+    + '</div>';
+}
+
 async function editJurnal(id) {
   var jurnal = await KDB.getAll('jurnal');
   var j = jurnal.find(function(x){ return x.id === id; });
   if (!j) return;
   var akunOpts = await getAkunOptions();
+  var evidenHtml = await buildEditJurnalEvidenHtml(j);
   var linesHtml = (j.lines || []).map(function(l, i) {
     return '<tr>'
       + '<td><select class="ej-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts.replace('value="' + l.akun + '"', 'value="' + l.akun + '" selected') + '</select></td>'
@@ -3598,9 +3751,10 @@ async function editJurnal(id) {
 
   openModal('<div class="form-grid">'
     + '<div class="fg"><label>Tanggal</label><input type="date" id="ej-tgl" value="' + (j.tanggal||'') + '"></div>'
-    + '<div class="fg"><label>No. Referensi</label><input id="ej-ref" value="' + (j.noRef||'') + '"></div>'
+    + '<div class="fg"><label>No. Referensi</label><input id="ej-ref" value="' + (j.noRef||j.ref||'') + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="ej-ket-main" value="' + (j.keterangan||'') + '"></div>'
     + '</div>'
+    + evidenHtml
     + '<div class="table-wrap mt-12"><table style="font-size:0.83rem"><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit (Rp)</th><th>Kredit (Rp)</th><th></th></tr></thead><tbody id="ej-lines-body">' + linesHtml + '</tbody></table></div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'
     + '<button class="btn btn-outline btn-sm" onclick="addEditJurnalLine()">+ Tambah Baris</button>'
@@ -3691,6 +3845,7 @@ async function lihatJurnal(id) {
   const jurnal = await KDB.getAll('jurnal');
   const j = jurnal.find(function(x){ return x.id === id; });
   if (!j) return;
+  var evidenHtml = await buildEditJurnalEvidenHtml(j);
   const lines = (j.lines || []).map(function(l) {
     return '<tr><td>' + l.akun + '</td><td>' + (l.ket||'-') + '</td><td class="text-green">' + (l.debit ? fmtRp(l.debit) : '-') + '</td><td class="text-red">' + (l.kredit ? fmtRp(l.kredit) : '-') + '</td></tr>';
   }).join('');
@@ -3698,7 +3853,7 @@ async function lihatJurnal(id) {
     + '<div class="fg"><label>Tanggal</label><div class="chip">' + fmtDate(j.tanggal) + '</div></div>'
     + '<div class="fg"><label>No. Ref</label><div class="chip">' + (j.noRef||'-') + '</div></div>'
     + '<div class="fg full"><label>Keterangan</label><div>' + j.keterangan + '</div></div>'
-    + '</div><div class="table-wrap mt-12"><table><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>' + lines + '</tbody>'
+    + '</div>' + evidenHtml + '<div class="table-wrap mt-12"><table><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit</th><th>Kredit</th></tr></thead><tbody>' + lines + '</tbody>'
     + '<tfoot><tr style="background:#f5f5ff"><td colspan="2"><b>Total</b></td><td class="text-green fw-bold">' + fmtRp(j.totalDebit) + '</td><td class="text-red fw-bold">' + fmtRp(j.totalKredit) + '</td></tr></tfoot></table></div>'
     + '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModalDirect()">Tutup</button>'
     + (hasRole('leader') ? '<button class="btn btn-danger" onclick="closeModalDirect();hapusJurnal(\'' + id + '\')">🗑️ Hapus Jurnal Ini</button>' : '')
