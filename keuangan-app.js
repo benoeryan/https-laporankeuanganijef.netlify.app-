@@ -2576,6 +2576,11 @@ async function restoreJurnal(id) {
   await KDB.save('jurnal', id, j);
   // Hapus dari trash
   await KDB.delete('jurnal_trash', id);
+
+  // Force clean up cached lists so it is guaranteed to re-fetch freshly
+  localStorage.removeItem('k_jurnal_all');
+  localStorage.removeItem('k_jurnal_trash_all');
+
   showAlert('Jurnal berhasil di-restore!');
   if (currentSection === 'jurnal-trash') {
     renderSection('jurnal-trash');
@@ -2596,6 +2601,11 @@ async function restoreSemuaTrash() {
     await KDB.save('jurnal', j.id, j);
     await KDB.delete('jurnal_trash', j.id);
   }
+
+  // Force clean up cached lists so it is guaranteed to re-fetch freshly
+  localStorage.removeItem('k_jurnal_all');
+  localStorage.removeItem('k_jurnal_trash_all');
+
   showLoading(false);
   showAlert(trash.length + ' jurnal berhasil di-restore!');
   if (currentSection === 'jurnal-trash') {
@@ -2699,7 +2709,9 @@ function renderRecoverLocalStorageList() {
       var refCol = escapeHtml(j.noRef || j.id || '-');
       if (j.isDuplicate) {
         refCol += ' <span style="color:#2e7d32;font-weight:bold" title="Sudah Sinkron di Database">✅</span>';
-    }
+      } else if (j.isInTrash) {
+        refCol += ' <span style="color:#d32f2f;font-weight:bold" title="Ada di Tempat Sampah">🗑️</span>';
+      }
 
       var actions = '<button class="btn btn-xs btn-info" onclick="lihatRecoverLocalStorageItem(\'' + j.id + '\')">👁️ View</button> '
         + '<button class="btn btn-xs btn-warning" onclick="editRecoverLocalStorageItem(\'' + j.id + '\')">✏️ Edit</button> '
@@ -2720,11 +2732,12 @@ function renderRecoverLocalStorageList() {
 
     var info = document.getElementById('recover-ls-summary');
     var totalCount = state.items.length;
-    var candidates = state.items.filter(function(x){ return !x.isDuplicate; });
+    var candidates = state.items.filter(function(x){ return !x.isDuplicate && !x.isInTrash; });
     var candCount = candidates.length;
-    var syncCount = totalCount - candCount;
+    var trashCount = state.items.filter(function(x){ return x.isInTrash; }).length;
+    var syncCount = totalCount - candCount - trashCount;
     var totalSelectedCount = state.items.filter(function(x){ return state.selected[x.id]; }).length;
-    if (info) info.textContent = 'Terpilih: ' + totalSelectedCount + ' | Kandidat Recover: ' + candCount + ' | Sudah Sinkron: ' + syncCount + ' | Total LocalStorage: ' + totalCount;
+    if (info) info.textContent = 'Terpilih: ' + totalSelectedCount + ' | Kandidat Recover: ' + candCount + ' | Sudah Sinkron: ' + syncCount + ' | Tempat Sampah: ' + trashCount + ' | Total LocalStorage: ' + totalCount;
 
     var pageInfo = document.getElementById('recover-ls-page-info');
     if (pageInfo) pageInfo.textContent = 'Halaman ' + state.page + ' / ' + totalPage;
@@ -2990,7 +3003,16 @@ async function prosesRecoverLocalStorageTerpilih() {
     var promises = chunk.map(async function(origItem) {
       try {
         var item = Object.assign({}, origItem);
+        
+        // Synchronize: if it is in trash, delete it from trash
+        if (item.isInTrash) {
+          try {
+            await KDB.delete('jurnal_trash', item.id);
+          } catch(trashErr) { console.warn('Delete from trash error:', trashErr); }
+        }
+
         delete item.isDuplicate;
+        delete item.isInTrash;
         await KDB.save('jurnal', item.id, item);
         count++;
       } catch(e) { console.warn('Recover error:', e); }
@@ -3000,6 +3022,7 @@ async function prosesRecoverLocalStorageTerpilih() {
 
   // Force clean up the cached Jurnal list in localStorage so it is guaranteed to re-fetch freshly
   localStorage.removeItem('k_jurnal_all');
+  localStorage.removeItem('k_jurnal_trash_all');
 
   showLoading(false);
   closeModalDirect();
@@ -3031,6 +3054,7 @@ async function recoverDariLocalStorage() {
 
   // Bandingkan dengan yang ada di Firebase
   var existing = await KDB.getAll('jurnal');
+  var trash = await KDB.getAll('jurnal_trash');
   var sortedItems = recovered.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
   
   var selected = {};
@@ -3040,8 +3064,13 @@ async function recoverDariLocalStorage() {
       return String(ex.id).toLowerCase() === jId || 
              (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
     });
+    var inTrash = trash.some(function(tr) {
+      return String(tr.id).toLowerCase() === jId ||
+             (tr.noRef && String(tr.noRef).toLowerCase() === String(j.noRef).toLowerCase() && tr.tanggal === j.tanggal);
+    });
     j.isDuplicate = exists;
-    if (!exists) {
+    j.isInTrash = inTrash;
+    if (!exists && !inTrash) {
       selected[j.id] = true;
     }
   });
@@ -3084,6 +3113,7 @@ async function renderJurnalRecoverPage() {
 
   // Bandingkan dengan yang ada di Firebase
   var existing = await KDB.getAll('jurnal');
+  var trash = await KDB.getAll('jurnal_trash');
   var sortedItems = recovered.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
   
   var selected = {};
@@ -3093,8 +3123,13 @@ async function renderJurnalRecoverPage() {
       return String(ex.id).toLowerCase() === jId || 
              (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
     });
+    var inTrash = trash.some(function(tr) {
+      return String(tr.id).toLowerCase() === jId ||
+             (tr.noRef && String(tr.noRef).toLowerCase() === String(j.noRef).toLowerCase() && tr.tanggal === j.tanggal);
+    });
     j.isDuplicate = exists;
-    if (!exists) {
+    j.isInTrash = inTrash;
+    if (!exists && !inTrash) {
       selected[j.id] = true;
     }
   });
