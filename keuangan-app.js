@@ -3577,11 +3577,141 @@ async function batchBuatJurnalPCTerpilih() {
   runAIAnalysis();
 }
 
+function isLikelyUrl(val) {
+  if (!val) return false;
+  var txt = String(val).trim().toLowerCase();
+  return txt.startsWith('http://') || txt.startsWith('https://') || txt.indexOf('drive.google') >= 0 || txt.indexOf('docs.google') >= 0;
+}
+
+function buildEvidenContentHtml(resolved) {
+  if (!resolved || !resolved.value) return '';
+  var safeRaw = escapeHtml(resolved.value);
+  var sourceBadge = '<span class="chip" style="font-size:0.72rem;background:#e8eaf6;color:#1a237e">' + escapeHtml(resolved.sourceLabel || 'Eviden') + '</span>';
+  if (resolved.kind === 'upload') {
+    var mime = resolved.mime || '';
+    var name = escapeHtml(resolved.name || 'File Upload');
+    if (mime.indexOf('image/') === 0) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">' + name + '</span></div>'
+        + '<img src="' + safeRaw + '" alt="' + name + '" style="max-width:100%;max-height:260px;border:1px solid #ddd;border-radius:8px">';
+    }
+    if (mime.indexOf('pdf') >= 0) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">' + name + '</span></div>'
+        + '<iframe src="' + safeRaw + '" style="width:100%;height:280px;border:1px solid #ddd;border-radius:8px" title="Preview ' + name + '"></iframe>';
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">' + name + '</span></div>'
+      + '<div class="alert alert-info" style="margin:0">File upload tersimpan. <b>Kode:</b> ' + safeRaw + '</div>';
+  }
+
+  if (resolved.kind === 'url') {
+    var linkBtn = '<div style="margin-top:8px"><a href="' + safeRaw + '" target="_blank" rel="noopener" class="btn btn-xs btn-info">🔗 Buka Eviden</a></div>';
+    if (resolved.isDrive && resolved.drivePreviewUrl) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Google Drive</span></div>'
+        + '<iframe src="' + escapeHtml(resolved.drivePreviewUrl) + '" style="width:100%;height:280px;border:1px solid #ddd;border-radius:8px" allowfullscreen></iframe>'
+        + linkBtn;
+    }
+    if (resolved.isImage) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Gambar</span></div>'
+        + '<img src="' + safeRaw + '" alt="Eviden" style="max-width:100%;max-height:260px;border:1px solid #ddd;border-radius:8px">'
+        + linkBtn;
+    }
+    if (resolved.isPdf) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">PDF</span></div>'
+        + '<iframe src="' + safeRaw + '" style="width:100%;height:280px;border:1px solid #ddd;border-radius:8px"></iframe>'
+        + linkBtn;
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '<span style="font-size:0.75rem;color:#666">Link</span></div>'
+      + '<div class="alert alert-info" style="margin:0;word-break:break-all">' + safeRaw + '</div>'
+      + linkBtn;
+  }
+
+  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' + sourceBadge + '</div>'
+    + '<div class="alert alert-info" style="margin:0;word-break:break-all">' + safeRaw + '</div>';
+}
+
+async function resolveJurnalEvidenValue(value, sourceLabel) {
+  var raw = String(value || '').trim();
+  if (!raw) return null;
+  if (raw.indexOf('bukti_') === 0) {
+    var buktiData = await KDB.getSetting(raw, null);
+    if (buktiData && buktiData.data) {
+      return {
+        sourceLabel: sourceLabel,
+        value: buktiData.data,
+        kind: 'upload',
+        mime: buktiData.type || '',
+        name: buktiData.name || raw,
+        key: raw
+      };
+    }
+  }
+  if (raw.indexOf('data:image') === 0 || raw.indexOf('data:application/pdf') === 0) {
+    return {
+      sourceLabel: sourceLabel,
+      value: raw,
+      kind: 'upload',
+      mime: raw.indexOf('data:image') === 0 ? 'image/base64' : 'application/pdf',
+      name: 'Data URI'
+    };
+  }
+  if (isLikelyUrl(raw)) {
+    var lower = raw.toLowerCase();
+    var driveMatch = raw.match(/\/d\/([^\/\?]+)/);
+    return {
+      sourceLabel: sourceLabel,
+      value: raw,
+      kind: 'url',
+      isDrive: !!driveMatch,
+      drivePreviewUrl: driveMatch ? ('https://drive.google.com/file/d/' + driveMatch[1] + '/preview') : '',
+      isImage: /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(lower),
+      isPdf: /\.pdf(\?.*)?$/i.test(lower)
+    };
+  }
+  return null;
+}
+
+async function buildEditJurnalEvidenHtml(j) {
+  var evidenCandidates = [];
+  if (j.noRef) evidenCandidates.push({ label: 'No. Referensi', value: j.noRef });
+
+  if (j.meta && j.meta.permohonanId) {
+    var permohonan = await KDB.getAll('permohonan');
+    var p = permohonan.find(function(x) { return x.id === j.meta.permohonanId; });
+    if (p && p.buktiDokumen) evidenCandidates.push({ label: 'Permohonan Dana', value: p.buktiDokumen });
+  }
+  if (j.meta && j.meta.danaMasukId) {
+    var danaMasuk = await KDB.getAll('danamasuk');
+    var d = danaMasuk.find(function(x) { return x.id === j.meta.danaMasukId; });
+    if (d && d.buktiDokumen) evidenCandidates.push({ label: 'Dana Masuk', value: d.buktiDokumen });
+  }
+
+  var seen = {};
+  var htmlItems = [];
+  for (var i = 0; i < evidenCandidates.length; i++) {
+    var cand = evidenCandidates[i];
+    var dedupKey = String(cand.value || '').trim();
+    if (!dedupKey || seen[dedupKey]) continue;
+    seen[dedupKey] = true;
+    var resolved = await resolveJurnalEvidenValue(cand.value, cand.label);
+    if (!resolved) continue;
+    htmlItems.push('<div style="border:1px solid #e3e7ef;border-radius:8px;padding:8px;background:#fafbff">' + buildEvidenContentHtml(resolved) + '</div>');
+  }
+
+  if (!htmlItems.length) {
+    return '<div class="alert alert-warning mt-12" style="margin-bottom:0">Belum ada eviden terlampir pada jurnal ini.</div>';
+  }
+
+  return '<div class="mt-12" style="padding:10px;border:1px solid #dbe3ff;border-radius:10px;background:#f8faff">'
+    + '<div style="font-weight:700;color:#1a237e;margin-bottom:8px">📎 Eviden Terlampir</div>'
+    + '<div style="display:grid;gap:8px">' + htmlItems.join('') + '</div>'
+    + '</div>';
+}
+
 async function editJurnal(id) {
   var jurnal = await KDB.getAll('jurnal');
   var j = jurnal.find(function(x){ return x.id === id; });
   if (!j) return;
   var akunOpts = await getAkunOptions();
+  var evidenHtml = await buildEditJurnalEvidenHtml(j);
   var linesHtml = (j.lines || []).map(function(l, i) {
     return '<tr>'
       + '<td><select class="ej-akun" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem"><option value="">-- Pilih --</option>' + akunOpts.replace('value="' + l.akun + '"', 'value="' + l.akun + '" selected') + '</select></td>'
@@ -3601,6 +3731,7 @@ async function editJurnal(id) {
     + '<div class="fg"><label>No. Referensi</label><input id="ej-ref" value="' + (j.noRef||'') + '"></div>'
     + '<div class="fg full"><label>Keterangan</label><input id="ej-ket-main" value="' + (j.keterangan||'') + '"></div>'
     + '</div>'
+    + evidenHtml
     + '<div class="table-wrap mt-12"><table style="font-size:0.83rem"><thead><tr><th>Akun</th><th>Keterangan</th><th>Debit (Rp)</th><th>Kredit (Rp)</th><th></th></tr></thead><tbody id="ej-lines-body">' + linesHtml + '</tbody></table></div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'
     + '<button class="btn btn-outline btn-sm" onclick="addEditJurnalLine()">+ Tambah Baris</button>'
