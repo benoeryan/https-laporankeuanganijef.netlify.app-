@@ -50,6 +50,8 @@ const MENU = [
     { id: 'jurnal-umum',         label: 'Jurnal Umum',         icon: '📓', minRole: 'leader' },
     { id: 'jurnal-penyesuaian',  label: 'Jurnal Penyesuaian',  icon: '🔧', minRole: 'leader' },
     { id: 'jurnal-penutup',      label: 'Jurnal Penutup',      icon: '🔒', minRole: 'admin' },
+    { id: 'jurnal-trash',        label: 'Tempat Sampah',       icon: '🗑️', minRole: 'leader' },
+    { id: 'jurnal-recover',      label: 'Recover Jurnal',      icon: '♻️', minRole: 'leader' },
   ]},
   { group: 'Monitor', icon: '📊', items: [
     { id: 'monitor-buku-besar',     label: 'Buku Besar',          icon: '📚', minRole: 'viewer' },
@@ -928,6 +930,8 @@ async function renderSection(id) {
       case 'jurnal-umum':         el.innerHTML = await renderJurnalUmum(); break;
       case 'jurnal-penyesuaian':  el.innerHTML = await renderJurnalPenyesuaian(); break;
       case 'jurnal-penutup':      el.innerHTML = await renderJurnalPenutup(); break;
+      case 'jurnal-trash':        el.innerHTML = await renderJurnalTrashPage(); break;
+      case 'jurnal-recover':      el.innerHTML = await renderJurnalRecoverPage(); break;
       case 'monitor-buku-besar':  el.innerHTML = await renderBukuBesar(); break;
       case 'monitor-utang-piutang': el.innerHTML = await renderUtangPiutang(); break;
       case 'monitor-forecast-bayar': el.innerHTML = await renderForecastBayar(); break;
@@ -2517,7 +2521,8 @@ async function lihatJurnalTrash(id) {
     j = trash.find(function(x){ return x.id === id; });
   }
   if (!j) { showAlert('Data tidak ditemukan di tempat sampah', 'warning'); return; }
-  openJurnalPreviewModal(j, '👁️ View Jurnal di Tempat Sampah', '<button class="btn btn-outline" onclick="lihatTrashJurnal(true)">⬅ Kembali</button>');
+  var backBtn = (currentSection === 'jurnal-trash') ? '<button class="btn btn-outline" onclick="closeModalDirect()">⬅ Kembali</button>' : '<button class="btn btn-outline" onclick="lihatTrashJurnal(true)">⬅ Kembali</button>';
+  openJurnalPreviewModal(j, '👁️ View Jurnal di Tempat Sampah', backBtn);
 }
 
 async function lihatTrashJurnal(preserveState) {
@@ -2572,7 +2577,11 @@ async function restoreJurnal(id) {
   // Hapus dari trash
   await KDB.delete('jurnal_trash', id);
   showAlert('Jurnal berhasil di-restore!');
-  lihatTrashJurnal(); // Refresh modal
+  if (currentSection === 'jurnal-trash') {
+    renderSection('jurnal-trash');
+  } else {
+    lihatTrashJurnal(); // Refresh modal
+  }
 }
 
 async function restoreSemuaTrash() {
@@ -2589,7 +2598,11 @@ async function restoreSemuaTrash() {
   }
   showLoading(false);
   showAlert(trash.length + ' jurnal berhasil di-restore!');
-  closeModalDirect();
+  if (currentSection === 'jurnal-trash') {
+    renderSection('jurnal-trash');
+  } else {
+    closeModalDirect();
+  }
 }
 
 async function hapusPermanen(id) {
@@ -2598,7 +2611,11 @@ async function hapusPermanen(id) {
   if (konfirmasi !== 'HAPUS PERMANEN') { showAlert('Dibatalkan', 'info'); return; }
   await KDB.delete('jurnal_trash', id);
   showAlert('Jurnal dihapus permanen.');
-  lihatTrashJurnal();
+  if (currentSection === 'jurnal-trash') {
+    renderSection('jurnal-trash');
+  } else {
+    lihatTrashJurnal();
+  }
 }
 
 async function kosongkanTrash() {
@@ -2611,7 +2628,54 @@ async function kosongkanTrash() {
   for (var i = 0; i < trash.length; i++) { await KDB.delete('jurnal_trash', trash[i].id); }
   showLoading(false);
   showAlert('Tempat sampah dikosongkan.');
-  closeModalDirect();
+  if (currentSection === 'jurnal-trash') {
+    renderSection('jurnal-trash');
+  } else {
+    closeModalDirect();
+  }
+}
+
+async function renderJurnalTrashPage() {
+  var trash = await KDB.getAll('jurnal_trash');
+  window._trashJurnalState = {
+    items: trash.sort(function(a, b) { return (b.deletedAt || '').localeCompare(a.deletedAt || ''); }),
+    query: '',
+    perPage: 20,
+    page: 1,
+    listHeight: 420
+  };
+
+  setTimeout(function() {
+    renderTrashJurnalList();
+  }, 10);
+
+  var state = window._trashJurnalState;
+  return '<div class="page-title">🗑️ Tempat Sampah Jurnal</div>'
+    + '<div class="alert alert-info">Jurnal yang dihapus bisa di-restore kembali ke sistem. Gunakan <b>View</b> untuk cek detail dulu.</div>'
+    + '<div class="card">'
+    + '<div class="card-header"><h2>Daftar Jurnal Terhapus (' + state.items.length + ')</h2>'
+    + '<div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    + '<input id="trash-jurnal-search" type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan / user..." oninput="applyTrashJurnalSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
+    + '<select id="trash-jurnal-per-page" onchange="applyTrashJurnalPerPage(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px">'
+    + '<option value="10"' + (state.perPage === 10 ? ' selected' : '') + '>10/baris</option>'
+    + '<option value="20"' + (state.perPage === 20 ? ' selected' : '') + '>20/baris</option>'
+    + '<option value="30"' + (state.perPage === 30 ? ' selected' : '') + '>30/baris</option>'
+    + '<option value="50"' + (state.perPage === 50 ? ' selected' : '') + '>50/baris</option>'
+    + '</select>'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#555">Tinggi List'
+    + '<input id="trash-jurnal-height" type="range" min="260" max="640" step="20" value="' + state.listHeight + '" oninput="applyTrashJurnalHeight(this.value)">'
+    + '<span id="trash-jurnal-height-label" style="min-width:44px">' + state.listHeight + 'px</span></label>'
+    + '</div>'
+    + '</div>'
+    + '<div id="trash-jurnal-summary" style="font-size:0.82rem;color:#555;margin-bottom:6px"></div>'
+    + '<div id="trash-jurnal-table-wrap" class="table-wrap" style="border:1px solid #edf1f7;border-radius:10px;margin-bottom:12px"></div>'
+    + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+    + '<div style="display:flex;gap:6px;align-items:center"><button id="trash-jurnal-prev" class="btn btn-sm btn-outline" onclick="changeTrashJurnalPage(-1)">← Prev</button><span id="trash-jurnal-page-info" style="font-size:0.82rem;color:#555"></span><button id="trash-jurnal-next" class="btn btn-sm btn-outline" onclick="changeTrashJurnalPage(1)">Next →</button></div>'
+    + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+    + '<button class="btn btn-success" onclick="restoreSemuaTrash()">♻️ Restore Semua (' + state.items.length + ')</button>'
+    + '<button class="btn btn-danger" onclick="kosongkanTrash()">🗑️ Kosongkan Tempat Sampah</button>'
+    + '</div></div>'
+    + '</div>';
 }
 
 // ===== RECOVER DATA DARI LOCALSTORAGE =====
@@ -2737,7 +2801,8 @@ function lihatRecoverLocalStorageItem(id) {
   if (!state) return;
   var j = state.items.find(function(x){ return x.id === id; });
   if (!j) { showAlert('Data tidak ditemukan', 'warning'); return; }
-  openJurnalPreviewModal(j, '👁️ Preview Jurnal Recover', '<button class="btn btn-outline" onclick="openRecoverLocalStorageModal()">⬅ Kembali</button>');
+  var backBtn = (currentSection === 'jurnal-recover') ? '<button class="btn btn-outline" onclick="closeModalDirect()">⬅ Kembali</button>' : '<button class="btn btn-outline" onclick="openRecoverLocalStorageModal()">⬅ Kembali</button>';
+  openJurnalPreviewModal(j, '👁️ Preview Jurnal Recover', backBtn);
 }
 
 async function prosesRecoverLocalStorageTerpilih() {
@@ -2804,6 +2869,86 @@ async function recoverDariLocalStorage() {
     totalRecoveredInCache: recovered.length
   };
   openRecoverLocalStorageModal();
+}
+
+async function renderJurnalRecoverPage() {
+  // Kumpulkan semua jurnal dari localStorage individual keys
+  var recovered = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var key = localStorage.key(i);
+    if (key && key.startsWith('k_jurnal_') && key !== 'k_jurnal_all' && key !== 'k_jurnal_trash_all') {
+      try {
+        var data = JSON.parse(localStorage.getItem(key));
+        if (data && data.id && data.tanggal) recovered.push(data);
+      } catch(e) {}
+    }
+  }
+  // Juga cek k_jurnal_all
+  try {
+    var allCache = JSON.parse(localStorage.getItem('k_jurnal_all') || '[]');
+    allCache.forEach(function(j) {
+      if (j && j.id && !recovered.find(function(r){ return r.id === j.id; })) recovered.push(j);
+    });
+  } catch(e) {}
+
+  if (recovered.length === 0) {
+    return '<div class="page-title">♻️ Recover Jurnal</div>'
+      + '<div class="alert alert-warning">Tidak ada data jurnal di localStorage untuk di-recover.</div>';
+  }
+
+  // Bandingkan dengan yang ada di Firebase
+  var existing = await KDB.getAll('jurnal');
+  var existingIds = existing.map(function(j){ return j.id; });
+  var toRestore = recovered.filter(function(j) { return existingIds.indexOf(j.id) === -1; });
+
+  if (toRestore.length === 0) {
+    return '<div class="page-title">♻️ Recover Jurnal</div>'
+      + '<div class="alert alert-info">Semua data di localStorage sudah ada di database. Tidak perlu recover.</div>';
+  }
+
+  var selected = {};
+  for (var i = 0; i < toRestore.length; i++) {
+    selected[toRestore[i].id] = true;
+  }
+  window._recoverLocalStorageState = {
+    items: toRestore.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); }),
+    selected: selected,
+    query: '',
+    perPage: 20,
+    page: 1,
+    listHeight: 400
+  };
+
+  setTimeout(function() {
+    renderRecoverLocalStorageList();
+  }, 10);
+
+  var state = window._recoverLocalStorageState;
+  return '<div class="page-title">♻️ Recover Jurnal</div>'
+    + '<div class="alert alert-info">Ditemukan <b>' + state.items.length + '</b> jurnal di localStorage yang belum ada di database. Silakan review lalu pilih yang ingin di-recover.</div>'
+    + '<div class="card">'
+    + '<div class="card-header"><h2>Kandidat Recover dari LocalStorage</h2>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    + '<input type="text" value="' + escapeHtml(state.query || '') + '" placeholder="Cari ref / keterangan..." oninput="stateRecoverLocalStorageSearch(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;min-width:220px;flex:1">'
+    + '<select onchange="stateRecoverLocalStoragePerPage(this.value)" style="padding:7px 10px;border:1.5px solid #ddd;border-radius:7px">'
+    + '<option value="10"' + (state.perPage === 10 ? ' selected' : '') + '>10/baris</option>'
+    + '<option value="20"' + (state.perPage === 20 ? ' selected' : '') + '>20/baris</option>'
+    + '<option value="30"' + (state.perPage === 30 ? ' selected' : '') + '>30/baris</option>'
+    + '<option value="50"' + (state.perPage === 50 ? ' selected' : '') + '>50/baris</option>'
+    + '</select>'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#555">Tinggi List'
+    + '<input type="range" min="260" max="640" step="20" value="' + state.listHeight + '" oninput="stateRecoverLocalStorageHeight(this.value)">'
+    + '<span id="recover-ls-height-label" style="min-width:44px">' + state.listHeight + 'px</span></label>'
+    + '</div>'
+    + '</div>'
+    + '<div id="recover-ls-summary" style="font-size:0.82rem;color:#555;margin-bottom:6px"></div>'
+    + '<div id="recover-ls-table-wrap" class="table-wrap" style="border:1px solid #edf1f7;border-radius:10px;margin-bottom:12px"></div>'
+    + '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+    + '<div style="display:flex;gap:6px;align-items:center"><button id="recover-ls-prev" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(-1)">← Prev</button><span id="recover-ls-page-info" style="font-size:0.82rem;color:#555"></span><button id="recover-ls-next" class="btn btn-sm btn-outline" onclick="changeRecoverLocalStoragePage(1)">Next →</button></div>'
+    + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+    + '<button class="btn btn-success" onclick="prosesRecoverLocalStorageTerpilih()">♻️ Recover Terpilih</button>'
+    + '</div></div>'
+    + '</div>';
 }
 
 // ===== INTEGRASI BATCH: Permohonan Dana & Dana Masuk → Jurnal =====
