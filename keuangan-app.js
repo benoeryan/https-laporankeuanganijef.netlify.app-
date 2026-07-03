@@ -14046,6 +14046,8 @@ function setATKFilterValue(key, value) {
   navigate('kalk-inventori-atk');
 }
 
+var ATK_LOG_MAX_ROWS = 200;
+
 async function renderInventoriATK() {
   var list = await KDB.getAll('inventori_atk');
   var logList = await KDB.getAll('atk_log');
@@ -14116,14 +14118,15 @@ async function renderInventoriATK() {
 
   // Log rows
   var logItemKeyword = (filters.logItem || '').toLowerCase().trim();
-  var filteredLogList = (logList||[]).slice().sort(function(a,b){
+  var filteredLogRaw = (logList||[]).slice().sort(function(a,b){
     return normalizeATKDate(b.tanggal || b.createdAt || '').localeCompare(normalizeATKDate(a.tanggal || a.createdAt || ''));
   }).filter(function(lg) {
     var itemNama = itemNameMap[lg.atkId] || lg.atkId || '';
     var matchItem = !logItemKeyword || itemNama.toLowerCase().indexOf(logItemKeyword) >= 0;
     var matchDate = isATKDateInRange(lg.tanggal || lg.createdAt || '', filters.logFrom, filters.logTo);
     return matchItem && matchDate;
-  }).slice(0,200);
+  });
+  var filteredLogList = filteredLogRaw.slice(0, ATK_LOG_MAX_ROWS);
 
   var logRows = filteredLogList.map(function(lg) {
     var itemNama = itemNameMap[lg.atkId] || lg.atkId;
@@ -14192,12 +14195,13 @@ async function renderInventoriATK() {
     + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
     + '</div>'
     // Log Transaksi
-    + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + filteredLogList.length + '/' + (logList||[]).length + ')</h2></div>'
+    + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + filteredLogRaw.length + '/' + (logList||[]).length + ')</h2></div>'
     + '<div class="form-grid cols3" style="margin-bottom:12px">'
     + '<div class="fg"><label>Filter Item</label><input value="' + logItemVal + '" placeholder="Cari nama item..." oninput="setATKFilterValue(\'logItem\', this.value)"></div>'
     + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.logFrom||'') + '" onchange="setATKFilterValue(\'logFrom\', this.value)"></div>'
     + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.logTo||'') + '" onchange="setATKFilterValue(\'logTo\', this.value)"></div>'
     + '</div>'
+    + (filteredLogRaw.length > ATK_LOG_MAX_ROWS ? '<div class="text-muted" style="margin-bottom:8px">Menampilkan ' + ATK_LOG_MAX_ROWS + ' transaksi terbaru dari hasil filter.</div>' : '')
     + (filteredLogList.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Item</th><th>Tipe</th><th>Qty</th><th>Pengambil</th><th>Keterangan</th><th>Bukti</th><th>Aksi</th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada log transaksi sesuai filter</div>')
     + '</div>'
     // Jurnal auto-detect
@@ -14569,7 +14573,7 @@ async function viewATKItem(id) {
   var sisa = stokAwal + totalMasuk - totalKeluar;
   var nilai = sisa * (parseFloat(item.harga) || 0);
 
-  var logRows = logs.slice(0, 15).map(function(lg) {
+  var logRows = logs.slice(0, ATK_LOG_MAX_ROWS).map(function(lg) {
     var badgeBg = lg.tipe === 'masuk' ? '#e8f5e9' : '#ffebee';
     var badgeColor = lg.tipe === 'masuk' ? '#2e7d32' : '#c62828';
     var qtyCls = lg.tipe === 'masuk' ? 'text-green' : 'text-red';
@@ -14596,6 +14600,7 @@ async function viewATKItem(id) {
     + '<tr><td style="padding:4px 8px;color:#888">Dibuat</td><td>' + (item.createdAt ? fmtDate(item.createdAt) : '-') + '</td></tr>'
     + '</tbody></table>'
     + '<div style="font-weight:700;margin-bottom:6px">Riwayat Transaksi Item (' + logs.length + ')</div>'
+    + (logs.length > ATK_LOG_MAX_ROWS ? '<div class="text-muted" style="margin-bottom:8px">Menampilkan ' + ATK_LOG_MAX_ROWS + ' transaksi terbaru.</div>' : '')
     + (logs.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Tipe</th><th>Qty</th><th>PIC</th><th>Keterangan</th><th>Aksi</th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty-state" style="padding:20px 12px"><span class="icon">📋</span>Belum ada riwayat transaksi untuk item ini</div>');
 
   openModal(html, '📋 Detail Item ATK');
