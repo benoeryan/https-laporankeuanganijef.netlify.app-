@@ -1274,6 +1274,43 @@ function getKasBankAccounts(akunList) {
   return (akunList || []).filter(function(a) { return a.kategori === 'Aset Lancar'; });
 }
 
+async function getKasBankSaldoFlow(jurnal, akunList) {
+  var tahunSekarang = new Date().getFullYear();
+  var saldoAwalData = await KDB.getSetting('saldo_awal_' + tahunSekarang, {});
+  var kasBankAccounts = getKasBankAccounts(akunList);
+  var result = {};
+
+  kasBankAccounts.forEach(function(a) {
+    var saldoAwal = parseFloat(saldoAwalData[a.kode]) || 0;
+    result[a.kode] = {
+      akun: a,
+      saldoAwal: saldoAwal,
+      kasMasuk: 0,
+      kasKeluar: 0,
+      saldoAkhir: saldoAwal
+    };
+  });
+
+  (jurnal || []).filter(function(j) {
+    if (j.tipe === 'penutup') return false;
+    var tahunJurnal = j.tanggal ? parseInt(String(j.tanggal).substring(0, 4), 10) : 0;
+    return tahunJurnal === tahunSekarang;
+  }).forEach(function(j) {
+    (j.lines || []).forEach(function(l) {
+      if (!l || !l.akun || !result[l.akun]) return;
+      result[l.akun].kasMasuk += Math.abs(parseFloat(l.debit) || 0);
+      result[l.akun].kasKeluar += Math.abs(parseFloat(l.kredit) || 0);
+    });
+  });
+
+  Object.keys(result).forEach(function(kode) {
+    var item = result[kode];
+    item.saldoAkhir = item.saldoAwal + item.kasMasuk - item.kasKeluar;
+  });
+
+  return result;
+}
+
 // ===== DASHBOARD =====
 async function renderDashboard() {
   if (KU.role === 'nanda') return renderPortalAset();
@@ -1289,6 +1326,7 @@ async function renderDashboard() {
   const fd = await getFinancialData();
   const saldo = fd.saldo;
   const kasAkun = getKasBankAccounts(fd.akun);
+  const kasBankFlow = await getKasBankSaldoFlow(jurnal, fd.akun);
 
   const totalDebit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalDebit)||0); }, 0);
   const totalKredit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalKredit)||0); }, 0);
@@ -1344,7 +1382,7 @@ async function renderDashboard() {
     if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') {
       net = pcSaldoReal;
     } else {
-      net = (saldo[a.kode] || {}).net || 0;
+      net = ((kasBankFlow[a.kode] || {}).saldoAkhir) || 0;
     }
     const bg = net > 0 ? '#f8fff8' : net < 0 ? '#fff8f8' : '#f8f9ff';
     const border = net > 0 ? '#10b981' : net < 0 ? '#f43f5e' : '#1a237e';
@@ -1362,7 +1400,7 @@ async function renderDashboard() {
     + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni) + '</div></div>';
   const totalKasBank = kasAkun.reduce(function(s,a){
     if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') return s + pcSaldoReal;
-    return s + (((saldo[a.kode]||{}).net)||0);
+    return s + ((((kasBankFlow[a.kode] || {}).saldoAkhir)) || 0);
   }, 0);
 
   // Compute total pendapatan and pengeluaran for primary KPI
@@ -1434,6 +1472,7 @@ async function renderDashboardApprover() {
   const fd = await getFinancialData();
   const saldo = fd.saldo;
   const kasAkun = getKasBankAccounts(fd.akun);
+  const kasBankFlow = await getKasBankSaldoFlow(jurnal, fd.akun);
 
   const totalDebit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalDebit)||0); }, 0);
   const totalKredit = jurnal.reduce(function(s,j){ return s+(parseFloat(j.totalKredit)||0); }, 0);
@@ -1477,7 +1516,7 @@ async function renderDashboardApprover() {
   const saldoCards = dashKasAkun2.map(function(a) {
     const net = ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3')
       ? pcSaldoReal2
-      : ((saldo[a.kode] || {}).net || 0);
+      : ((((kasBankFlow[a.kode] || {}).saldoAkhir)) || 0);
     const bg = net > 0 ? '#f8fff8' : net < 0 ? '#fff8f8' : '#f8f9ff';
     const border = net > 0 ? '#10b981' : net < 0 ? '#f43f5e' : '#1a237e';
     const cls = net > 0 ? 'text-green' : net < 0 ? 'text-red' : 'text-blue';
@@ -1494,7 +1533,7 @@ async function renderDashboardApprover() {
     + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni2) + '</div></div>';
   const totalKasBank2 = kasAkun.reduce(function(s,a){
     if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') return s + pcSaldoReal2;
-    return s + (((saldo[a.kode]||{}).net)||0);
+    return s + ((((kasBankFlow[a.kode] || {}).saldoAkhir)) || 0);
   }, 0);
 
   const jurnalRows = recentJurnal.length
@@ -6383,6 +6422,9 @@ async function renderSaldoHariIni() {
   const fd = await getFinancialData();
   const saldo = fd.saldo;
   const akun = fd.akun;
+  const jurnal = await KDB.getAll('jurnal');
+  const kasBankFlow = await getKasBankSaldoFlow(jurnal, akun);
+  const pcSaldoReal = await getPettyCashSaldo();
   // Filter akun sesuai list yang diminta
   var saldoKeywords = ['bni','mandiri','petty','deposito','piutang usaha','piutang siswa','piutang peserta','piutang mitra','piutang karyawan','persediaan barang','persediaan pelatihan','persediaan atk','piutang seragam','utang usaha','utang supplier','utang operasional','utang pajak','utang pph 21','utang pph 23','utang pph 25','utang pembelian','utang bank'];
   var filteredAkun = akun.filter(function(a) {
@@ -6390,10 +6432,15 @@ async function renderSaldoHariIni() {
     return saldoKeywords.some(function(kw){ return n.includes(kw); });
   });
   if (!filteredAkun.length) filteredAkun = akun.filter(function(a){ return a.kategori === 'Aset Lancar' || a.kategori === 'Kewajiban Lancar'; });
-  const totalFiltered = filteredAkun.reduce(function(s,a){ return s+((saldo[a.kode]||{}).net||0); }, 0);
+  function getSaldoHariIniValue(a) {
+    if ((a.nama || '').toLowerCase().includes('petty') || a.kode === '1-1101-3') return pcSaldoReal;
+    if (isKasBankAccount(a)) return (((kasBankFlow[a.kode] || {}).saldoAkhir)) || 0;
+    return ((saldo[a.kode] || {}).net) || 0;
+  }
+  const totalFiltered = filteredAkun.reduce(function(s,a){ return s + getSaldoHariIniValue(a); }, 0);
   const today_str = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const rows = filteredAkun.map(function(a) {
-    const net = (saldo[a.kode]||{}).net || 0;
+    const net = getSaldoHariIniValue(a);
     const badgeCls = net > 0 ? 'badge-success' : net === 0 ? 'badge-neutral' : 'badge-danger';
     const badgeText = net > 0 ? 'Positif' : net === 0 ? 'Nihil' : 'Negatif';
     return '<tr><td>' + a.kode + '</td><td class="fw-bold">' + a.nama + '</td>'
@@ -11173,7 +11220,7 @@ async function callOpenRouterChat(msg, apiKey) {
       + '- "rekap", "ringkasan", "summary" → buat ringkasan\n'
       + '- "yang tadi", "lanjutkan", "seperti sebelumnya", "ulangi" → merujuk ke konteks chat sebelumnya\n\n'
       + 'KNOWLEDGE BASE - CARA ANALISA SELISIH BANK:\n'
-      + '- Saldo di Posisi Saldo Hari Ini = saldo_awal + semua jurnal (debit - kredit)\n'
+      + '- Saldo kas/bank di Posisi Saldo Hari Ini = saldo_awal + kas_masuk - kas_keluar pada akun kas/bank\n'
       + '- Saldo di Buku Besar = sama (saldo awal + jurnal)\n'
       + '- Jika selisih antara sistem vs aktual bank: penyebab utama yang perlu diverifikasi:\n'
       + '  a) Saldo awal di-set terlalu besar/kecil → koreksi di Setup Saldo Awal\n'
