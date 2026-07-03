@@ -930,8 +930,8 @@ async function renderSection(id) {
       case 'jurnal-umum':         el.innerHTML = await renderJurnalUmum(); break;
       case 'jurnal-penyesuaian':  el.innerHTML = await renderJurnalPenyesuaian(); break;
       case 'jurnal-penutup':      el.innerHTML = await renderJurnalPenutup(); break;
-      case 'jurnal-trash':        el.innerHTML = await renderJurnalTrashPage(); break;
-      case 'jurnal-recover':      el.innerHTML = await renderJurnalRecoverPage(); break;
+      case 'jurnal-trash':        el.innerHTML = await renderJurnalTrashPage(); renderTrashJurnalList(); break;
+      case 'jurnal-recover':      el.innerHTML = await renderJurnalRecoverPage(); renderRecoverLocalStorageList(); break;
       case 'monitor-buku-besar':  el.innerHTML = await renderBukuBesar(); break;
       case 'monitor-utang-piutang': el.innerHTML = await renderUtangPiutang(); break;
       case 'monitor-forecast-bayar': el.innerHTML = await renderForecastBayar(); break;
@@ -2645,10 +2645,6 @@ async function renderJurnalTrashPage() {
     listHeight: 420
   };
 
-  setTimeout(function() {
-    renderTrashJurnalList();
-  }, 10);
-
   var state = window._trashJurnalState;
   return '<div class="page-title">🗑️ Tempat Sampah Jurnal</div>'
     + '<div class="alert alert-info">Jurnal yang dihapus bisa di-restore kembali ke sistem. Gunakan <b>View</b> untuk cek detail dulu.</div>'
@@ -2918,10 +2914,6 @@ async function renderJurnalRecoverPage() {
     page: 1,
     listHeight: 400
   };
-
-  setTimeout(function() {
-    renderRecoverLocalStorageList();
-  }, 10);
 
   var state = window._recoverLocalStorageState;
   return '<div class="page-title">♻️ Recover Jurnal</div>'
