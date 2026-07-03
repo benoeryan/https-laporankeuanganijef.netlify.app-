@@ -11207,13 +11207,29 @@ async function runAIAnalysis() {
       if (!timedOut) {
       updateProgress(14, 'Mengecek outlier/transaksi tidak lazim...');
       try {
+    function normalizeOutlierPattern(text) {
+      return normalizeCompareText(text)
+        .replace(/\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|agt|sep|okt|nov|des)\b/g, '')
+        .replace(/\b20\d{2}\b/g, '')
+        .replace(/\d+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
     var allAmounts = [];
     allJurnal.forEach(function(j) {
       // Skip jurnal penutup — nominalnya memang besar (total pendapatan/beban) dan bukan anomali
       if (j.tipe === 'penutup') return;
-      (j.lines||[]).forEach(function(l) {
-        if ((l.debit||0) > 0) allAmounts.push({ val: l.debit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'debit', jurnalId: j.id });
-        if ((l.kredit||0) > 0) allAmounts.push({ val: l.kredit, ref: j.noRef||j.id, tanggal: j.tanggal, ket: l.ket||j.keterangan, type: 'kredit', jurnalId: j.id });
+      var amount = Math.abs(parseFloat(j.totalDebit) || 0);
+      if (amount <= 0) return;
+      var patternKey = normalizeOutlierPattern(j.keterangan || '') || normalizeOutlierPattern(j.noRef || j.id);
+      allAmounts.push({
+        val: amount,
+        ref: j.noRef || j.id,
+        tanggal: j.tanggal,
+        ket: j.keterangan || '-',
+        source: j.sumber || '',
+        patternKey: patternKey,
+        jurnalId: j.id
       });
     });
     var outliers = [];
@@ -11227,19 +11243,36 @@ async function runAIAnalysis() {
       var threshold = meanVal + 3 * stdDev;
       if (threshold > 0) {
         var outlierExcluded = JSON.parse(localStorage.getItem('k_outlier_excluded') || '[]');
+        var recurringCount = 0;
         allAmounts.forEach(function(a) {
           if (a.val > threshold) {
             // Skip jika sudah ditandai "sudah benar"
             var outlierKey = a.tanggal + '_' + a.ref + '_' + a.val;
-            if (outlierExcluded.indexOf(outlierKey) === -1) outliers.push(a);
+            if (outlierExcluded.indexOf(outlierKey) !== -1) return;
+            // Jika pola transaksi berulang (contoh: payroll bulanan), jangan ditandai anomali
+            var similarRecurring = allAmounts.filter(function(b) {
+              if (b.jurnalId === a.jurnalId) return false;
+              if (!a.patternKey || !b.patternKey || a.patternKey !== b.patternKey) return false;
+              var tolerance = Math.max(10000, a.val * 0.1); // toleransi 10%
+              return Math.abs(b.val - a.val) <= tolerance;
+            }).length;
+            if (similarRecurring >= 2) {
+              recurringCount++;
+              return;
+            }
+            var ratioMean = meanVal > 0 ? (a.val / meanVal) : 0;
+            var reason = 'Nominal ' + ratioMean.toFixed(1) + 'x di atas rata-rata ' + fmtRp(meanVal) + ' (ambang outlier ' + fmtRp(threshold) + ')';
+            if (a.source) reason += ' | Sumber: ' + a.source;
+            outliers.push(Object.assign({}, a, { reason: reason }));
           }
         });
+        if (recurringCount > 0) info.push('ℹ️ ' + recurringCount + ' transaksi nominal besar tidak ditandai anomali karena terdeteksi pola berulang (contoh payroll/periode rutin).');
         outliers.sort(function(a,b) { return b.val - a.val; });
         outliers = outliers.slice(0,10);
       }
     }
     if (outliers.length > 0) {
-      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button> <button class="btn btn-success btn-sm" onclick="abaikanSemuaOutlier()">✅ Abaikan Semua</button>', detail: outliers.map(function(o) { var oKey = (o.tanggal||'') + '_' + (o.ref||'') + '_' + o.val; return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td>' + o.type + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="reviewOutlierDetail(\'' + o.jurnalId + '\')">👁️ Review</button> <button class="btn btn-xs btn-success" onclick="abaikanOutlier(\'' + oKey.replace(/'/g,'') + '\')">✅ Benar</button></td></tr>'; }).join('') + '<tr><td colspan="6" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Review transaksi dengan nominal sangat besar dibanding rata-rata. Pastikan bukan kesalahan input.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Tipe</th><th>Jumlah</th><th>Aksi</th>', group: 'anomali' });
+      warnings.push({ severity: 'warning', title: '⚠️ Transaksi Tidak Lazim / Outlier (' + outliers.length + ' ditemukan)', actionButtons: '<button class="btn btn-info btn-sm" onclick="navigate(\'jurnal-umum\')">📓 Buka Jurnal Umum</button> <button class="btn btn-success btn-sm" onclick="abaikanSemuaOutlier()">✅ Abaikan Semua</button>', detail: outliers.map(function(o) { var oKey = (o.tanggal||'') + '_' + (o.ref||'') + '_' + o.val; return '<tr><td>' + fmtDate(o.tanggal) + '</td><td>' + o.ref + '</td><td>' + (o.ket||'-') + '</td><td class="text-red fw-bold">' + fmtRp(o.val) + '</td><td style="font-size:0.78rem;line-height:1.35">' + (o.reason||'-') + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="reviewOutlierDetail(\'' + o.jurnalId + '\')">👁️ Review</button> <button class="btn btn-xs btn-success" onclick="abaikanOutlier(\'' + oKey.replace(/'/g,'') + '\')">✅ Benar</button></td></tr>'; }).join('') + '<tr><td colspan="6" style="font-size:0.82rem;color:#666;padding-top:8px"><b>Rekomendasi:</b> Koreksi hanya jika transaksi memang salah input. Jika valid, klik "✅ Benar" agar tidak ditandai lagi.</td></tr>', isTable: true, headers: '<th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Jumlah</th><th>Alasan Ditandai</th><th>Aksi</th>', group: 'anomali' });
     } else {
       info.push('✅ Tidak ditemukan transaksi outlier (nominal tidak lazim)');
     }
