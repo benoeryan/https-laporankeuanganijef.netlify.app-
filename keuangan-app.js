@@ -178,6 +178,15 @@ function parseNominal(val) {
     var decLen = str.length - lastComma - 1;
     str = decLen === 3 ? str.replace(/,/g, '') : str.replace(',', '.');
   } else {
+    var dotCount = (str.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      // Format ribuan Indonesia: 20.000.000 -> 20000000
+      str = str.replace(/\./g, '');
+    } else if (dotCount === 1) {
+      var dotDecLen = str.length - lastDot - 1;
+      // 1.000 -> ribuan, 1000.50 -> desimal
+      if (dotDecLen === 3 || dotDecLen === 0 || dotDecLen > 3) str = str.replace(/\./g, '');
+    }
     str = str.replace(/,/g, '');
   }
   str = str.replace(/[^\d.-]/g, '');
