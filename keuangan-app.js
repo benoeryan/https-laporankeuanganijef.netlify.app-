@@ -14017,10 +14017,47 @@ async function hitungHPPCustomer() {
 }
 
 // ===== INVENTORI STOK ATK =====
+function normalizeATKDate(value) {
+  if (!value) return '';
+  var raw = String(value);
+  if (raw.indexOf('T') >= 0) raw = raw.split('T')[0];
+  if (raw.indexOf(' ') >= 0) raw = raw.split(' ')[0];
+  if (raw.length < 10) return '';
+  return raw.slice(0, 10);
+}
+
+function isATKDateInRange(value, from, to) {
+  var dt = normalizeATKDate(value);
+  if (!dt) return !(from || to);
+  if (from && dt < from) return false;
+  if (to && dt > to) return false;
+  return true;
+}
+
+function getATKFilterState() {
+  var defaults = { stockItem: '', stockFrom: '', stockTo: '', logItem: '', logFrom: '', logTo: '' };
+  var saved = window._atkFilters || {};
+  return Object.assign({}, defaults, saved);
+}
+
+function setATKFilterValue(key, value) {
+  var next = getATKFilterState();
+  next[key] = value || '';
+  window._atkFilters = next;
+  navigate('kalk-inventori-atk');
+}
+
+function escapeJsSingleQuote(text) {
+  return String(text || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+var ATK_LOG_MAX_ROWS = 200;
+
 async function renderInventoriATK() {
   var list = await KDB.getAll('inventori_atk');
   var logList = await KDB.getAll('atk_log');
   var jurnal = await KDB.getAll('jurnal');
+  var filters = getATKFilterState();
 
   // Auto-detect ATK transactions from jurnal
   var atkFromJurnal = [];
@@ -14066,24 +14103,51 @@ async function renderInventoriATK() {
     stockMap[item.id] = { stok: (parseInt(item.stok)||0) + totalBeli - totalPakai, beli: totalBeli, pakai: totalPakai, nama: item.nama };
   });
 
-  var rows = (list||[]).map(function(item) {
+  var itemNameMap = {};
+  (list||[]).forEach(function(item) { itemNameMap[item.id] = item.nama || item.id; });
+
+  var stockItemKeyword = (filters.stockItem || '').toLowerCase().trim();
+  var filteredStockList = (list||[]).filter(function(item) {
+    var nama = (item.nama || '').toLowerCase();
+    var matchItem = !stockItemKeyword || nama.indexOf(stockItemKeyword) >= 0;
+    var matchDate = isATKDateInRange(item.createdAt || item.updatedAt || item.tanggal || '', filters.stockFrom, filters.stockTo);
+    return matchItem && matchDate;
+  });
+
+  var rows = filteredStockList.map(function(item) {
     var sm = stockMap[item.id] || { stok: (parseInt(item.stok)||0), beli: (parseInt(item.beli)||0), pakai: (parseInt(item.pakai)||0) };
     var sisa = sm.stok;
     var lowStock = sisa <= 2;
-    return '<tr><td class="fw-bold">' + item.nama + '</td><td>' + (item.satuan||'-') + '</td><td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editATK(\'' + item.id + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + item.id + '\')">Hapus</button></td></tr>';
+    var safeId = escapeJsSingleQuote(item.id);
+    var safeNama = escapeHtml(item.nama || '-');
+    var safeSatuan = escapeHtml(item.satuan || '-');
+    return '<tr><td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td><td>' + safeSatuan + '</td><td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewATKItem(\'' + safeId + '\')">View</button><button class="btn btn-xs btn-warning" onclick="editATK(\'' + safeId + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + safeId + '\')">Hapus</button></td></tr>';
   }).join('');
 
   // Log rows
-  var logRows = (logList||[]).slice().sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); }).slice(0,50).map(function(lg) {
-    var itemNama = (list||[]).find(function(x){ return x.id === lg.atkId; });
+  var logItemKeyword = (filters.logItem || '').toLowerCase().trim();
+  var filteredLogRaw = (logList||[]).slice().sort(function(a,b){
+    return normalizeATKDate(b.tanggal || b.createdAt || '').localeCompare(normalizeATKDate(a.tanggal || a.createdAt || ''));
+  }).filter(function(lg) {
+    var itemNama = itemNameMap[lg.atkId] || lg.atkId || '';
+    var matchItem = !logItemKeyword || itemNama.toLowerCase().indexOf(logItemKeyword) >= 0;
+    var matchDate = isATKDateInRange(lg.tanggal || lg.createdAt || '', filters.logFrom, filters.logTo);
+    return matchItem && matchDate;
+  });
+  var filteredLogList = filteredLogRaw.slice(0, ATK_LOG_MAX_ROWS);
+
+  var logRows = filteredLogList.map(function(lg) {
+    var itemNama = itemNameMap[lg.atkId] || lg.atkId;
+    var safeLogId = escapeJsSingleQuote(lg.id);
+    var safeItemNama = escapeHtml(itemNama || '-');
     var cls = lg.tipe === 'masuk' ? 'text-green' : 'text-red';
     var sign = lg.tipe === 'masuk' ? '+' : '-';
-    return '<tr><td>' + fmtDate(lg.tanggal) + '</td><td class="fw-bold">' + (itemNama ? itemNama.nama : lg.atkId) + '</td>'
+    return '<tr><td>' + fmtDate(lg.tanggal) + '</td><td class="fw-bold"><a href="javascript:void(0)" onclick="viewBuktiATK(\'' + safeLogId + '\')" style="color:#1a237e;text-decoration:underline">' + safeItemNama + '</a></td>'
       + '<td><span class="chip" style="background:' + (lg.tipe==='masuk'?'#e8f5e9':'#ffebee') + ';color:' + (lg.tipe==='masuk'?'#2e7d32':'#c62828') + '">' + (lg.tipe==='masuk'?'Masuk':'Keluar') + '</span></td>'
       + '<td class="text-center fw-bold ' + cls + '">' + sign + (lg.qty||0) + '</td>'
-      + '<td>' + (lg.pengambil||'-') + '</td><td>' + (lg.keterangan||'-') + '</td>'
-      + '<td>' + ((lg.buktiLink || lg.buktiPhoto) ? '<button class="btn btn-xs btn-info" onclick="viewBuktiATK(\'' + lg.id + '\')">📷 Foto</button>' : '-') + '</td>'
-      + '<td class="tbl-actions"><button class="btn btn-xs btn-danger" onclick="hapusATKLog(\'' + lg.id + '\')">Hapus</button></td></tr>';
+      + '<td>' + escapeHtml(lg.pengambil||'-') + '</td><td>' + escapeHtml(lg.keterangan||'-') + '</td>'
+      + '<td>' + ((lg.buktiLink || lg.buktiPhoto) ? '<button class="btn btn-xs btn-info" onclick="viewBuktiATK(\'' + safeLogId + '\')">📷 Foto</button>' : '-') + '</td>'
+      + '<td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewBuktiATK(\'' + safeLogId + '\')">View</button><button class="btn btn-xs btn-danger" onclick="hapusATKLog(\'' + safeLogId + '\')">Hapus</button></td></tr>';
   }).join('');
 
   var jurnalRows = atkFromJurnal.slice(0,20).map(function(t) {
@@ -14092,6 +14156,9 @@ async function renderInventoriATK() {
 
   // Generate barcode URL for public form
   var barcodeUrl = window.location.origin + window.location.pathname + '?mode=atk-form';
+
+  var stockItemVal = escapeHtml(filters.stockItem || '');
+  var logItemVal = escapeHtml(filters.logItem || '');
 
   return '<div class="page-title">📋 Inventori Stok ATK</div>'
     + '<div class="stats-row">'
@@ -14129,12 +14196,23 @@ async function renderInventoriATK() {
     + '<button class="btn btn-outline btn-sm" onclick="generateATKQR()">📱 Generate QR</button>'
     + '</div><div id="atk-qr-result" class="mt-12" style="text-align:center"></div></div>'
     // Daftar Stok
-    + '<div class="card"><div class="card-header"><h2>Daftar Stok ATK (' + (list||[]).length + ')</h2></div>'
-    + ((list||[]).length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Belum ada data ATK</div>')
+    + '<div class="card"><div class="card-header"><h2>Daftar Stok ATK (' + filteredStockList.length + '/' + (list||[]).length + ')</h2></div>'
+    + '<div class="form-grid cols3" style="margin-bottom:12px">'
+    + '<div class="fg"><label>Filter Item</label><input value="' + stockItemVal + '" placeholder="Cari nama item..." oninput="setATKFilterValue(\'stockItem\', this.value)"></div>'
+    + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.stockFrom||'') + '" onchange="setATKFilterValue(\'stockFrom\', this.value)"></div>'
+    + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.stockTo||'') + '" onchange="setATKFilterValue(\'stockTo\', this.value)"></div>'
+    + '</div>'
+    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
     + '</div>'
     // Log Transaksi
-    + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + (logList||[]).length + ')</h2></div>'
-    + ((logList||[]).length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Item</th><th>Tipe</th><th>Qty</th><th>Pengambil</th><th>Keterangan</th><th>Bukti</th><th>Aksi</th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Belum ada log transaksi</div>')
+    + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + filteredLogRaw.length + '/' + (logList||[]).length + ')</h2></div>'
+    + '<div class="form-grid cols3" style="margin-bottom:12px">'
+    + '<div class="fg"><label>Filter Item</label><input value="' + logItemVal + '" placeholder="Cari nama item..." oninput="setATKFilterValue(\'logItem\', this.value)"></div>'
+    + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.logFrom||'') + '" onchange="setATKFilterValue(\'logFrom\', this.value)"></div>'
+    + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.logTo||'') + '" onchange="setATKFilterValue(\'logTo\', this.value)"></div>'
+    + '</div>'
+    + (filteredLogRaw.length > ATK_LOG_MAX_ROWS ? '<div class="text-muted" style="margin-bottom:8px">Menampilkan ' + ATK_LOG_MAX_ROWS + ' transaksi terbaru dari hasil filter.</div>' : '')
+    + (filteredLogList.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Item</th><th>Tipe</th><th>Qty</th><th>Pengambil</th><th>Keterangan</th><th>Bukti</th><th>Aksi</th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada log transaksi sesuai filter</div>')
     + '</div>'
     // Jurnal auto-detect
     + '<div class="card"><div class="card-header"><h2>Transaksi ATK dari Jurnal (Auto-detect)</h2></div>'
@@ -14484,6 +14562,59 @@ async function hapusATK(id) {
   if (!confirm('Hapus ATK ini?')) return;
   await KDB.delete('inventori_atk', id);
   navigate('kalk-inventori-atk');
+}
+
+async function viewATKItem(id) {
+  var list = await KDB.getAll('inventori_atk');
+  var item = (list||[]).find(function(x){ return x.id === id; });
+  if (!item) { showAlert('Item ATK tidak ditemukan!', 'warning'); return; }
+
+  var logs = (await KDB.getAll('atk_log') || []).filter(function(lg){ return lg.atkId === id; })
+    .sort(function(a,b){ return normalizeATKDate(b.tanggal || b.createdAt || '').localeCompare(normalizeATKDate(a.tanggal || a.createdAt || '')); });
+
+  var totalMasuk = (parseInt(item.beli) || 0);
+  var totalKeluar = (parseInt(item.pakai) || 0);
+  logs.forEach(function(lg) {
+    if (lg.tipe === 'masuk') totalMasuk += (parseInt(lg.qty) || 0);
+    else totalKeluar += (parseInt(lg.qty) || 0);
+  });
+
+  var stokAwal = parseInt(item.stok) || 0;
+  var sisa = stokAwal + totalMasuk - totalKeluar;
+  var nilai = sisa * (parseFloat(item.harga) || 0);
+
+  var logRows = logs.slice(0, ATK_LOG_MAX_ROWS).map(function(lg) {
+    var badgeBg = lg.tipe === 'masuk' ? '#e8f5e9' : '#ffebee';
+    var badgeColor = lg.tipe === 'masuk' ? '#2e7d32' : '#c62828';
+    var qtyCls = lg.tipe === 'masuk' ? 'text-green' : 'text-red';
+    var qtySign = lg.tipe === 'masuk' ? '+' : '-';
+    var safeLogId = escapeJsSingleQuote(lg.id);
+    return '<tr><td>' + fmtDate(lg.tanggal) + '</td>'
+      + '<td><span class="chip" style="background:' + badgeBg + ';color:' + badgeColor + '">' + (lg.tipe === 'masuk' ? 'Masuk' : 'Keluar') + '</span></td>'
+      + '<td class="fw-bold ' + qtyCls + '">' + qtySign + (lg.qty || 0) + '</td>'
+      + '<td>' + escapeHtml(lg.pengambil || '-') + '</td>'
+      + '<td>' + escapeHtml(lg.keterangan || '-') + '</td>'
+      + '<td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewBuktiATK(\'' + safeLogId + '\')">View</button></td></tr>';
+  }).join('');
+
+  var html = '<div class="stats-row" style="margin-bottom:10px">'
+    + '<div class="stat-box"><div class="val">' + stokAwal + '</div><div class="lbl">Stok Awal</div></div>'
+    + '<div class="stat-box green"><div class="val">+' + totalMasuk + '</div><div class="lbl">Total Masuk</div></div>'
+    + '<div class="stat-box red"><div class="val">-' + totalKeluar + '</div><div class="lbl">Total Keluar</div></div>'
+    + '<div class="stat-box"><div class="val">' + sisa + '</div><div class="lbl">Sisa</div></div>'
+    + '</div>'
+    + '<table style="width:100%;font-size:0.85rem;margin-bottom:12px"><tbody>'
+    + '<tr><td style="padding:4px 8px;color:#888;width:120px">Nama</td><td class="fw-bold">' + escapeHtml(item.nama || '-') + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Satuan</td><td>' + escapeHtml(item.satuan || '-') + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Harga</td><td>' + fmtRp(item.harga || 0) + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Nilai Sisa</td><td class="fw-bold">' + fmtRp(nilai) + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Dibuat</td><td>' + (item.createdAt ? fmtDate(item.createdAt) : '-') + '</td></tr>'
+    + '</tbody></table>'
+    + '<div style="font-weight:700;margin-bottom:6px">Riwayat Transaksi Item (' + logs.length + ')</div>'
+    + (logs.length > ATK_LOG_MAX_ROWS ? '<div class="text-muted" style="margin-bottom:8px">Menampilkan ' + ATK_LOG_MAX_ROWS + ' transaksi terbaru.</div>' : '')
+    + (logs.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Tipe</th><th>Qty</th><th>PIC</th><th>Keterangan</th><th>Aksi</th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty-state" style="padding:20px 12px"><span class="icon">📋</span>Belum ada riwayat transaksi untuk item ini</div>');
+
+  openModal(html, '📋 Detail Item ATK');
 }
 
 // ===== SISTEM NOTIFIKASI =====
