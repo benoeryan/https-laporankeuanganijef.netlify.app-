@@ -14048,22 +14048,29 @@ async function renderInventoriATK() {
     return '<option value="' + item.id + '">' + item.nama + ' (' + (item.satuan||'pcs') + ')</option>';
   }).join('');
 
-  // Calculate real-time stock per item (including log)
-  var stockMap = {};
-  (list||[]).forEach(function(item) {
-    stockMap[item.id] = { stok: (parseInt(item.stok)||0) + (parseInt(item.beli)||0) - (parseInt(item.pakai)||0), nama: item.nama };
-  });
+  // Aggregate log transactions per item
+  var logBeliMap = {}, logPakaiMap = {};
   (logList||[]).forEach(function(lg) {
-    if (stockMap[lg.atkId]) {
-      if (lg.tipe === 'masuk') stockMap[lg.atkId].stok += parseInt(lg.qty)||0;
-      else stockMap[lg.atkId].stok -= parseInt(lg.qty)||0;
+    if (lg.tipe === 'masuk') {
+      logBeliMap[lg.atkId] = (logBeliMap[lg.atkId]||0) + (parseInt(lg.qty)||0);
+    } else {
+      logPakaiMap[lg.atkId] = (logPakaiMap[lg.atkId]||0) + (parseInt(lg.qty)||0);
     }
   });
 
+  // Calculate real-time stock per item (including log)
+  var stockMap = {};
+  (list||[]).forEach(function(item) {
+    var totalBeli = (parseInt(item.beli)||0) + (logBeliMap[item.id]||0);
+    var totalPakai = (parseInt(item.pakai)||0) + (logPakaiMap[item.id]||0);
+    stockMap[item.id] = { stok: (parseInt(item.stok)||0) + totalBeli - totalPakai, beli: totalBeli, pakai: totalPakai, nama: item.nama };
+  });
+
   var rows = (list||[]).map(function(item) {
-    var sisa = stockMap[item.id] ? stockMap[item.id].stok : (parseInt(item.stok)||0) + (parseInt(item.beli)||0) - (parseInt(item.pakai)||0);
+    var sm = stockMap[item.id] || { stok: (parseInt(item.stok)||0), beli: (parseInt(item.beli)||0), pakai: (parseInt(item.pakai)||0) };
+    var sisa = sm.stok;
     var lowStock = sisa <= 2;
-    return '<tr><td class="fw-bold">' + item.nama + '</td><td>' + (item.satuan||'-') + '</td><td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + (item.beli||0) + '</td><td class="text-center text-red">-' + (item.pakai||0) + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editATK(\'' + item.id + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + item.id + '\')">Hapus</button></td></tr>';
+    return '<tr><td class="fw-bold">' + item.nama + '</td><td>' + (item.satuan||'-') + '</td><td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-warning" onclick="editATK(\'' + item.id + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + item.id + '\')">Hapus</button></td></tr>';
   }).join('');
 
   // Log rows
