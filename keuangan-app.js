@@ -2448,9 +2448,9 @@ function renderTrashJurnalList() {
   if (!state) return;
   var q = (state.query || '').toLowerCase();
   var filtered = state.items.filter(function(j) {
-    var ref = (j.noRef || j.id || '').toLowerCase();
-    var ket = (j.keterangan || '').toLowerCase();
-    var by = (j.deletedBy || '').toLowerCase();
+    var ref = String(j.noRef || j.id || '').toLowerCase();
+    var ket = String(j.keterangan || '').toLowerCase();
+    var by = String(j.deletedBy || '').toLowerCase();
     return !q || ref.indexOf(q) !== -1 || ket.indexOf(q) !== -1 || by.indexOf(q) !== -1;
   });
 
@@ -2680,8 +2680,8 @@ function renderRecoverLocalStorageList() {
   if (!state) return;
   var q = (state.query || '').toLowerCase();
   var filtered = state.items.filter(function(j) {
-    var ref = (j.noRef || j.id || '').toLowerCase();
-    var ket = (j.keterangan || '').toLowerCase();
+    var ref = String(j.noRef || j.id || '').toLowerCase();
+    var ket = String(j.keterangan || '').toLowerCase();
     return !q || ref.indexOf(q) !== -1 || ket.indexOf(q) !== -1;
   });
 
@@ -11384,7 +11384,7 @@ async function localAIReply(msg) {
     var keyword = msg.replace(/cari(kan)?|temukan|mana|tampilkan/gi, '').trim().toLowerCase();
     if (keyword.length >= 3) {
       var found = jurnal.filter(function(j) {
-        return (j.keterangan||'').toLowerCase().includes(keyword) || (j.noRef||'').toLowerCase().includes(keyword);
+        return String(j.keterangan||'').toLowerCase().includes(keyword) || String(j.noRef||'').toLowerCase().includes(keyword);
       }).slice(0,5);
       if (found.length > 0) {
         var list2 = found.map(function(j) { return '• ' + (j.tanggal||'-') + ' | ' + (j.noRef||'-') + ' | ' + (j.keterangan||'-') + ' | ' + fmtRp(j.totalDebit||0); }).join('\n');
