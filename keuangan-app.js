@@ -1408,7 +1408,7 @@ async function renderDashboard() {
     + buildDashboardExtras(jurnal, fd, allPD, allDM);
 }
 
-// Auto-refresh dashboard setiap 30 detik
+// Auto-refresh dashboard setiap 15 menit
 var _dashRefreshTimer = null;
 function startDashAutoRefresh() {
   if (_dashRefreshTimer) clearInterval(_dashRefreshTimer);
@@ -1419,7 +1419,7 @@ function startDashAutoRefresh() {
       clearInterval(_dashRefreshTimer);
       _dashRefreshTimer = null;
     }
-  }, 300000); // 5 menit
+  }, 900000); // 15 menit
 }
 
 async function renderDashboardApprover() {
@@ -2693,25 +2693,34 @@ function renderRecoverLocalStorageList() {
 
   var rows = pageItems.map(function(j) {
     var totals = getJurnalTotals(j);
-    var checked = state.selected[j.id] ? ' checked' : '';
-    return '<tr><td><input type="checkbox"' + checked + ' onchange="toggleRecoverLocalStorage(\'' + j.id + '\', this.checked)"></td><td>' + fmtDate(j.tanggal) + '</td><td>' + escapeHtml(j.noRef || j.id || '-') + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td class="text-green">' + fmtRp(totals.debit) + '</td><td class="text-red">' + fmtRp(totals.kredit) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatRecoverLocalStorageItem(\'' + j.id + '\')">👁️ View</button></td></tr>';
+    var checkboxCol = '';
+    if (j.isDuplicate) {
+      checkboxCol = '<td><span style="color:#2e7d32;font-size:1.1rem;display:inline-block;text-align:center;width:100%" title="Sudah Sinkron">✅</span></td>';
+    } else {
+      var checked = state.selected[j.id] ? ' checked' : '';
+      checkboxCol = '<td><input type="checkbox"' + checked + ' onchange="toggleRecoverLocalStorage(\'' + j.id + '\', this.checked)"></td>';
+    }
+    return '<tr>' + checkboxCol + '<td>' + fmtDate(j.tanggal) + '</td><td>' + escapeHtml(j.noRef || j.id || '-') + '</td><td>' + escapeHtml(j.keterangan || '-') + '</td><td class="text-green">' + fmtRp(totals.debit) + '</td><td class="text-red">' + fmtRp(totals.kredit) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-info" onclick="lihatRecoverLocalStorageItem(\'' + j.id + '\')">👁️ View</button></td></tr>';
   }).join('');
   if (!rows) rows = '<tr><td colspan="7" class="text-center text-muted">Tidak ada data yang cocok</td></tr>';
 
-  var selectedCount = 0;
-  for (var id in state.selected) {
-    if (state.selected[id]) selectedCount++;
-  }
+  var candidates = state.items.filter(function(x){ return !x.isDuplicate; });
+  var selectedCandidatesCount = candidates.filter(function(x){ return state.selected[x.id]; }).length;
+  var isAllSelected = candidates.length > 0 && selectedCandidatesCount === candidates.length;
 
   var tableWrap = document.getElementById('recover-ls-table-wrap');
   if (tableWrap) {
     tableWrap.style.maxHeight = state.listHeight + 'px';
     tableWrap.style.overflow = 'auto';
-    tableWrap.innerHTML = '<table style="font-size:0.82rem"><thead><tr><th style="width:34px"><input type="checkbox" onchange="toggleAllRecoverLocalStorage(this.checked)"' + (selectedCount === state.items.length ? ' checked' : '') + '></th><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    tableWrap.innerHTML = '<table style="font-size:0.82rem"><thead><tr><th style="width:34px">' + (candidates.length > 0 ? '<input type="checkbox" onchange="toggleAllRecoverLocalStorage(this.checked)"' + (isAllSelected ? ' checked' : '') + '>' : '') + '</th><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   var info = document.getElementById('recover-ls-summary');
-  if (info) info.textContent = 'Terpilih: ' + selectedCount + ' | Ditampilkan: ' + pageItems.length + ' dari ' + filtered.length + ' | Kandidat recover: ' + state.items.length;
+  var totalCount = state.items.length;
+  var candCount = candidates.length;
+  var syncCount = totalCount - candCount;
+  if (info) info.textContent = 'Terpilih: ' + selectedCandidatesCount + ' | Kandidat Recover: ' + candCount + ' | Sudah Sinkron: ' + syncCount + ' | Total LocalStorage: ' + totalCount;
+
   var pageInfo = document.getElementById('recover-ls-page-info');
   if (pageInfo) pageInfo.textContent = 'Halaman ' + state.page + ' / ' + totalPage;
   var heightLabel = document.getElementById('recover-ls-height-label');
@@ -2846,29 +2855,28 @@ async function recoverDariLocalStorage() {
 
   // Bandingkan dengan yang ada di Firebase
   var existing = await KDB.getAll('jurnal');
-  var toRestore = recovered.filter(function(j) {
+  var sortedItems = recovered.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
+  
+  var selected = {};
+  sortedItems.forEach(function(j) {
     var jId = String(j.id).toLowerCase();
     var exists = existing.some(function(ex) {
       return String(ex.id).toLowerCase() === jId || 
              (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
     });
-    return !exists;
+    j.isDuplicate = exists;
+    if (!exists) {
+      selected[j.id] = true;
+    }
   });
 
-  if (toRestore.length === 0) { showAlert('Semua data di localStorage sudah ada di database. Tidak perlu recover.', 'info'); return; }
-
-  var selected = {};
-  for (var i = 0; i < toRestore.length; i++) {
-    selected[toRestore[i].id] = true;
-  }
   window._recoverLocalStorageState = {
-    items: toRestore.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); }),
+    items: sortedItems,
     selected: selected,
     query: '',
     perPage: 20,
     page: 1,
-    listHeight: 420,
-    totalRecoveredInCache: recovered.length
+    listHeight: 420
   };
   openRecoverLocalStorageModal();
 }
