@@ -2846,8 +2846,14 @@ async function recoverDariLocalStorage() {
 
   // Bandingkan dengan yang ada di Firebase
   var existing = await KDB.getAll('jurnal');
-  var existingIds = existing.map(function(j){ return j.id; });
-  var toRestore = recovered.filter(function(j) { return existingIds.indexOf(j.id) === -1; });
+  var toRestore = recovered.filter(function(j) {
+    var jId = String(j.id).toLowerCase();
+    var exists = existing.some(function(ex) {
+      return String(ex.id).toLowerCase() === jId || 
+             (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
+    });
+    return !exists;
+  });
 
   if (toRestore.length === 0) { showAlert('Semua data di localStorage sudah ada di database. Tidak perlu recover.', 'info'); return; }
 
@@ -2894,8 +2900,14 @@ async function renderJurnalRecoverPage() {
 
   // Bandingkan dengan yang ada di Firebase
   var existing = await KDB.getAll('jurnal');
-  var existingIds = existing.map(function(j){ return j.id; });
-  var toRestore = recovered.filter(function(j) { return existingIds.indexOf(j.id) === -1; });
+  var toRestore = recovered.filter(function(j) {
+    var jId = String(j.id).toLowerCase();
+    var exists = existing.some(function(ex) {
+      return String(ex.id).toLowerCase() === jId || 
+             (ex.noRef && String(ex.noRef).toLowerCase() === String(j.noRef).toLowerCase() && ex.tanggal === j.tanggal);
+    });
+    return !exists;
+  });
 
   if (toRestore.length === 0) {
     return '<div class="page-title">♻️ Recover Jurnal</div>'

@@ -116,7 +116,11 @@ const KDB = {
     if (kfbReady) {
       try {
         const snap = await kfs.getDocs(kfs.collection(kdb, 'k_' + col));
-        var items = snap.docs.map(d => d.data());
+        var items = snap.docs.map(function(d) {
+          var item = d.data();
+          if (item && !item.id) item.id = d.id;
+          return item;
+        });
         // Merge locally-dirty items that Firebase may not have synced yet
         var now = Date.now();
         // Collect dirty IDs from in-memory tracking
