@@ -13109,6 +13109,7 @@ async function renderPortalAset() {
     const stokMin = parseInt(p.stokMin) || 5;
     const stokAlert = sisa <= stokMin ? '<span class="badge badge-danger">Stok Rendah!</span>' : '';
     return '<tr>'
+      + '<td><input type="checkbox" class="pl-print-check" data-id="' + p.id + '"></td>'
       + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (p.kode || '-') + '</td>'
       + '<td class="fw-bold">' + p.nama + '</td>'
       + '<td>' + (p.satuan||'-') + '</td>'
@@ -13130,6 +13131,7 @@ async function renderPortalAset() {
     const pdItem = allPD.filter(function(x){ return x.sumberRefId === p.id; });
     const pdBadge = pdItem.length > 0 ? statusBadge(pdItem[0].status) : '';
     return '<tr>'
+      + '<td><input type="checkbox" class="pl-print-check" data-id="' + p.id + '"></td>'
       + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (p.kode || '-') + '</td>'
       + '<td class="fw-bold">' + p.nama + '</td>'
       + '<td><span class="chip">' + (p.kategoriAset||'Peralatan') + '</span></td>'
@@ -13208,6 +13210,7 @@ async function renderPortalAset() {
     + '<div class="mt-12 flex-row">'
     + '<button class="btn btn-primary" onclick="tambahPerlengkapanPortal(false)">Tambah & Buat Permohonan</button>'
     + '<button class="btn btn-outline" onclick="tambahPerlengkapanPortal(true)">Simpan Tanpa Permohonan</button>'
+    + '<button class="btn btn-info" onclick="printInventoryLabels(\'perlengkapan\', \'pl-print-check\')">🖨️ Cetak Label Terpilih</button>'
     + '</div></div>'
 
     // Tabs
@@ -13217,11 +13220,11 @@ async function renderPortalAset() {
     + '<button class="tab-btn" onclick="switchTab(this,\'tab-pengadaan\')">Riwayat Pengadaan (' + pdPortal.length + ')</button>'
     + '</div>'
     + '<div class="tab-content active" id="tab-perlengkapan">'
-    + (perlengkapan.length ? '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama</th><th>Satuan</th><th>Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai Sisa</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + plRows + '</tbody></table></div>'
+    + (perlengkapan.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'pl-print-check\')"></th><th>Kode</th><th>Nama</th><th>Satuan</th><th>Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai Sisa</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + plRows + '</tbody></table></div>'
       : '<div class="empty-state"><span class="icon">🔧</span>Belum ada data perlengkapan</div>')
     + '</div>'
     + '<div class="tab-content" id="tab-aset-tetap">'
-    + (asetTetap.length ? '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama</th><th>Kategori</th><th>Tgl Beli</th><th>Nilai</th><th>Kondisi</th><th>Lokasi</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + atRows + '</tbody></table></div>'
+    + (asetTetap.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'pl-print-check\')"></th><th>Kode</th><th>Nama</th><th>Kategori</th><th>Tgl Beli</th><th>Nilai</th><th>Kondisi</th><th>Lokasi</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + atRows + '</tbody></table></div>'
       : '<div class="empty-state"><span class="icon">🏢</span>Belum ada data aset tetap</div>')
     + '</div>'
     + '<div class="tab-content" id="tab-pengadaan">'
@@ -14976,6 +14979,7 @@ async function renderInventoriATK() {
     var safeNama = escapeHtml(item.nama || '-');
     var safeSatuan = escapeHtml(item.satuan || '-');
     return '<tr>'
+      + '<td><input type="checkbox" class="atk-print-check" data-id="' + item.id + '"></td>'
       + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (item.kode || '-') + '</td>'
       + '<td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td>'
       + '<td>' + safeSatuan + '</td>'
@@ -15060,7 +15064,8 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.stockFrom||'') + '" onchange="setATKFilterValue(\'stockFrom\', this.value)"></div>'
     + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.stockTo||'') + '" onchange="setATKFilterValue(\'stockTo\', this.value)"></div>'
     + '</div>'
-    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
+    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'atk-print-check\')"></th><th>Kode</th><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
+    + '<div class="mt-12"><button class="btn btn-info" onclick="printInventoryLabels(\'inventori_atk\', \'atk-print-check\')">🖨️ Cetak Label Terpilih</button></div>'
     + '</div>'
     // Log Transaksi
     + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + filteredLogRaw.length + '/' + (logList||[]).length + ')</h2></div>'
@@ -15571,6 +15576,62 @@ async function updateNotifBadge() {
     badge.textContent = unread > 0 ? unread : '';
     badge.style.display = unread > 0 ? 'inline-block' : 'none';
   }
+}
+
+// ===== INVENTORY PRINT LABEL SYSTEM =====
+function toggleSelectAllLabels(el, className) {
+  const cbs = document.querySelectorAll('.' + className);
+  cbs.forEach(cb => cb.checked = el.checked);
+}
+
+async function printInventoryLabels(collectionName, checkboxClass) {
+  const checkboxes = document.querySelectorAll('.' + checkboxClass + ':checked');
+  if (checkboxes.length === 0) {
+    showAlert('Pilih item yang ingin dicetak labelnya!', 'warning');
+    return;
+  }
+
+  const ids = Array.from(checkboxes).map(cb => cb.getAttribute('data-id'));
+  const allItems = await KDB.getAll(collectionName);
+  const selectedItems = allItems.filter(item => ids.includes(item.id));
+
+  const perusahaan = await KDB.getSetting('perusahaan', {});
+  const logoHtml = perusahaan.logoData ? '<img src="' + perusahaan.logoData + '" style="height:25px;margin-right:8px;vertical-align:middle">' : '';
+
+  const w = window.open('', '_blank');
+
+  const labelHtml = selectedItems.map(item => {
+    return '<div class="label-card">'
+      + '<div class="label-header">' + logoHtml + '<span class="comp-name">' + (perusahaan.nama || 'IJEF CORP') + '</span></div>'
+      + '<div class="label-code">' + (item.kode || item.id) + '</div>'
+      + '<div class="label-name">' + (item.nama || '-') + '</div>'
+      + '</div>';
+  }).join('');
+
+  const css = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: #f0f2f5; }
+    .label-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+    .label-card { background: white; border: 2px solid #1a237e; border-radius: 8px; padding: 12px; text-align: center; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; height: 120px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .label-header { font-size: 0.65rem; font-weight: 800; color: #1a237e; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; text-align: left; display: flex; align-items: center; }
+    .comp-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .label-code { font-family: 'Courier New', monospace; font-size: 1.4rem; font-weight: 900; color: #000; margin: 5px 0; letter-spacing: 1px; }
+    .label-name { font-size: 0.75rem; color: #444; font-weight: 600; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .no-print-btn { text-align: center; margin-bottom: 20px; }
+    .btn { padding: 10px 20px; background: #1a237e; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    @media print {
+      body { background: white; padding: 0; }
+      .no-print-btn { display: none; }
+      .label-card { border: 1.5px solid #000; box-shadow: none; break-inside: avoid; }
+      .label-grid { gap: 10px; }
+    }
+  `;
+
+  w.document.write('<!DOCTYPE html><html><head><title>Print Labels</title><style>' + css + '</style></head><body>'
+    + '<div class="no-print-btn"><button class="btn" onclick="window.print()">🖨️ Cetak Label (' + selectedItems.length + ')</button></div>'
+    + '<div class="label-grid">' + labelHtml + '</div>'
+    + '</body></html>');
+  w.document.close();
 }
 
 async function showNotifPanel() {
