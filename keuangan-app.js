@@ -13075,6 +13075,16 @@ async function renderPortalAset() {
   const allPD = await KDB.getAll('permohonan');
   const akunOpts = await getAkunOptions();
 
+  // Auto-generate missing inventory codes (migration)
+  for (const item of list) {
+    if (!item.kode) {
+      const prefix = item.tipeItem === 'Aset Tetap' ? 'AT' : 'PL';
+      const year = new Date().getFullYear().toString().slice(-2);
+      item.kode = prefix + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+      await KDB.save('perlengkapan', item.id, item);
+    }
+  }
+
   const perlengkapan = list.filter(function(p){ return !p.tipeItem || p.tipeItem === 'Perlengkapan'; });
   const asetTetap = list.filter(function(p){ return p.tipeItem === 'Aset Tetap'; });
   const pdPortal = allPD.filter(function(p){ return p.sumberRef === 'perlengkapan'; });
@@ -13099,6 +13109,7 @@ async function renderPortalAset() {
     const stokMin = parseInt(p.stokMin) || 5;
     const stokAlert = sisa <= stokMin ? '<span class="badge badge-danger">Stok Rendah!</span>' : '';
     return '<tr>'
+      + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (p.kode || '-') + '</td>'
       + '<td class="fw-bold">' + p.nama + '</td>'
       + '<td>' + (p.satuan||'-') + '</td>'
       + '<td class="text-center">' + (p.awal||0) + '</td>'
@@ -13119,6 +13130,7 @@ async function renderPortalAset() {
     const pdItem = allPD.filter(function(x){ return x.sumberRefId === p.id; });
     const pdBadge = pdItem.length > 0 ? statusBadge(pdItem[0].status) : '';
     return '<tr>'
+      + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (p.kode || '-') + '</td>'
       + '<td class="fw-bold">' + p.nama + '</td>'
       + '<td><span class="chip">' + (p.kategoriAset||'Peralatan') + '</span></td>'
       + '<td>' + fmtDate(p.tanggalBeli||p.createdAt) + '</td>'
@@ -13205,11 +13217,11 @@ async function renderPortalAset() {
     + '<button class="tab-btn" onclick="switchTab(this,\'tab-pengadaan\')">Riwayat Pengadaan (' + pdPortal.length + ')</button>'
     + '</div>'
     + '<div class="tab-content active" id="tab-perlengkapan">'
-    + (perlengkapan.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai Sisa</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + plRows + '</tbody></table></div>'
+    + (perlengkapan.length ? '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama</th><th>Satuan</th><th>Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai Sisa</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + plRows + '</tbody></table></div>'
       : '<div class="empty-state"><span class="icon">🔧</span>Belum ada data perlengkapan</div>')
     + '</div>'
     + '<div class="tab-content" id="tab-aset-tetap">'
-    + (asetTetap.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Kategori</th><th>Tgl Beli</th><th>Nilai</th><th>Kondisi</th><th>Lokasi</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + atRows + '</tbody></table></div>'
+    + (asetTetap.length ? '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama</th><th>Kategori</th><th>Tgl Beli</th><th>Nilai</th><th>Kondisi</th><th>Lokasi</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + atRows + '</tbody></table></div>'
       : '<div class="empty-state"><span class="icon">🏢</span>Belum ada data aset tetap</div>')
     + '</div>'
     + '<div class="tab-content" id="tab-pengadaan">'
@@ -13235,8 +13247,11 @@ async function tambahPerlengkapanPortal(noPermohonan) {
   const akunDebit = (document.getElementById('pl-akun-debit') || {}).value || '5-1400';
   const akunKredit = (document.getElementById('pl-akun-kredit') || {}).value || '1-1100';
   const id = genId('PL');
+  const prefix = tipeItem === 'Aset Tetap' ? 'AT' : 'PL';
+  const year = new Date().getFullYear().toString().slice(-2);
+  const kode = prefix + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
 
-  var itemData = { id: id, nama: nama.trim(), satuan: satuan, harga: harga, tipeItem: tipeItem, keterangan: ket, createdBy: KU.username, createdAt: new Date().toISOString() };
+  var itemData = { id: id, kode: kode, nama: nama.trim(), satuan: satuan, harga: harga, tipeItem: tipeItem, keterangan: ket, createdBy: KU.username, createdAt: new Date().toISOString() };
 
   if (tipeItem === 'Aset Tetap') {
     itemData.kategoriAset = (document.getElementById('pl-kat-aset') || {}).value || 'Peralatan Kantor';
@@ -13282,6 +13297,7 @@ async function editPerlengkapan(id) {
       + '<div class="fg"><label>Pembelian</label><input type="number" id="ep-beli" value="' + (p.beli||0) + '"></div>'
       + '<div class="fg"><label>Pemakaian</label><input type="number" id="ep-pakai" value="' + (p.pakai||0) + '"></div>';
   openModal('<div class="form-grid">'
+    + '<div class="fg"><label>Kode Inventaris</label><input value="' + (p.kode || p.id || '-') + '" disabled style="background:#f5f5f5"></div>'
     + '<div class="fg"><label>Nama</label><input id="ep-nama" value="' + (p.nama||'') + '"></div>'
     + '<div class="fg"><label>Satuan</label><input id="ep-satuan" value="' + (p.satuan||'') + '"></div>'
     + '<div class="fg"><label>Harga Satuan</label><input type="text" inputmode="decimal" id="ep-harga" value="' + (p.harga ? formatNominalValue(p.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
@@ -14888,6 +14904,15 @@ async function renderInventoriATK() {
   var jurnal = await KDB.getAll('jurnal');
   var filters = getATKFilterState();
 
+  // Auto-generate missing ATK codes (migration)
+  for (const item of (list || [])) {
+    if (!item.kode) {
+      const year = new Date().getFullYear().toString().slice(-2);
+      item.kode = 'ATK' + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+      await KDB.save('inventori_atk', item.id, item);
+    }
+  }
+
   // Auto-detect ATK transactions from jurnal
   var atkFromJurnal = [];
   jurnal.forEach(function(j) {
@@ -14950,7 +14975,11 @@ async function renderInventoriATK() {
     var safeId = escapeJsSingleQuote(item.id);
     var safeNama = escapeHtml(item.nama || '-');
     var safeSatuan = escapeHtml(item.satuan || '-');
-    return '<tr><td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td><td>' + safeSatuan + '</td><td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewATKItem(\'' + safeId + '\')">View</button><button class="btn btn-xs btn-warning" onclick="editATK(\'' + safeId + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + safeId + '\')">Hapus</button></td></tr>';
+    return '<tr>'
+      + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (item.kode || '-') + '</td>'
+      + '<td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td>'
+      + '<td>' + safeSatuan + '</td>'
+      + '<td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewATKItem(\'' + safeId + '\')">View</button><button class="btn btn-xs btn-warning" onclick="editATK(\'' + safeId + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + safeId + '\')">Hapus</button></td></tr>';
   }).join('');
 
   // Log rows
@@ -15031,7 +15060,7 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.stockFrom||'') + '" onchange="setATKFilterValue(\'stockFrom\', this.value)"></div>'
     + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.stockTo||'') + '" onchange="setATKFilterValue(\'stockTo\', this.value)"></div>'
     + '</div>'
-    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
+    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
     + '</div>'
     // Log Transaksi
     + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + filteredLogRaw.length + '/' + (logList||[]).length + ')</h2></div>'
@@ -15357,7 +15386,9 @@ async function tambahATK() {
   var nama = (document.getElementById('atk-nama')||{}).value;
   if (!nama || !nama.trim()) { showAlert('Nama ATK wajib diisi!', 'danger'); return; }
   var id = genId('ATK');
-  await KDB.save('inventori_atk', id, { id: id, nama: nama.trim(), satuan: (document.getElementById('atk-satuan')||{}).value||'', stok: parseInt((document.getElementById('atk-stok')||{}).value)||0, beli: parseInt((document.getElementById('atk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('atk-pakai')||{}).value)||0, harga: parseNominal((document.getElementById('atk-harga')||{}).value), createdBy: KU.username, createdAt: new Date().toISOString() });
+  const year = new Date().getFullYear().toString().slice(-2);
+  const kode = 'ATK' + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+  await KDB.save('inventori_atk', id, { id: id, kode: kode, nama: nama.trim(), satuan: (document.getElementById('atk-satuan')||{}).value||'', stok: parseInt((document.getElementById('atk-stok')||{}).value)||0, beli: parseInt((document.getElementById('atk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('atk-pakai')||{}).value)||0, harga: parseNominal((document.getElementById('atk-harga')||{}).value), createdBy: KU.username, createdAt: new Date().toISOString() });
   showAlert('ATK ditambahkan!');
   navigate('kalk-inventori-atk');
 }
@@ -15367,6 +15398,7 @@ async function editATK(id) {
   var item = list.find(function(x){ return x.id === id; });
   if (!item) return;
   openModal('<div class="form-grid">'
+    + '<div class="fg"><label>Kode ATK</label><input value="' + (item.kode || item.id || '-') + '" disabled style="background:#f5f5f5"></div>'
     + '<div class="fg"><label>Nama</label><input id="eatk-nama" value="' + (item.nama||'') + '"></div>'
     + '<div class="fg"><label>Satuan</label><input id="eatk-satuan" value="' + (item.satuan||'') + '"></div>'
     + '<div class="fg"><label>Stok</label><input type="number" id="eatk-stok" value="' + (item.stok||0) + '"></div>'
@@ -15433,7 +15465,8 @@ async function viewATKItem(id) {
     + '<div class="stat-box"><div class="val">' + sisa + '</div><div class="lbl">Sisa</div></div>'
     + '</div>'
     + '<table style="width:100%;font-size:0.85rem;margin-bottom:12px"><tbody>'
-    + '<tr><td style="padding:4px 8px;color:#888;width:120px">Nama</td><td class="fw-bold">' + escapeHtml(item.nama || '-') + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888;width:120px">Kode</td><td class="fw-bold" style="font-family:monospace">' + (item.kode || '-') + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888">Nama</td><td class="fw-bold">' + escapeHtml(item.nama || '-') + '</td></tr>'
     + '<tr><td style="padding:4px 8px;color:#888">Satuan</td><td>' + escapeHtml(item.satuan || '-') + '</td></tr>'
     + '<tr><td style="padding:4px 8px;color:#888">Harga</td><td>' + fmtRp(item.harga || 0) + '</td></tr>'
     + '<tr><td style="padding:4px 8px;color:#888">Nilai Sisa</td><td class="fw-bold">' + fmtRp(nilai) + '</td></tr>'
