@@ -13207,10 +13207,11 @@ async function renderPortalAset() {
     + '<div class="fg full"><label>Keterangan</label><textarea id="pl-ket" placeholder="Keterangan tambahan..." style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%;min-height:60px"></textarea></div>'
     + '</div>'
     + '<div class="alert alert-info" style="margin-top:12px">Jika ada pembelian (harga > 0), Draft Permohonan Dana akan dibuat otomatis untuk proses approval 3 layer.</div>'
-    + '<div class="mt-12 flex-row">'
+    + '<div class="mt-12 flex-row" style="gap:10px">'
     + '<button class="btn btn-primary" onclick="tambahPerlengkapanPortal(false)">Tambah & Buat Permohonan</button>'
     + '<button class="btn btn-outline" onclick="tambahPerlengkapanPortal(true)">Simpan Tanpa Permohonan</button>'
-    + '<button class="btn btn-info" onclick="printInventoryLabels(\'perlengkapan\', \'pl-print-check\')">🖨️ Cetak Label Terpilih</button>'
+    + '<button class="btn btn-info" onclick="printInventoryLabels(\'perlengkapan\', \'pl-print-check\')">🖨️ Cetak Label</button>'
+    + '<button class="btn btn-success" onclick="printInventoryChecklist(\'perlengkapan\', \'pl-print-check\')">📋 Cetak Daftar Cek</button>'
     + '</div></div>'
 
     // Tabs
@@ -15065,7 +15066,10 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.stockTo||'') + '" onchange="setATKFilterValue(\'stockTo\', this.value)"></div>'
     + '</div>'
     + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'atk-print-check\')"></th><th>Kode</th><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
-    + '<div class="mt-12"><button class="btn btn-info" onclick="printInventoryLabels(\'inventori_atk\', \'atk-print-check\')">🖨️ Cetak Label Terpilih</button></div>'
+    + '<div class="mt-12 flex-row" style="gap:10px">'
+    + '<button class="btn btn-info" onclick="printInventoryLabels(\'inventori_atk\', \'atk-print-check\')">🖨️ Cetak Label</button>'
+    + '<button class="btn btn-success" onclick="printInventoryChecklist(\'inventori_atk\', \'atk-print-check\')">📋 Cetak Daftar Cek</button>'
+    + '</div>'
     + '</div>'
     // Log Transaksi
     + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + filteredLogRaw.length + '/' + (logList||[]).length + ')</h2></div>'
@@ -15682,10 +15686,80 @@ async function printInventoryLabels(collectionName, checkboxClass) {
     }
   `;
 
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cetak ' + totalLabels + ' Label</title><style>' + css + '</style></head><body>'
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Print Labels</title><style>' + css + '</style></head><body>'
     + '<div class="no-print-btn"><button class="btn" onclick="window.print()">🖨️ Cetak ' + totalLabels + ' Label (A4)</button></div>'
     + '<div class="label-grid">' + labelHtml + '</div>'
     + '</body></html>');
+  w.document.close();
+}
+
+async function printInventoryChecklist(collectionName, checkboxClass) {
+  const checkboxes = document.querySelectorAll('.' + checkboxClass + ':checked');
+  if (checkboxes.length === 0) {
+    showAlert('Pilih item yang ingin dicetak daftarnya!', 'warning');
+    return;
+  }
+
+  const ids = Array.from(checkboxes).map(cb => cb.getAttribute('data-id'));
+  const allItems = await KDB.getAll(collectionName);
+  const selectedItems = allItems.filter(item => ids.includes(item.id));
+
+  const perusahaan = await KDB.getSetting('perusahaan', {});
+  const logoHtml = perusahaan.logoData ? '<img src="' + perusahaan.logoData + '" style="height:40px;margin-right:12px;vertical-align:middle">' : '';
+
+  const w = window.open('', '_blank');
+
+  const rows = selectedItems.map((item, index) => {
+    let sisa = 0;
+    if (collectionName === 'perlengkapan') {
+      sisa = (parseInt(item.awal)||0) + (parseInt(item.beli)||0) - (parseInt(item.pakai)||0);
+    } else {
+      // For ATK, we might need a more complex calculation if it's not pre-calculated,
+      // but for this report we'll show the base stock info.
+      sisa = (parseInt(item.stok)||0) + (parseInt(item.beli)||0) - (parseInt(item.pakai)||0);
+    }
+
+    return '<tr>'
+      + '<td style="text-align:center">' + (index + 1) + '</td>'
+      + '<td style="font-family:monospace">' + (item.kode || '-') + '</td>'
+      + '<td><b>' + (item.nama || '-') + '</b></td>'
+      + '<td>' + (item.satuan || '-') + '</td>'
+      + '<td style="text-align:center">' + sisa + '</td>'
+      + '<td style="width:100px;border-bottom:1px solid #000"></td>'
+      + '<td style="font-size:0.75rem">' + (item.lokasi || item.keterangan || '-') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const css = `
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1a237e; padding-bottom: 10px; margin-bottom: 20px; }
+    .title { font-size: 1.4rem; font-weight: 700; color: #1a237e; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 0.9rem; }
+    th { background: #f5f5f5; font-weight: 700; text-transform: uppercase; font-size: 0.8rem; }
+    .footer { margin-top: 30px; display: flex; justify-content: space-between; }
+    .sig-box { text-align: center; width: 200px; }
+    .sig-line { margin-top: 60px; border-top: 1px solid #000; padding-top: 5px; }
+    @media print {
+      @page { size: A4; margin: 15mm; }
+      .no-print { display: none; }
+    }
+  `;
+
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daftar Cek Inventori</title><style>' + css + '</style></head><body>'
+    + '<div class="header"><div>' + logoHtml + '<span style="font-weight:700;font-size:1.2rem">' + (perusahaan.nama || 'IJEF CORP') + '</span></div>'
+    + '<div style="text-align:right"><div class="title">DAFTAR CEK INVENTORI</div>'
+    + '<div style="font-size:0.85rem">Tanggal: ' + new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'}) + '</div></div></div>'
+    + '<div class="no-print" style="text-align:center;margin-bottom:20px"><button onclick="window.print()" style="padding:10px 20px;background:#1a237e;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600">🖨️ Cetak Daftar Cek</button></div>'
+    + '<table><thead><tr>'
+    + '<th style="width:40px;text-align:center">No</th><th>Kode</th><th>Nama Barang</th><th>Satuan</th><th style="text-align:center">Sistem</th><th>Fisik (Isi)</th><th>Lokasi/Ket</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table>'
+    + '<div class="footer"><div class="sig-box">Petugas Pemeriksa<div class="sig-line">Nama & Tanda Tangan</div></div>'
+    + '<div class="sig-box">Mengetahui,<div class="sig-line">Manager Sarpras</div></div></div>'
+    + '</body></html>';
+
+  w.document.write(html);
   w.document.close();
 }
 
