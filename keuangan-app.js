@@ -594,7 +594,7 @@ function printBankRecAnalysis() {
     showAlert('Popup print diblokir browser.', 'warning');
     return;
   }
-  w.document.write('<!DOCTYPE html><html><head><title>Analisa Rekonsiliasi ' + escapeHtml(data.kode) + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div><div class="ttl">Analisa Rekonsiliasi Bank</div><div class="sub">Akun: <b>' + escapeHtml(data.akunNama || data.kode) + '</b> (' + escapeHtml(data.kode) + ')<br>Dibuat: ' + escapeHtml(new Date(data.generatedAt).toLocaleString('id-ID')) + '</div></div><div class="sec-chip">' + data.findings.length + ' temuan</div></div><div class="grid"><div class="card"><div class="lbl">Saldo Sistem</div><div class="val">' + fmtRp(data.saldoSistem) + '</div></div><div class="card"><div class="lbl">Saldo Aktual</div><div class="val">' + fmtRp(data.saldoAktual) + '</div></div><div class="card"><div class="lbl">Selisih</div><div class="val">' + fmtRp(data.selisih) + '</div></div></div>' + sections.join('') + pendingHtml + '<div class="actions"><button onclick="window.print()" style="padding:10px 18px;border:none;border-radius:8px;background:#1a237e;color:#fff;cursor:pointer">Print</button></div></div></body></html>');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Analisa Rekonsiliasi ' + escapeHtml(data.kode) + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div><div class="ttl">Analisa Rekonsiliasi Bank</div><div class="sub">Akun: <b>' + escapeHtml(data.akunNama || data.kode) + '</b> (' + escapeHtml(data.kode) + ')<br>Dibuat: ' + escapeHtml(new Date(data.generatedAt).toLocaleString('id-ID')) + '</div></div><div class="sec-chip">' + data.findings.length + ' temuan</div></div><div class="grid"><div class="card"><div class="lbl">Saldo Sistem</div><div class="val">' + fmtRp(data.saldoSistem) + '</div></div><div class="card"><div class="lbl">Saldo Aktual</div><div class="val">' + fmtRp(data.saldoAktual) + '</div></div><div class="card"><div class="lbl">Selisih</div><div class="val">' + fmtRp(data.selisih) + '</div></div></div>' + sections.join('') + pendingHtml + '<div class="actions"><button onclick="window.print()" style="padding:10px 18px;border:none;border-radius:8px;background:#1a237e;color:#fff;cursor:pointer">Print</button></div></div></body></html>');
   w.document.close();
 }
 
@@ -8853,7 +8853,7 @@ async function printInvoice(id) {
   }).join('');
   const statusColor = inv.status === 'Lunas' ? '#27ae60' : inv.status === 'Terkirim' ? '#2980b9' : '#7f8c8d';
   const css = '*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;background:#f5f6fa;padding:20px;color:#2c3e50}.page{background:white;max-width:800px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}.hdr{background:linear-gradient(135deg,#1a237e,#1565c0);color:white;padding:28px;display:flex;justify-content:space-between;align-items:flex-start}.hdr-l h1{font-size:1.6rem;font-weight:800;margin-top:8px}.hdr-l p{opacity:.85;font-size:.82rem;line-height:1.5}.inv-badge{background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.4);border-radius:8px;padding:10px 18px;text-align:center}.inv-badge .lbl{font-size:.7rem;opacity:.8;text-transform:uppercase;letter-spacing:1px}.inv-badge .num{font-size:1.3rem;font-weight:800;margin-top:4px}.stamp{display:inline-block;border:3px solid ' + statusColor + ';color:' + statusColor + ';border-radius:6px;padding:3px 10px;font-weight:800;font-size:.85rem;margin-top:8px;transform:rotate(-5deg)}.body{padding:28px}.ig{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}.ib{background:#f8f9ff;border-radius:8px;padding:14px;border-left:4px solid #1a237e}.ib h3{font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:6px}.ib .nm{font-size:1rem;font-weight:700;color:#1a237e}table{width:100%;border-collapse:collapse;margin-bottom:16px}thead tr{background:#1a237e;color:white}thead th{padding:10px 12px;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px}tbody tr:nth-child(even){background:#f8f9ff}tbody td{padding:10px 12px;font-size:.85rem;border-bottom:1px solid #eee}.tots{margin-left:auto;width:260px}.tr{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee;font-size:.85rem}.tr.fin{font-size:1.05rem;font-weight:800;color:#1a237e;border-top:2px solid #1a237e;border-bottom:none;padding-top:10px;margin-top:4px}.ftr{background:#f8f9ff;padding:20px 28px;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #eee}.sl{border-top:1px solid #333;margin-top:50px;padding-top:5px;min-width:160px;font-size:.8rem;text-align:center}.note{font-size:.78rem;color:#888;max-width:280px;line-height:1.5}@media print{body{background:white;padding:0}.page{box-shadow:none;border-radius:0}button{display:none}}';
-  w.document.write('<!DOCTYPE html><html><head><title>Invoice ' + inv.noInvoice + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="inv-badge"><div class="lbl">Invoice</div><div class="num">' + inv.noInvoice + '</div></div><div class="stamp">' + (inv.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Tagihan Kepada</h3><p class="nm">' + inv.customer + '</p></div><div class="ib"><h3>Detail Invoice</h3><p><b>Tanggal:</b> ' + fmtDate(inv.tanggal) + '</p><p><b>Jatuh Tempo:</b> ' + fmtDate(inv.jatuhTempo) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(inv.subtotal) + '</span></div>' + (inv.diskon?'<div class="tr"><span>Diskon ('+inv.diskon+'%)</span><span style="color:#e74c3c">('+fmtRp(inv.diskonAmt)+')</span></div>':'') + (inv.ppn?'<div class="tr"><span>PPN ('+inv.ppn+'%)</span><span>'+fmtRp(inv.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(inv.total) + '</span></div></div>' + (inv.catatan?'<div style="margin-top:14px;padding:10px;background:#fff8e1;border-radius:6px;border-left:4px solid #f39c12;font-size:.82rem"><b>Catatan:</b> '+inv.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Terima kasih atas kepercayaan Anda.<br>Invoice ini sah tanpa tanda tangan.</div><div><div class="sl">Hormat Kami,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#1a237e;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">🖨️ Print Invoice</button></div></body></html>');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice ' + inv.noInvoice + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="inv-badge"><div class="lbl">Invoice</div><div class="num">' + inv.noInvoice + '</div></div><div class="stamp">' + (inv.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Tagihan Kepada</h3><p class="nm">' + inv.customer + '</p></div><div class="ib"><h3>Detail Invoice</h3><p><b>Tanggal:</b> ' + fmtDate(inv.tanggal) + '</p><p><b>Jatuh Tempo:</b> ' + fmtDate(inv.jatuhTempo) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(inv.subtotal) + '</span></div>' + (inv.diskon?'<div class="tr"><span>Diskon ('+inv.diskon+'%)</span><span style="color:#e74c3c">('+fmtRp(inv.diskonAmt)+')</span></div>':'') + (inv.ppn?'<div class="tr"><span>PPN ('+inv.ppn+'%)</span><span>'+fmtRp(inv.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(inv.total) + '</span></div></div>' + (inv.catatan?'<div style="margin-top:14px;padding:10px;background:#fff8e1;border-radius:6px;border-left:4px solid #f39c12;font-size:.82rem"><b>Catatan:</b> '+inv.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Terima kasih atas kepercayaan Anda.<br>Invoice ini sah tanpa tanda tangan.</div><div><div class="sl">Hormat Kami,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#1a237e;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">🖨️ Print Invoice</button></div></body></html>');
   w.document.close();
 }
 
@@ -8972,7 +8972,7 @@ async function printPO(id) {
   }).join('');
   const statusColor = po.status === 'Diterima' ? '#27ae60' : po.status === 'Dibatalkan' ? '#e74c3c' : po.status === 'Terkirim' ? '#2980b9' : '#7f8c8d';
   const css = '*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;background:#f5f6fa;padding:20px;color:#2c3e50}.page{background:white;max-width:820px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}.hdr{background:linear-gradient(135deg,#1b5e20,#2e7d32);color:white;padding:28px;display:flex;justify-content:space-between;align-items:flex-start}.hdr-l h1{font-size:1.6rem;font-weight:800;margin-top:8px}.hdr-l p{opacity:.85;font-size:.82rem;line-height:1.5}.po-badge{background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.4);border-radius:8px;padding:10px 18px;text-align:center}.po-badge .lbl{font-size:.7rem;opacity:.8;text-transform:uppercase;letter-spacing:1px}.po-badge .num{font-size:1.3rem;font-weight:800;margin-top:4px}.stamp{display:inline-block;border:3px solid ' + statusColor + ';color:' + statusColor + ';border-radius:6px;padding:3px 10px;font-weight:800;font-size:.85rem;margin-top:8px;transform:rotate(-5deg)}.body{padding:28px}.ig{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}.ib{background:#f1f8e9;border-radius:8px;padding:14px;border-left:4px solid #2e7d32}.ib h3{font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:6px}.ib .nm{font-size:1rem;font-weight:700;color:#1b5e20}table{width:100%;border-collapse:collapse;margin-bottom:16px}thead tr{background:#2e7d32;color:white}thead th{padding:10px 12px;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px}tbody tr:nth-child(even){background:#f1f8e9}tbody td{padding:10px 12px;font-size:.85rem;border-bottom:1px solid #eee}.tots{margin-left:auto;width:260px}.tr{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee;font-size:.85rem}.tr.fin{font-size:1.05rem;font-weight:800;color:#1b5e20;border-top:2px solid #2e7d32;border-bottom:none;padding-top:10px;margin-top:4px}.ftr{background:#f1f8e9;padding:20px 28px;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #c8e6c9}.sl{border-top:1px solid #333;margin-top:50px;padding-top:5px;min-width:160px;font-size:.8rem;text-align:center}.note{font-size:.78rem;color:#888;max-width:280px;line-height:1.5}.terms{background:#fff8e1;border-radius:6px;padding:12px;border-left:4px solid #f9a825;font-size:.82rem;margin-top:14px}@media print{body{background:white;padding:0}.page{box-shadow:none;border-radius:0}button{display:none}}';
-  w.document.write('<!DOCTYPE html><html><head><title>PO ' + po.noPO + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="po-badge"><div class="lbl">Purchase Order</div><div class="num">' + po.noPO + '</div></div><div class="stamp">' + (po.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Kepada Supplier</h3><p class="nm">' + po.supplier + '</p></div><div class="ib"><h3>Detail PO</h3><p><b>Tanggal:</b> ' + fmtDate(po.tanggal) + '</p><p><b>Tgl Pengiriman:</b> ' + fmtDate(po.tanggalKirim) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:60px;text-align:center">Satuan</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(po.subtotal) + '</span></div>' + (po.ppn?'<div class="tr"><span>PPN ('+po.ppn+'%)</span><span>'+fmtRp(po.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(po.total) + '</span></div></div>' + (po.catatan?'<div class="terms"><b>Syarat & Ketentuan:</b> '+po.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Harap konfirmasi penerimaan PO ini.<br>Pengiriman sesuai spesifikasi yang tertera.</div><div style="display:flex;gap:40px"><div><div class="sl">Dibuat Oleh,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div><div><div class="sl">Disetujui Oleh,<br>&nbsp;</div></div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#2e7d32;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">��️ Print Purchase Order</button></div></body></html>');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PO ' + po.noPO + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="po-badge"><div class="lbl">Purchase Order</div><div class="num">' + po.noPO + '</div></div><div class="stamp">' + (po.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Kepada Supplier</h3><p class="nm">' + po.supplier + '</p></div><div class="ib"><h3>Detail PO</h3><p><b>Tanggal:</b> ' + fmtDate(po.tanggal) + '</p><p><b>Tgl Pengiriman:</b> ' + fmtDate(po.tanggalKirim) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:60px;text-align:center">Satuan</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(po.subtotal) + '</span></div>' + (po.ppn?'<div class="tr"><span>PPN ('+po.ppn+'%)</span><span>'+fmtRp(po.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(po.total) + '</span></div></div>' + (po.catatan?'<div class="terms"><b>Syarat & Ketentuan:</b> '+po.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Harap konfirmasi penerimaan PO ini.<br>Pengiriman sesuai spesifikasi yang tertera.</div><div style="display:flex;gap:40px"><div><div class="sl">Dibuat Oleh,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div><div><div class="sl">Disetujui Oleh,<br>&nbsp;</div></div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#2e7d32;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">🖨️ Print Purchase Order</button></div></body></html>');
   w.document.close();
 }
 
@@ -9071,7 +9071,7 @@ async function printSlipGaji(id) {
   if (!g) return;
   const perusahaan = await KDB.getSetting('perusahaan', {});
   const w = window.open('', '_blank');
-  w.document.write('<!DOCTYPE html><html><head><title>Slip Gaji ' + g.nama + '</title>'
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Slip Gaji ' + g.nama + '</title>'
     + '<style>body{font-family:Arial,sans-serif;padding:30px;max-width:600px;margin:0 auto}h2{color:#1a237e;text-align:center}.header{text-align:center;border-bottom:2px solid #1a237e;padding-bottom:10px;margin-bottom:20px}table{width:100%;border-collapse:collapse}td{padding:7px 10px;border-bottom:1px solid #eee}.total{font-weight:700;font-size:1.1rem;background:#e8eaf6}.text-right{text-align:right}@media print{button{display:none}}</style></head><body>'
     + '<div class="header"><h2>SLIP GAJI</h2><p>' + (perusahaan.nama||'IJEF Corp') + '</p></div>'
     + '<table><tr><td>Nama</td><td>' + g.nama + '</td></tr><tr><td>Jabatan</td><td>' + (g.jabatan||'-') + '</td></tr><tr><td>Periode</td><td>' + g.periode + '</td></tr><tr><td>Tanggal Bayar</td><td>' + fmtDate(g.tanggal) + '</td></tr></table><br>'
@@ -13785,7 +13785,7 @@ function printBundleLaporan() {
   var content = document.querySelector('.print-bundle-section');
   if (!content) { showAlert('Konten print tidak ditemukan!', 'danger'); return; }
   var w = window.open('', '_blank');
-  w.document.write('<html><head><title>Laporan Keuangan</title>');
+  w.document.write('<html><head><meta charset="UTF-8"><title>Laporan Keuangan</title>');
   w.document.write('<style>');
   w.document.write('*{box-sizing:border-box;margin:0;padding:0}');
   w.document.write('body{font-family:"Segoe UI",sans-serif;color:#333;font-size:12px;background:white}');
@@ -15591,6 +15591,7 @@ async function printInventoryLabels(collectionName, checkboxClass) {
     return;
   }
 
+  const copies = parseInt(prompt('Berapa jumlah label (copy) yang ingin dicetak untuk SETIAP item terpilih?', '1')) || 1;
   const ids = Array.from(checkboxes).map(cb => cb.getAttribute('data-id'));
   const allItems = await KDB.getAll(collectionName);
   const selectedItems = allItems.filter(item => ids.includes(item.id));
@@ -15600,35 +15601,89 @@ async function printInventoryLabels(collectionName, checkboxClass) {
 
   const w = window.open('', '_blank');
 
-  const labelHtml = selectedItems.map(item => {
-    return '<div class="label-card">'
+  let labelHtml = '';
+  selectedItems.forEach(item => {
+    const singleLabel = '<div class="label-card">'
       + '<div class="label-header">' + logoHtml + '<span class="comp-name">' + (perusahaan.nama || 'IJEF CORP') + '</span></div>'
       + '<div class="label-code">' + (item.kode || item.id) + '</div>'
       + '<div class="label-name">' + (item.nama || '-') + '</div>'
       + '</div>';
-  }).join('');
+    for (let i = 0; i < copies; i++) {
+      labelHtml += singleLabel;
+    }
+  });
+
+  const totalLabels = selectedItems.length * copies;
 
   const css = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: #f0f2f5; }
-    .label-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
-    .label-card { background: white; border: 2px solid #1a237e; border-radius: 8px; padding: 12px; text-align: center; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; height: 120px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .label-header { font-size: 0.65rem; font-weight: 800; color: #1a237e; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; text-align: left; display: flex; align-items: center; }
-    .comp-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .label-code { font-family: 'Courier New', monospace; font-size: 1.4rem; font-weight: 900; color: #000; margin: 5px 0; letter-spacing: 1px; }
-    .label-name { font-size: 0.75rem; color: #444; font-weight: 600; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .no-print-btn { text-align: center; margin-bottom: 20px; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 10mm; background: #f0f2f5; }
+    .label-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 63mm);
+      gap: 4mm;
+      justify-content: center;
+    }
+    .label-card {
+      background: white;
+      border: 1px solid #1a237e;
+      border-radius: 5px;
+      padding: 3mm;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 34mm;
+      width: 63mm;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      page-break-inside: avoid;
+      overflow: hidden;
+    }
+    .label-header {
+      font-size: 8pt;
+      font-weight: 800;
+      color: #1a237e;
+      border-bottom: 0.5px solid #eee;
+      padding-bottom: 1mm;
+      margin-bottom: 1mm;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .comp-name { overflow: hidden; text-overflow: ellipsis; }
+    .label-code {
+      font-family: 'Courier New', monospace;
+      font-size: 14pt;
+      font-weight: 900;
+      color: #000;
+      margin: 1mm 0;
+      letter-spacing: 1px;
+    }
+    .label-name {
+      font-size: 8pt;
+      color: #444;
+      font-weight: 600;
+      line-height: 1.2;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .no-print-btn { text-align: center; margin-bottom: 10mm; }
     .btn { padding: 10px 20px; background: #1a237e; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
     @media print {
-      body { background: white; padding: 0; }
+      body { background: white; padding: 0; margin: 0; }
       .no-print-btn { display: none; }
-      .label-card { border: 1.5px solid #000; box-shadow: none; break-inside: avoid; }
-      .label-grid { gap: 10px; }
+      .label-card { border: 1pt solid #000; box-shadow: none; }
+      .label-grid { gap: 2mm; }
+      @page { size: A4; margin: 5mm; }
     }
   `;
 
-  w.document.write('<!DOCTYPE html><html><head><title>Print Labels</title><style>' + css + '</style></head><body>'
-    + '<div class="no-print-btn"><button class="btn" onclick="window.print()">🖨️ Cetak Label (' + selectedItems.length + ')</button></div>'
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cetak ' + totalLabels + ' Label</title><style>' + css + '</style></head><body>'
+    + '<div class="no-print-btn"><button class="btn" onclick="window.print()">🖨️ Cetak ' + totalLabels + ' Label (A4)</button></div>'
     + '<div class="label-grid">' + labelHtml + '</div>'
     + '</body></html>');
   w.document.close();
