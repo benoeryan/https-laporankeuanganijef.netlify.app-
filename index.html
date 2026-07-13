@@ -168,12 +168,12 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#333;font-size:14px
 .stat-box.purple .val{color:#9c27b0}
 .stat-box .lbl{font-size:0.72rem;color:#64748b;margin-top:3.3px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em}
 
-/* VIEWPORT & OVERFLOW CORRECTIONS (Allows natural scrolling on real devices, while keeping simulator frame bounded) */
+/* VIEWPORT & OVERFLOW CORRECTIONS (Allows natural scrolling on real devices) */
 [class*="preview-mode-mobile"] #app,
 [class*="preview-mode-tablet"] #app,
 [class*="preview-mode-mobile"] .app-body,
 [class*="preview-mode-tablet"] .app-body {
-  overflow: hidden !important;
+  overflow: visible !important;
 }
 
 .main-content {
@@ -1451,6 +1451,59 @@ input:focus, select:focus, textarea:focus {
   padding: 1px 5px !important;
   font-size: 0.65rem !important;
 }
+
+/* NATIVE RESPONSIVE FORCE OVERRIDES */
+#preview-control-bar,
+#preview-floating-toggle,
+#mock-device-header,
+.header-device-switcher {
+  display: none !important;
+}
+
+#viewport-wrapper {
+  position: relative !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  display: block !important;
+  overflow: visible !important;
+  background: transparent !important;
+  padding: 0 !important;
+  top: 0 !important;
+}
+
+#viewport-scaler {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  transform: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  display: block !important;
+}
+
+#app-viewport {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  transform: none !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+#app {
+  border-radius: 0 !important;
+  height: auto !important;
+  min-height: 100vh !important;
+}
+
+.app-body {
+  height: auto !important;
+  min-height: calc(100vh - 52px) !important;
+  overflow: visible !important;
+}
 </style>
 </head>
 <body>
@@ -1575,18 +1628,7 @@ input:focus, select:focus, textarea:focus {
       <h1>💼 Sistem Keuangan IJEF Corp</h1>
     </div>
     <div class="header-right">
-      <!-- Device Selector Switcher -->
-      <div class="header-device-switcher" style="display:flex;align-items:center;background:rgba(255,255,255,0.12);padding:2px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);margin-right:4px">
-         <button onclick="setPreviewMode('desktop')" id="hdr-btn-desktop" style="background:rgba(255,255,255,0.22);color:white;border:none;padding:5px 12px;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s" title="Tampilan Desktop">
-           <span>💻</span> <span class="switcher-lbl">Desktop</span>
-         </button>
-         <button onclick="setPreviewMode('tablet')" id="hdr-btn-tablet" style="background:transparent;color:rgba(255,255,255,0.75);border:none;padding:5px 12px;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s" title="Tampilan Tablet">
-           <span>📟</span> <span class="switcher-lbl">Tablet</span>
-         </button>
-         <button onclick="setPreviewMode('mobile')" id="hdr-btn-mobile" style="background:transparent;color:rgba(255,255,255,0.75);border:none;padding:5px 12px;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s" title="Tampilan Mobile">
-           <span>📱</span> <span class="switcher-lbl">Mobile</span>
-         </button>
-      </div>
+      <!-- Header user info and actions -->
       <span class="user-info" id="header-user">-</span>
       <span class="role-chip" id="header-role">-</span>
       <button onclick="showNotifPanel()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:0.9rem;position:relative">
@@ -1653,28 +1695,13 @@ function togglePwd(inputId, btn) {
 
 // === PREVIEW SIMULATOR LOGIC ===
 function detectAndAdjustDevice() {
-  // Only hide the simulator when opened in actual standalone PWA mode (downloaded app)!
-  // This allows the user to see and use the 3 simulator buttons in the AI Studio web preview, 
-  // even if the preview window is small (e.g. width <= 1024).
-  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  // Always hide simulator controls completely
+  var bar = document.getElementById('preview-control-bar');
+  var floatBtn = document.getElementById('preview-floating-toggle');
+  if (bar) bar.style.setProperty('display', 'none', 'important');
+  if (floatBtn) floatBtn.style.setProperty('display', 'none', 'important');
   
-  if (isStandalone) {
-    // Hide simulator controls completely
-    var bar = document.getElementById('preview-control-bar');
-    var floatBtn = document.getElementById('preview-floating-toggle');
-    if (bar) bar.style.setProperty('display', 'none', 'important');
-    if (floatBtn) floatBtn.style.setProperty('display', 'none', 'important');
-    
-    // Force 'desktop' mode (which is native responsive 100% full screen design)
-    localStorage.setItem('k_preview_mode', 'desktop');
-    localStorage.setItem('k_preview_bar_hidden', 'true');
-    
-    // Inject CSS to guarantee hiding
-    var style = document.createElement('style');
-    style.id = 'hide-simulator-styles';
-    style.innerHTML = '#preview-control-bar, #preview-floating-toggle { display: none !important; }';
-    document.head.appendChild(style);
-  }
+  localStorage.setItem('k_preview_bar_hidden', 'true');
 }
 
 var DEVICE_MODELS = {
@@ -1692,11 +1719,7 @@ var DEVICE_MODELS = {
 };
 
 function changeDeviceModel(modelId) {
-  localStorage.setItem('k_preview_model_id', modelId);
-  updateDeviceScaling();
-  setTimeout(function() {
-    window.dispatchEvent(new Event('resize'));
-  }, 100);
+  // Ignored / Not used anymore
 }
 
 function updateDeviceScaling() {
@@ -1704,81 +1727,26 @@ function updateDeviceScaling() {
   var wrapper = document.getElementById('viewport-wrapper');
   var scaler = document.getElementById('viewport-scaler');
   var mockHeader = document.getElementById('mock-device-header');
-  var notch = document.getElementById('mock-device-notch');
   
   if (!viewport || !wrapper || !scaler) return;
   
-  var mode = localStorage.getItem('k_preview_mode') || 'desktop';
-  var bar = document.getElementById('preview-control-bar');
-  var isBarVisible = bar && window.getComputedStyle(bar).display !== 'none';
-  var barHeight = isBarVisible ? 60 : 0;
-  
-  if (mode === 'desktop') {
-    viewport.style.transform = 'none';
-    viewport.style.transformOrigin = 'unset';
-    viewport.style.margin = '0';
-    viewport.style.width = '100%';
-    viewport.style.height = '100%';
-    
-    scaler.style.width = '100%';
-    scaler.style.height = 'calc(100vh - ' + (isBarVisible ? '60px' : '0px') + ')';
-    scaler.style.transform = 'none';
-    scaler.style.border = 'none';
-    scaler.style.borderRadius = '0';
-    scaler.style.boxShadow = 'none';
-    
-    wrapper.style.height = 'calc(100vh - ' + barHeight + 'px)';
-    wrapper.style.top = isBarVisible ? '60px' : '0px';
-    wrapper.className = ''; // remove grid dotted background
-    if (mockHeader) mockHeader.style.display = 'none';
-    return;
-  }
-  
-  // Set wrapper height to contain scaled content
-  wrapper.style.height = 'calc(100vh - ' + barHeight + 'px)';
-  wrapper.style.top = isBarVisible ? '60px' : '0px';
-  wrapper.className = 'simulation-canvas-bg'; // Enable fancy mesh dotted pattern
-  
-  if (mockHeader) {
-    mockHeader.style.display = 'flex';
-  }
-  
-  // Find current model specs
-  var models = DEVICE_MODELS[mode] || [];
-  var savedModelId = localStorage.getItem('k_preview_model_id');
-  var activeModel = models.find(function(m) { return m.id === savedModelId; }) || models[0];
-  
-  if (!activeModel) return;
-  
-  if (notch) {
-    notch.style.display = activeModel.notch ? 'block' : 'none';
-  }
-  
-  var targetW = activeModel.width;
-  var targetH = activeModel.height;
-  
-  var borderSize = 24; // 12px each side border
-  var availableH = window.innerHeight - barHeight - 48 - borderSize; // 48px safety padding
-  var availableW = window.innerWidth - 48 - borderSize; // 48px safety padding
-  
-  var scaleH = availableH / targetH;
-  var scaleW = availableW / targetW;
-  var scale = Math.min(1, scaleH, scaleW);
-  
-  // Configure scaler container
-  scaler.style.width = (targetW * scale) + 'px';
-  scaler.style.height = (targetH * scale) + 'px';
-  scaler.style.overflow = 'hidden';
-  scaler.style.borderRadius = (mode === 'mobile' ? 40 : 28) * scale + 'px';
-  scaler.style.border = (12 * scale) + 'px solid #1e293b';
-  scaler.style.boxShadow = '0 25px 60px -15px rgba(0, 0, 0, 0.75)';
-  
-  // Scale viewport from top-left (0, 0) inside scaler
-  viewport.style.width = targetW + 'px';
-  viewport.style.height = targetH + 'px';
-  viewport.style.transform = 'scale(' + scale + ')';
-  viewport.style.transformOrigin = '0 0';
+  viewport.style.transform = 'none';
+  viewport.style.transformOrigin = 'unset';
   viewport.style.margin = '0';
+  viewport.style.width = '100%';
+  viewport.style.height = '100%';
+  
+  scaler.style.width = '100%';
+  scaler.style.height = '100%';
+  scaler.style.transform = 'none';
+  scaler.style.border = 'none';
+  scaler.style.borderRadius = '0';
+  scaler.style.boxShadow = 'none';
+  
+  wrapper.style.height = '100%';
+  wrapper.style.top = '0px';
+  wrapper.className = ''; // remove grid dotted background
+  if (mockHeader) mockHeader.style.display = 'none';
 }
 
 // Live Mock Status Bar Clock
@@ -1791,102 +1759,37 @@ function updateMockTime() {
   el.textContent = hh + ':' + mm;
 }
 
-window.addEventListener('resize', updateDeviceScaling);
+window.addEventListener('resize', function() {
+  setPreviewMode();
+});
 
 function setPreviewMode(mode) {
-  var viewport = document.getElementById('app-viewport');
-  var btnMobile = document.getElementById('btn-view-mobile');
-  var btnTablet = document.getElementById('btn-view-tablet');
-  var btnDesktop = document.getElementById('btn-view-desktop');
-  var modelSelectorWrap = document.getElementById('device-model-selector-wrap');
-  var modelSelect = document.getElementById('device-model-select');
-  var bar = document.getElementById('preview-control-bar');
-  var isBarVisible = bar && window.getComputedStyle(bar).display !== 'none';
-  
-  localStorage.setItem('k_preview_mode', mode);
-
-  // Update button highlights
-  [btnMobile, btnTablet, btnDesktop].forEach(function(btn) {
-    if (btn) {
-      btn.style.background = 'transparent';
-      btn.style.color = '#94a3b8';
-      btn.style.transform = 'scale(1)';
-    }
-  });
-
-  var activeBtn = mode === 'mobile' ? btnMobile : (mode === 'tablet' ? btnTablet : btnDesktop);
-  if (activeBtn) {
-    activeBtn.style.background = '#1a237e';
-    activeBtn.style.color = 'white';
-    activeBtn.style.transform = 'scale(1.05)';
-  }
-
-  // Update header device switcher button highlights
-  var hDesktop = document.getElementById('hdr-btn-desktop');
-  var hTablet = document.getElementById('hdr-btn-tablet');
-  var hMobile = document.getElementById('hdr-btn-mobile');
-  
-  [hDesktop, hTablet, hMobile].forEach(function(btn) {
-    if (btn) {
-      btn.style.background = 'transparent';
-      btn.style.color = 'rgba(255,255,255,0.75)';
-    }
-  });
-  
-  var hActive = mode === 'mobile' ? hMobile : (mode === 'tablet' ? hTablet : hDesktop);
-  if (hActive) {
-    hActive.style.background = 'rgba(255,255,255,0.22)';
-    hActive.style.color = '#ffffff';
-  }
-
-  // Handle Model Selector Dropdown
-  if (mode === 'desktop') {
-    if (modelSelectorWrap) modelSelectorWrap.style.display = 'none';
+  // Automatically read actual window width
+  var width = window.innerWidth;
+  var autoMode = 'desktop';
+  if (width <= 600) {
+    autoMode = 'mobile';
+  } else if (width <= 1024) {
+    autoMode = 'tablet';
   } else {
-    if (modelSelectorWrap && modelSelect) {
-      modelSelectorWrap.style.display = 'flex';
-      
-      // Populate select options
-      modelSelect.innerHTML = '';
-      var models = DEVICE_MODELS[mode] || [];
-      var savedModelId = localStorage.getItem('k_preview_model_id');
-      var hasSaved = models.some(function(m) { return m.id === savedModelId; });
-      var activeId = hasSaved ? savedModelId : models[0].id;
-      
-      models.forEach(function(m) {
-        var opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name + ' (' + m.width + 'x' + m.height + ')';
-        opt.style.background = '#0f172a';
-        opt.style.color = 'white';
-        if (m.id === activeId) opt.selected = true;
-        modelSelect.appendChild(opt);
-      });
-      
-      if (!hasSaved) {
-        localStorage.setItem('k_preview_model_id', activeId);
-      }
-    }
+    autoMode = 'desktop';
   }
+  
+  localStorage.setItem('k_preview_mode', autoMode);
 
-  // Set classes on viewport wrapper
+  var viewport = document.getElementById('app-viewport');
+  
+  // Set classes on document.body and app-viewport
+  document.body.classList.remove('preview-mode-desktop', 'preview-mode-tablet', 'preview-mode-mobile');
+  document.body.classList.add('preview-mode-' + autoMode);
+  
   if (viewport) {
-    var suffix = isBarVisible ? '' : '-full';
-    viewport.className = 'preview-mode-' + mode + suffix;
-    
-    // Also synchronize classes on document.body for both CSS and JS (e.g. toggleSidebar checks)
-    document.body.classList.remove('preview-mode-desktop', 'preview-mode-tablet', 'preview-mode-mobile');
-    document.body.classList.add('preview-mode-' + mode);
-    
-    // Change body and root background dynamically for tablet/mobile representation
-    if (mode === 'desktop') {
-      document.documentElement.style.backgroundColor = '#f0f4f8';
-      document.body.style.background = '#f0f4f8';
-    } else {
-      document.documentElement.style.backgroundColor = '#0f172a';
-      document.body.style.background = '#0f172a';
-    }
+    viewport.className = 'preview-mode-' + autoMode + '-full';
   }
+  
+  // Standard background colors
+  document.documentElement.style.backgroundColor = '#f0f4f8';
+  document.body.style.background = '#f0f4f8';
 
   updateDeviceScaling();
 
@@ -1897,22 +1800,12 @@ function setPreviewMode(mode) {
 }
 
 function togglePreviewBar(show) {
+  // Force hidden
   var bar = document.getElementById('preview-control-bar');
   var floatBtn = document.getElementById('preview-floating-toggle');
-  
-  localStorage.setItem('k_preview_bar_hidden', !show);
-  
-  if (show) {
-    bar.style.display = 'flex';
-    floatBtn.style.display = 'none';
-  } else {
-    bar.style.display = 'none';
-    floatBtn.style.display = 'flex';
-  }
-  
-  // Re-apply preview mode to recalculate the height layout (with/without top bar)
-  var savedMode = localStorage.getItem('k_preview_mode') || 'desktop';
-  setPreviewMode(savedMode);
+  if (bar) bar.style.display = 'none';
+  if (floatBtn) floatBtn.style.display = 'none';
+  localStorage.setItem('k_preview_bar_hidden', 'true');
 }
 
 async function quickSwitchUser(username) {
@@ -2006,13 +1899,8 @@ async function populateQuickSwitchUsers() {
 // Initialize on page load
 window.addEventListener('load', function() {
   detectAndAdjustDevice();
-
-  // Force show the preview bar on page load so the 3 layout modes are immediately available
-  localStorage.setItem('k_preview_bar_hidden', 'false');
-  togglePreviewBar(true);
-
-  var savedMode = localStorage.getItem('k_preview_mode') || 'desktop';
-  setPreviewMode(savedMode);
+  togglePreviewBar(false);
+  setPreviewMode();
   
   // Real-time Status clock loop
   updateMockTime();
