@@ -1,0 +1,15 @@
+{
+  "name": "https-laporankeuanganijef",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build step required'",
+    "lint": "echo 'No lint step required'",
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@google/genai": "latest"
+  }
+}

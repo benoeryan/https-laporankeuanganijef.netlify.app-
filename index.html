@@ -2,6 +2,64 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
+<script id="safe-json-stringify-polyfill">
+// Safe JSON.stringify polyfill to eliminate circular reference errors
+(function() {
+  var nativeStringify = JSON.stringify;
+  JSON.stringify = function(value, replacer, space) {
+    var seen = [];
+    function safeReplacer(key, val) {
+      if (val && typeof val === 'object') {
+        if (seen.indexOf(val) !== -1) {
+          return '[Circular]';
+        }
+        seen.push(val);
+      }
+      if (typeof replacer === 'function') {
+        return replacer(key, val);
+      }
+      if (Array.isArray(replacer)) {
+        if (key !== '' && replacer.indexOf(key) === -1) {
+          return undefined;
+        }
+      }
+      return val;
+    }
+    try {
+      return nativeStringify(value, safeReplacer, space);
+    } catch (e) {
+      try {
+        return nativeStringify(String(value));
+      } catch (e2) {
+        return '"[Unserializable]"';
+      }
+    }
+  };
+
+  // Safe global error handler to sanitize complex or circular error objects
+  window.addEventListener('error', function(event) {
+    if (event.error && typeof event.error === 'object') {
+      try {
+        JSON.stringify(event.error);
+      } catch (e) {
+        event.preventDefault();
+        console.error('Sanitized circular uncaught error:', event.error.message || event.error);
+      }
+    }
+  }, true);
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (event.reason && typeof event.reason === 'object') {
+      try {
+        JSON.stringify(event.reason);
+      } catch (e) {
+        event.preventDefault();
+        console.error('Sanitized circular unhandled promise rejection:', event.reason.message || event.reason);
+      }
+    }
+  }, true);
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sistem Keuangan IJEF Corp</title>
 <link rel="manifest" href="manifest.json">
@@ -13,6 +71,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+html, body {
+  width: 100% !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background-color: #0f172a; /* Fallback safe dark color to prevent white flashes */
+}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#333;font-size:14px}
 
@@ -33,7 +99,7 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#333;font-size:14px
 .login-footer{text-align:center;margin-top:16px;font-size:0.8rem;color:#aaa}
 
 /* APP SHELL */
-#app{display:none;min-height:100vh}
+#app{display:none;min-height:100vh;position:relative;width:100%}
 .app-header{background:linear-gradient(135deg,#1a237e,#1565c0);color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
 .app-header h1{font-size:1.1rem;display:flex;align-items:center;gap:8px}
 .header-right{display:flex;align-items:center;gap:10px}
@@ -75,22 +141,99 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#333;font-size:14px
 .card-header .actions{display:flex;gap:8px;flex-wrap:wrap}
 
 /* STATS */
+.responsive-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 768px) {
+  .responsive-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
 .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:16px}
 .stat-box{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #1a237e;border:1px solid #e2e8f0;border-left:4px solid #1a237e}
 .stat-box.green{border-left-color:#10b981}
 .stat-box.red{border-left-color:#f43f5e}
 .stat-box.orange{border-left-color:#ff9800}
 .stat-box.purple{border-left-color:#9c27b0}
-.stat-box .val{font-size:1.7rem;font-weight:700;color:#1a237e;letter-spacing:-0.02em}
+.stat-box .val{font-size:1.45rem;font-weight:700;color:#1a237e;letter-spacing:-0.02em;word-break:break-word;overflow-wrap:break-word;line-height:1.2}
+.stat-box .val-large{font-size:1.85rem;font-weight:800;color:#1a237e;letter-spacing:-0.03em;word-break:break-word;overflow-wrap:break-word;line-height:1.25}
 .stat-box.green .val{color:#10b981}
+.stat-box.green .val-large{color:#10b981}
 .stat-box.red .val{color:#f43f5e}
+.stat-box.red .val-large{color:#f43f5e}
 .stat-box.orange .val{color:#ff9800}
 .stat-box.purple .val{color:#9c27b0}
-.stat-box .lbl{font-size:0.72rem;color:#64748b;margin-top:3px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em}
+.stat-box .lbl{font-size:0.72rem;color:#64748b;margin-top:3.3px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em}
+
+/* VIEWPORT & OVERFLOW CORRECTIONS (Allows natural scrolling on real devices, while keeping simulator frame bounded) */
+[class*="preview-mode-mobile"] #app,
+[class*="preview-mode-tablet"] #app,
+[class*="preview-mode-mobile"] .app-body,
+[class*="preview-mode-tablet"] .app-body {
+  overflow: hidden !important;
+}
+
+.main-content {
+  scrollbar-width: thin !important;
+  scrollbar-color: #cbd5e1 transparent !important;
+}
+
+/* Custom Saldo Grid (Flex wrapper with wrap to never leave empty columns or gaps on right) */
+.saldo-grid {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+}
+.saldo-grid > div {
+  flex: 1 1 160px !important;
+  box-sizing: border-box !important;
+}
+.saldo-card-val {
+  font-size: 1.15rem !important;
+}
+@media (max-width: 768px) {
+  .saldo-grid > div {
+    flex: 1 1 160px !important;
+  }
+  .saldo-card-val {
+    font-size: 1.05rem !important;
+  }
+}
+@media (max-width: 480px) {
+  .saldo-grid > div {
+    flex: 1 1 100% !important; /* Stack vertically on small phone screens for optimal reading */
+  }
+  .saldo-card-val {
+    font-size: 0.95rem !important;
+  }
+}
+.preview-mode-tablet .saldo-card-val {
+  font-size: 1.05rem !important;
+}
+.preview-mode-mobile .saldo-grid > div {
+  flex: 1 1 100% !important; /* Stack vertically in simulated mobile mode */
+}
+.preview-mode-mobile .saldo-card-val {
+  font-size: 0.95rem !important;
+}
 
 /* TABLES */
-.table-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:0.84rem}
+.table-wrap{
+  width:100% !important;
+  overflow-x:auto !important;
+  -webkit-overflow-scrolling:touch;
+  background: white;
+  border-radius: 8px;
+}
+table{
+  width:100% !important;
+  min-width:100% !important;
+  border-collapse:collapse;
+  font-size:0.84rem;
+}
 th{background:#1a237e;color:white;padding:9px 11px;text-align:left;white-space:nowrap}
 td{padding:8px 11px;border-bottom:1px solid #eee;vertical-align:middle}
 tr:hover td{background:#f5f5ff}
@@ -215,7 +358,8 @@ textarea{resize:vertical;min-height:70px}
 .chip{display:inline-block;padding:3px 10px;border-radius:12px;font-size:0.75rem;background:#e8eaf6;color:#1a237e}
 
 /* HAMBURGER */
-.hamburger{background:none;border:none;color:white;font-size:1.3rem;cursor:pointer;padding:4px 8px;display:none}
+.hamburger{background:none;border:none;color:white;font-size:1.3rem;cursor:pointer;padding:4px 8px;display:block;transition:background 0.2s;border-radius:4px}
+.hamburger:hover{background:rgba(255,255,255,0.12)}
 
 /* PRINT */
 @media print{
@@ -247,7 +391,20 @@ textarea{resize:vertical;min-height:70px}
 }
 
 /* RESPONSIVE */
+@media(max-width:850px){
+  .switcher-lbl { display: none !important; }
+  .header-device-switcher { margin-right: 4px !important; }
+}
+@media(max-width:550px){
+  .user-info { display: none !important; }
+}
 @media(max-width:768px){
+  .app-body { height: auto !important; overflow: visible !important; }
+  #app { height: auto !important; min-height: 100vh !important; }
+  #app-viewport { height: auto !important; }
+  .main-content { height: auto !important; overflow: visible !important; padding-bottom: 80px !important; }
+  #app-bottom-nav { display: flex !important; position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; z-index: 1000 !important; }
+
   .sidebar{position:fixed;top:52px;left:0;height:calc(100vh - 52px);z-index:150;transform:translateX(-100%);transition:transform 0.3s}
   .sidebar.mobile-open{transform:translateX(0)}
   .hamburger{display:block}
@@ -269,6 +426,16 @@ textarea{resize:vertical;min-height:70px}
   .audit-old-toolbar-right input,.audit-old-toolbar-right select{width:100%;min-width:0!important}
   .audit-old-table-wrap{max-height:none}
   .audit-old-cell-wrap,.audit-old-cell-detail{max-width:none}
+  .stat-box .val-large { font-size: 1.4rem !important; }
+  .stat-box .val { font-size: 1.15rem !important; }
+
+  /* Override inline 4-column and 3-column grids to 2-columns on tablet views */
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"],
+  div[style*="grid-template-columns:1fr 1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
 }
 @media(max-width:480px){
   .stats-row{grid-template-columns:1fr}
@@ -276,6 +443,178 @@ textarea{resize:vertical;min-height:70px}
   .audit-old-summary-grid{grid-template-columns:1fr}
   .tbl-actions{flex-direction:column;align-items:stretch}
   .btn-xs{justify-content:center}
+  .stat-box .val-large { font-size: 1.15rem !important; }
+  .stat-box .val { font-size: 0.95rem !important; }
+
+  /* Override all inline multi-column grids to 1-column on phone screens */
+  div[style*="grid-template-columns:1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="grid-template-columns:1fr 1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr 1fr"],
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* SIMULATED DEVICE PREVIEW RESPONSIVE OVERRIDES */
+/* These simulate mobile and tablet layouts based on parent classes set on document.body and viewport */
+.preview-mode-mobile .switcher-lbl,
+.preview-mode-tablet .switcher-lbl {
+  display: none !important;
+}
+.preview-mode-mobile .user-info,
+.preview-mode-mobile .role-chip {
+  display: none !important;
+}
+.preview-mode-tablet .user-info {
+  font-size: 0.75rem !important;
+  padding: 4px 10px !important;
+}
+.preview-mode-tablet .role-chip {
+  font-size: 0.68rem !important;
+  padding: 2px 8px !important;
+}
+.preview-mode-mobile .app-header {
+  padding: 8px 12px !important;
+}
+.preview-mode-mobile .app-header h1 {
+  font-size: 0.92rem !important;
+}
+.preview-mode-mobile .app-header h1 .logo-icon {
+  font-size: 1.1rem !important;
+}
+.preview-mode-mobile .header-right {
+  gap: 6px !important;
+}
+.preview-mode-mobile .header-right button {
+  padding: 4px 8px !important;
+  font-size: 0.72rem !important;
+  border-radius: 6px !important;
+}
+.preview-mode-mobile .header-device-switcher {
+  padding: 1px !important;
+  border-radius: 8px !important;
+  margin-right: 2px !important;
+}
+.preview-mode-mobile .header-device-switcher button {
+  padding: 4px 6px !important;
+  font-size: 0.7rem !important;
+}
+
+/* Force inline 2, 3, and 4-column grid styles to stack into a single column under simulated mobile */
+.preview-mode-mobile div[style*="grid-template-columns:1fr 1fr"],
+.preview-mode-mobile div[style*="grid-template-columns: 1fr 1fr"],
+.preview-mode-mobile div[style*="grid-template-columns:1fr 1fr 1fr"],
+.preview-mode-mobile div[style*="grid-template-columns: 1fr 1fr 1fr"],
+.preview-mode-mobile div[style*="grid-template-columns:1fr 1fr 1fr 1fr"],
+.preview-mode-mobile div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"] {
+  grid-template-columns: 1fr !important;
+}
+
+/* For simulated tablet, allow 2-column layout for 4-column grids */
+.preview-mode-tablet div[style*="grid-template-columns:1fr 1fr 1fr 1fr"],
+.preview-mode-tablet div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"] {
+  grid-template-columns: 1fr 1fr !important;
+}
+
+/* Also ensure all responsive class elements respond correctly under simulated classes */
+.preview-mode-mobile .sidebar, .preview-mode-tablet .sidebar {
+  position: fixed !important;
+  top: 52px !important;
+  left: 0 !important;
+  height: calc(100% - 52px) !important;
+  z-index: 150 !important;
+  transform: translateX(-100%) !important;
+  transition: transform 0.3s !important;
+}
+.preview-mode-mobile .sidebar.mobile-open, .preview-mode-tablet .sidebar.mobile-open {
+  transform: translateX(0) !important;
+}
+.preview-mode-mobile .hamburger, .preview-mode-tablet .hamburger {
+  display: block !important;
+}
+.preview-mode-mobile .form-grid, .preview-mode-tablet .form-grid {
+  grid-template-columns: 1fr !important;
+}
+.preview-mode-mobile .form-grid.cols3, .preview-mode-tablet .form-grid.cols3 {
+  grid-template-columns: 1fr !important;
+}
+.preview-mode-mobile .stats-row {
+  grid-template-columns: 1fr !important;
+}
+.preview-mode-mobile .responsive-grid-2 {
+  grid-template-columns: 1fr !important;
+}
+.preview-mode-tablet .stats-row {
+  grid-template-columns: 1fr 1fr !important;
+}
+.preview-mode-mobile .main-content, .preview-mode-tablet .main-content {
+  padding: 12px !important;
+}
+.preview-mode-mobile .modal-overlay, .preview-mode-tablet .modal-overlay {
+  padding: 8px !important;
+}
+.preview-mode-mobile .modal, .preview-mode-tablet .modal {
+  padding: 16px !important;
+  border-radius: 12px !important;
+  max-height: 94vh !important;
+}
+.preview-mode-mobile .bankrec-summary-grid, .preview-mode-tablet .bankrec-summary-grid {
+  grid-template-columns: 1fr !important;
+}
+.preview-mode-mobile .bankrec-mini-grid {
+  grid-template-columns: 1fr !important;
+}
+.preview-mode-tablet .bankrec-mini-grid {
+  grid-template-columns: 1fr 1fr !important;
+}
+.preview-mode-mobile .bankrec-group summary, .preview-mode-tablet .bankrec-group summary {
+  padding: 12px !important;
+  align-items: flex-start !important;
+}
+.preview-mode-mobile .bankrec-group .chip, .preview-mode-tablet .bankrec-group .chip {
+  font-size: 0.7rem !important;
+}
+.preview-mode-mobile .bankrec-group-table, .preview-mode-tablet .bankrec-group-table {
+  max-height: none !important;
+}
+.preview-mode-mobile .bankrec-cell-wrap, .preview-mode-mobile .bankrec-table-cell-note,
+.preview-mode-tablet .bankrec-cell-wrap, .preview-mode-tablet .bankrec-table-cell-note {
+  max-width: none !important;
+}
+.preview-mode-mobile .audit-old-summary-grid {
+  grid-template-columns: 1fr !important;
+}
+.preview-mode-tablet .audit-old-summary-grid {
+  grid-template-columns: 1fr 1fr !important;
+}
+.preview-mode-mobile .audit-old-toolbar, .preview-mode-tablet .audit-old-toolbar {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+.preview-mode-mobile .audit-old-toolbar-left, .preview-mode-mobile .audit-old-toolbar-right,
+.preview-mode-tablet .audit-old-toolbar-left, .preview-mode-tablet .audit-old-toolbar-right {
+  width: 100% !important;
+}
+.preview-mode-mobile .audit-old-toolbar-right input, .preview-mode-mobile .audit-old-toolbar-right select,
+.preview-mode-tablet .audit-old-toolbar-right input, .preview-mode-tablet .audit-old-toolbar-right select {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+.preview-mode-mobile .audit-old-table-wrap, .preview-mode-tablet .audit-old-table-wrap {
+  max-height: none !important;
+}
+.preview-mode-mobile .audit-old-cell-wrap, .preview-mode-mobile .audit-old-cell-detail,
+.preview-mode-tablet .audit-old-cell-wrap, .preview-mode-tablet .audit-old-cell-detail {
+  max-width: none !important;
+}
+.preview-mode-mobile .tbl-actions, .preview-mode-tablet .tbl-actions {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+.preview-mode-mobile .btn-xs, .preview-mode-tablet .btn-xs {
+  justify-content: center !important;
 }
 
 /* UPLOAD AREA */
@@ -320,14 +659,887 @@ textarea{resize:vertical;min-height:70px}
 .fva-tooltip::after{content:'';position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid #334155}
 
 #fva-charts-container{transition:opacity 0.25s ease,transform 0.25s ease}
+
+/* RESPONSIVE PREVIEW CONTROL BAR STYLING */
+.preview-logo-section {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+}
+.preview-logo-icon-wrap {
+  background: #1e293b !important;
+  padding: 8px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.preview-title-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.preview-title {
+  font-weight: 700 !important;
+  color: #f1f5f9 !important;
+  font-size: 0.82rem !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+.preview-desc {
+  font-size: 0.72rem !important;
+  color: #94a3b8 !important;
+  margin-top: 2px !important;
+}
+.preview-controls-section {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+.preview-button-group {
+  display: flex !important;
+  background: #1e293b !important;
+  padding: 4px !important;
+  border-radius: 10px !important;
+  border: 1px solid #334155 !important;
+}
+.preview-action-section {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+.preview-dropdown-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  background: #1e293b !important;
+  padding: 4px 12px !important;
+  border-radius: 8px !important;
+  border: 1px solid #334155 !important;
+  height: 36px !important;
+}
+
+@media (max-width: 1150px) {
+  .preview-logo-icon-wrap {
+    display: none !important;
+  }
+  .preview-desc {
+    display: none !important;
+  }
+  .preview-logo-section {
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 950px) {
+  .preview-logo-section {
+    display: none !important;
+  }
+  #preview-control-bar {
+    justify-content: space-around !important;
+    padding: 8px 12px !important;
+  }
+}
+
+@media (max-width: 680px) {
+  #preview-control-bar {
+    height: auto !important;
+    padding: 10px 8px !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 10px !important;
+  }
+  .preview-controls-section {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .preview-action-section {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  
+  /* Sibling selector shift: only shifts viewport when preview-control-bar is visible */
+  #preview-control-bar:not([style*="display: none"]):not([style*="display:none"]) ~ #viewport-wrapper {
+    top: 100px !important;
+    height: calc(100vh - 100px) !important;
+  }
+}
+
+/* PREVIEW DEVICE SIMULATOR AND OVERRIDES */
+#viewport-wrapper {
+  width: 100vw !important;
+  height: 100vh !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  transition: background 0.4s ease, padding 0.3s ease, height 0.3s ease, top 0.3s ease;
+  box-sizing: border-box !important;
+}
+
+/* Playground dotted grid pattern for simulated background */
+.simulation-canvas-bg {
+  background-color: #0f172a !important;
+  background-image: radial-gradient(#334155 1.5px, transparent 1.5px) !important;
+  background-size: 24px 24px !important;
+}
+
+#viewport-scaler {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: transparent;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 0.4s ease, border-width 0.4s ease, box-shadow 0.4s ease, width 0.4s ease, height 0.4s ease;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+#app-viewport {
+  width: 100%;
+  position: relative;
+  box-sizing: border-box;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Force container limits to perfectly fit simulator frames */
+#login-screen {
+  min-height: 100% !important;
+  height: 100% !important;
+  border-radius: inherit;
+}
+#app {
+  height: 100% !important;
+  min-height: 100% !important;
+  background: #f0f4f8 !important;
+  border-radius: inherit;
+  display: flex;
+  flex-direction: column;
+}
+.app-body {
+  height: calc(100% - 52px) !important;
+  flex: 1;
+}
+
+/* Desktop Preview Mode */
+.preview-mode-desktop {
+  width: 100% !important;
+  height: calc(100vh - 60px) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+}
+.preview-mode-desktop-full {
+  width: 100% !important;
+  height: 100vh !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+}
+
+/* Responsive Overrides when simulated Mobile/Tablet modes are active */
+[class*="preview-mode-mobile"] .sidebar, [class*="preview-mode-tablet"] .sidebar {
+  position: fixed !important;
+  top: 52px !important;
+  left: 0 !important;
+  height: calc(100% - 52px) !important;
+  z-index: 150 !important;
+  transform: translateX(-100%) !important;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.25) !important;
+}
+[class*="preview-mode-mobile"] .sidebar.mobile-open, [class*="preview-mode-tablet"] .sidebar.mobile-open {
+  transform: translateX(0) !important;
+}
+[class*="preview-mode-mobile"] .hamburger, [class*="preview-mode-tablet"] .hamburger {
+  display: block !important;
+}
+[class*="preview-mode-mobile"] .form-grid, [class*="preview-mode-tablet"] .form-grid {
+  grid-template-columns: 1fr !important;
+}
+[class*="preview-mode-mobile"] .form-grid.cols3, [class*="preview-mode-tablet"] .form-grid.cols3 {
+  grid-template-columns: 1fr !important;
+}
+
+/* On mobile, cards look clean in 1 single column to keep readable text sizes */
+[class*="preview-mode-mobile"] .stats-row {
+  grid-template-columns: 1fr !important;
+}
+[class*="preview-mode-mobile"] .responsive-grid-2 {
+  grid-template-columns: 1fr !important;
+}
+[class*="preview-mode-tablet"] .stats-row {
+  grid-template-columns: 1fr 1fr !important;
+}
+
+[class*="preview-mode-mobile"] .main-content, [class*="preview-mode-tablet"] .main-content {
+  padding: 14px !important;
+}
+[class*="preview-mode-mobile"] .modal-overlay, [class*="preview-mode-tablet"] .modal-overlay {
+  padding: 8px !important;
+}
+[class*="preview-mode-mobile"] .modal, [class*="preview-mode-tablet"] .modal {
+  padding: 16px !important;
+  border-radius: 12px !important;
+  max-height: 94vh !important;
+}
+
+/* Specific grids and forms to prevent cropping in tablet/mobile simulators */
+[class*="preview-mode-mobile"] .bankrec-summary-grid, [class*="preview-mode-tablet"] .bankrec-summary-grid {
+  grid-template-columns: 1fr !important;
+}
+[class*="preview-mode-mobile"] .bankrec-mini-grid, [class*="preview-mode-tablet"] .bankrec-mini-grid {
+  grid-template-columns: 1fr 1fr !important;
+}
+[class*="preview-mode-mobile"] .bankrec-group summary, [class*="preview-mode-tablet"] .bankrec-group summary {
+  padding: 12px !important;
+  align-items: flex-start !important;
+}
+[class*="preview-mode-mobile"] .audit-old-summary-grid, [class*="preview-mode-tablet"] .audit-old-summary-grid {
+  grid-template-columns: 1fr 1fr !important;
+}
+[class*="preview-mode-mobile"] .audit-old-toolbar, [class*="preview-mode-tablet"] .audit-old-toolbar {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+[class*="preview-mode-mobile"] .audit-old-toolbar-left, [class*="preview-mode-mobile"] .audit-old-toolbar-right,
+[class*="preview-mode-tablet"] .audit-old-toolbar-left, [class*="preview-mode-tablet"] .audit-old-toolbar-right {
+  width: 100% !important;
+}
+
+/* Horizontal Table Navigation Aids for Touch Interfaces */
+[class*="preview-mode-mobile"] .table-wrap, [class*="preview-mode-tablet"] .table-wrap {
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid #edf2f7;
+  box-shadow: inset -10px 0 10px -10px rgba(0,0,0,0.15);
+}
+
+[class*="preview-mode-mobile"] .table-wrap::after, [class*="preview-mode-tablet"] .table-wrap::after {
+  content: 'Geser Halaman ↔';
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  background: rgba(26, 35, 126, 0.9);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  pointer-events: none;
+  animation: pulseIndicator 2.2s infinite;
+  text-transform: uppercase;
+}
+
+/* Scrollbar customizations inside the simulator for aesthetic pairing */
+.preview-mode-mobile .main-content::-webkit-scrollbar,
+.preview-mode-tablet .main-content::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.preview-mode-mobile .main-content::-webkit-scrollbar-thumb,
+.preview-mode-tablet .main-content::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+.preview-mode-mobile .main-content::-webkit-scrollbar-track,
+.preview-mode-tablet .main-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Keyframes for Live Indicator */
+@keyframes pulseIndicator {
+  0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+  70% { transform: scale(1.08); opacity: 0.8; box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+  100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
+
+/* Bottom Navigation Bar for Simulated Mobile & Tablet Views */
+#app-bottom-nav {
+  display: none !important;
+}
+
+[class*="preview-mode-mobile"] #app-bottom-nav,
+[class*="preview-mode-tablet"] #app-bottom-nav {
+  display: flex !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 60px !important;
+  background: #1a237e !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.12) !important;
+  align-items: center !important;
+  justify-content: space-around !important;
+  z-index: 1000 !important;
+  box-shadow: 0 -4px 15px rgba(0,0,0,0.2) !important;
+}
+
+[class*="preview-mode-mobile"] .main-content,
+[class*="preview-mode-tablet"] .main-content {
+  height: calc(100% - 60px) !important;
+  padding-bottom: 80px !important; /* Safety padding so bottom content isn't covered by bottom nav */
+}
+
+.b-nav-item {
+  background: none !important;
+  border: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 3px !important;
+  color: #b0bec5 !important;
+  cursor: pointer !important;
+  font-size: 0.72rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+  outline: none !important;
+}
+
+.b-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.b-nav-item.active {
+  color: #ffd700 !important;
+  font-weight: 700 !important;
+}
+
+.b-nav-item .icon {
+  font-size: 1.35rem !important;
+}
+
+/* INTERACTIVE & HIGH-FIDELITY FLUIDITY CUSTOMIZATIONS */
+.card, .stat-box, .setup-box, .btn, input, select, textarea {
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.card:hover {
+  transform: translateY(-2.5px);
+  box-shadow: 0 12px 25px -5px rgba(0,0,0,0.06), 0 8px 10px -6px rgba(0,0,0,0.04) !important;
+}
+.stat-box:hover {
+  transform: translateY(-2.5px);
+  box-shadow: 0 10px 18px -4px rgba(0,0,0,0.08) !important;
+}
+.btn:active, .b-nav-item:active {
+  transform: scale(0.96) !important;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #1a237e !important;
+  box-shadow: 0 0 0 3.5px rgba(26, 35, 126, 0.16) !important;
+  outline: none !important;
+}
+
+/* Sidebar transition rules */
+.sidebar {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.sidebar.collapsed {
+  width: 0 !important;
+  overflow: hidden !important;
+  border-right: none !important;
+}
+
+/* Chat Portal Styles */
+.chat-container {
+  display: flex;
+  height: 550px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 25px rgba(0,0,0,0.05);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  margin-top: 10px;
+}
+.chat-sidebar {
+  width: 240px;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+}
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f1f5f9;
+}
+.chat-user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.chat-user-item:hover, .chat-user-item.active {
+  background: #f1f5f9;
+}
+.chat-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #1a237e;
+  color: white;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  border: 2px solid white;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  flex-shrink: 0;
+}
+.chat-msg-list {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chat-bubble-wrap {
+  display: flex;
+  flex-direction: column;
+  max-width: 75%;
+}
+.chat-bubble-wrap.me {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.chat-bubble-wrap.other {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.chat-bubble {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  word-break: break-word;
+}
+.chat-bubble-wrap.me .chat-bubble {
+  background: #1a237e;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.chat-bubble-wrap.other .chat-bubble {
+  background: white;
+  color: #1e293b;
+  border-bottom-left-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+.chat-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.chat-input-area {
+  padding: 14px 16px;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Toast Notifications styling */
+#chat-toast-container {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  z-index: 11000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.chat-toast {
+  pointer-events: auto;
+  background: white;
+  border-left: 5px solid #ffd700;
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 280px;
+  max-width: 380px;
+  animation: slideInToast 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+  cursor: pointer;
+}
+@keyframes slideInToast {
+  0% { transform: translateX(120%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .chat-container {
+    flex-direction: column;
+    height: 480px;
+  }
+  .chat-sidebar {
+    width: 100%;
+    height: 120px;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .chat-user-item {
+    flex-direction: column;
+    padding: 8px 12px;
+    justify-content: center;
+    border-bottom: none;
+    border-right: 1px solid #f1f5f9;
+    text-align: center;
+    min-width: 80px;
+  }
+  .chat-user-item div {
+    font-size: 0.72rem !important;
+  }
+}
+
+/* COMPREHENSIVE COMPACT MOBILE STYLING (For real phones & simulated preview mobile mode) */
+
+/* 1. Real phone screens via media queries */
+@media (max-width: 480px) {
+  /* Scale down base fonts */
+  #app {
+    font-size: 11px !important;
+  }
+  
+  /* Compact headers and titles */
+  .page-title {
+    font-size: 0.9rem !important;
+    margin-bottom: 8px !important;
+    gap: 4px !important;
+  }
+  
+  /* Compact cards */
+  .card {
+    padding: 10px 12px !important;
+    border-radius: 10px !important;
+    margin-bottom: 8px !important;
+  }
+  .card-header {
+    padding-bottom: 6px !important;
+    margin-bottom: 6px !important;
+    gap: 4px !important;
+    flex-wrap: wrap !important;
+  }
+  .card-header h2 {
+    font-size: 0.8rem !important;
+  }
+  .card-header .btn {
+    padding: 2px 6px !important;
+    font-size: 0.68rem !important;
+  }
+
+  /* Compact Stats & KPI boxes */
+  .stats-row {
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+  }
+  .responsive-grid-2 {
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+  }
+  .stat-box {
+    padding: 10px 12px !important;
+    border-radius: 8px !important;
+  }
+  .stat-box .val-large {
+    font-size: 1.05rem !important; /* Smaller text size so numbers adapt perfectly to phone screen */
+    letter-spacing: -0.01em !important;
+  }
+  .stat-box .val {
+    font-size: 0.85rem !important; /* Smaller text size */
+    letter-spacing: -0.01em !important;
+  }
+  .stat-box .lbl {
+    font-size: 0.6rem !important;
+    margin-top: 2px !important;
+    letter-spacing: 0.02em !important;
+  }
+  
+  /* Compact forms */
+  .form-grid {
+    gap: 6px !important;
+  }
+  .fg {
+    gap: 2px !important;
+  }
+  .fg label {
+    font-size: 0.7rem !important;
+  }
+  .fg input, .fg select, .fg textarea {
+    padding: 5px 8px !important;
+    border-radius: 5px !important;
+    font-size: 0.78rem !important;
+  }
+  
+  /* Table compacting */
+  table {
+    font-size: 0.72rem !important;
+  }
+  th {
+    padding: 5px 6px !important;
+    font-size: 0.72rem !important;
+  }
+  td {
+    padding: 5px 6px !important;
+    font-size: 0.72rem !important;
+  }
+  
+  /* Buttons compacting */
+  .btn {
+    padding: 5px 10px !important;
+    font-size: 0.72rem !important;
+    border-radius: 5px !important;
+    gap: 3px !important;
+  }
+  .btn-sm {
+    padding: 3px 6px !important;
+    font-size: 0.7rem !important;
+  }
+  .btn-xs {
+    padding: 2px 5px !important;
+    font-size: 0.65rem !important;
+  }
+  
+  /* Alerts/Banners */
+  .alert {
+    padding: 6px 10px !important;
+    font-size: 0.74rem !important;
+    margin-bottom: 8px !important;
+  }
+  
+  /* Tabs and chips */
+  .chip {
+    padding: 2px 5px !important;
+    font-size: 0.65rem !important;
+  }
+  .badge {
+    padding: 1px 5px !important;
+    font-size: 0.65rem !important;
+  }
+}
+
+/* 2. Simulated mobile preview mode on desktop */
+.preview-mode-mobile #app {
+  font-size: 11px !important;
+}
+.preview-mode-mobile .page-title {
+  font-size: 0.9rem !important;
+  margin-bottom: 8px !important;
+  gap: 4px !important;
+}
+.preview-mode-mobile .card {
+  padding: 10px 12px !important;
+  border-radius: 10px !important;
+  margin-bottom: 8px !important;
+}
+.preview-mode-mobile .card-header {
+  padding-bottom: 6px !important;
+  margin-bottom: 6px !important;
+  gap: 4px !important;
+  flex-wrap: wrap !important;
+}
+.preview-mode-mobile .card-header h2 {
+  font-size: 0.8rem !important;
+}
+.preview-mode-mobile .card-header .btn {
+  padding: 2px 6px !important;
+  font-size: 0.68rem !important;
+}
+.preview-mode-mobile .stats-row {
+  gap: 6px !important;
+  margin-bottom: 8px !important;
+}
+.preview-mode-mobile .responsive-grid-2 {
+  gap: 6px !important;
+  margin-bottom: 8px !important;
+}
+.preview-mode-mobile .stat-box {
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+}
+.preview-mode-mobile .stat-box .val-large {
+  font-size: 1.05rem !important; /* Smaller text size so numbers adapt perfectly to phone screen */
+  letter-spacing: -0.01em !important;
+}
+.preview-mode-mobile .stat-box .val {
+  font-size: 0.85rem !important; /* Smaller text size */
+  letter-spacing: -0.01em !important;
+}
+.preview-mode-mobile .stat-box .lbl {
+  font-size: 0.6rem !important;
+  margin-top: 2px !important;
+  letter-spacing: 0.02em !important;
+}
+.preview-mode-mobile .form-grid {
+  gap: 6px !important;
+}
+.preview-mode-mobile .fg {
+  gap: 2px !important;
+}
+.preview-mode-mobile .fg label {
+  font-size: 0.7rem !important;
+}
+.preview-mode-mobile .fg input, .preview-mode-mobile .fg select, .preview-mode-mobile .fg textarea {
+  padding: 5px 8px !important;
+  border-radius: 5px !important;
+  font-size: 0.78rem !important;
+}
+.preview-mode-mobile table {
+  font-size: 0.72rem !important;
+}
+.preview-mode-mobile th {
+  padding: 5px 6px !important;
+  font-size: 0.72rem !important;
+}
+.preview-mode-mobile td {
+  padding: 5px 6px !important;
+  font-size: 0.72rem !important;
+}
+.preview-mode-mobile .btn {
+  padding: 5px 10px !important;
+  font-size: 0.72rem !important;
+  border-radius: 5px !important;
+  gap: 3px !important;
+}
+.preview-mode-mobile .btn-sm {
+  padding: 3px 6px !important;
+  font-size: 0.7rem !important;
+}
+.preview-mode-mobile .btn-xs {
+  padding: 2px 5px !important;
+  font-size: 0.65rem !important;
+}
+.preview-mode-mobile .alert {
+  padding: 6px 10px !important;
+  font-size: 0.74rem !important;
+  margin-bottom: 8px !important;
+}
+.preview-mode-mobile .chip {
+  padding: 2px 5px !important;
+  font-size: 0.65rem !important;
+}
+.preview-mode-mobile .badge {
+  padding: 1px 5px !important;
+  font-size: 0.65rem !important;
+}
 </style>
 </head>
 <body>
+
+<!-- PREVIEW RESOLUSI BAR -->
+<div id="preview-control-bar" style="background:#0f172a; color:#f8fafc; border-bottom:1.5px solid #1e293b; padding:10px 24px; display:flex; align-items:center; justify-content:space-between; font-family:'Inter', sans-serif; position:fixed; top:0; left:0; right:0; height:60px; z-index:10000; box-shadow:0 4px 20px rgba(0,0,0,0.15); transition:transform 0.3s ease">
+  <div class="preview-logo-section">
+    <div class="preview-logo-icon-wrap">
+      <span style="font-size:1.2rem">📺</span>
+    </div>
+    <div class="preview-title-wrap">
+      <div class="preview-title">
+        PREVIEW PRESET
+        <span style="display:inline-flex; align-items:center; width:8px; height:8px; background:#10b981; border-radius:50%; animation:pulseIndicator 1.8s infinite"></span>
+      </div>
+      <div class="preview-desc">Uji responsivitas portal secara instan di berbagai ukuran layar:</div>
+    </div>
+  </div>
+  
+  <div class="preview-controls-section">
+    <div class="preview-button-group">
+      <button id="btn-view-mobile" onclick="setPreviewMode('mobile')" style="display:flex; align-items:center; gap:8px; padding:6px 16px; border:none; border-radius:8px; background:transparent; color:#94a3b8; font-size:0.8rem; font-weight:600; cursor:pointer; transition:all 0.2s">
+        📱 MOBILE
+      </button>
+      <button id="btn-view-tablet" onclick="setPreviewMode('tablet')" style="display:flex; align-items:center; gap:8px; padding:6px 16px; border:none; border-radius:8px; background:transparent; color:#94a3b8; font-size:0.8rem; font-weight:600; cursor:pointer; transition:all 0.2s">
+        📟 TABLET
+      </button>
+      <button id="btn-view-desktop" onclick="setPreviewMode('desktop')" style="display:flex; align-items:center; gap:8px; padding:6px 16px; border:none; border-radius:8px; background:#1a237e; color:white; font-size:0.8rem; font-weight:600; cursor:pointer; transition:all 0.2s">
+        💻 DESKTOP
+      </button>
+    </div>
+
+    <!-- DEVICE MODEL SELECTOR (Shown for mobile/tablet) -->
+    <div id="device-model-selector-wrap" class="preview-dropdown-wrap" style="display:none">
+      <span style="font-size:0.9rem">⚙️</span>
+      <span style="font-size:0.72rem; font-weight:600; color:#cbd5e1">Model:</span>
+      <select id="device-model-select" onchange="changeDeviceModel(this.value)" style="background:transparent; color:white; border:none; font-size:0.75rem; font-weight:700; outline:none; cursor:pointer; padding:2px 4px">
+      </select>
+    </div>
+  </div>
+
+  <div class="preview-action-section">
+    <div class="preview-dropdown-wrap">
+      <span style="font-size:0.9rem">👤</span>
+      <span style="font-size:0.72rem; font-weight:600; color:#cbd5e1">Quick Switch:</span>
+      <select id="quick-user-select" onchange="quickSwitchUser(this.value)" style="background:transparent; color:white; border:none; font-size:0.75rem; font-weight:600; outline:none; cursor:pointer; padding:2px 4px; max-width:140px">
+        <option value="" style="background:#0f172a; color:#cbd5e1">Pilih User...</option>
+      </select>
+    </div>
+    
+    <div style="width:1px; height:24px; background:#334155" class="hide-md"></div>
+    
+    <button onclick="togglePreviewBar(false)" style="background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.3); color:#fb7185; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:0.75rem; font-weight:600; transition:all 0.2s; display:flex; align-items:center; gap:4px">
+      Sembunyikan ✕
+    </button>
+  </div>
+</div>
+
+<!-- MINI FLOATING TOGGLE BUTTON -->
+<button id="preview-floating-toggle" onclick="togglePreviewBar(true)" style="display:none; position:fixed; top:12px; right:12px; background:#0f172a; color:white; border:1.5px solid #334155; border-radius:30px; padding:8px 16px; font-size:0.8rem; font-weight:600; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.35); z-index:10001; align-items:center; gap:8px; transition:all 0.2s">
+  <span>📺</span> Preview Simulator
+</button>
 
 <!-- LOADING -->
 <div class="loading-overlay" id="loading-overlay">
   <div class="spinner"></div>
   <div style="color:#1a237e;font-weight:600">Memuat...</div>
+</div>
+
+<div id="viewport-wrapper">
+<div id="viewport-scaler">
+<div id="app-viewport">
+
+<!-- HIGH FIDELITY MOCK STATUS BAR (For Mobile/Tablet Simulation) -->
+<div id="mock-device-header" style="display:none; background:#1e293b; color:#cbd5e1; padding:6px 16px; font-size:0.75rem; font-family:'Inter', system-ui, sans-serif; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.06); user-select:none; font-weight:600; line-height:1">
+  <div style="display:flex; align-items:center; gap:6px">
+    <span id="mock-device-time">09:41</span>
+    <span style="font-size:0.68rem; opacity:0.75; font-weight:500; letter-spacing:0.5px">IJEF Corp 5G</span>
+  </div>
+  <!-- Simulated Camera Punch-Hole/Notch -->
+  <div id="mock-device-notch" style="width:110px; height:18px; background:#000; border-radius:0 0 12px 12px; margin-top:-6px; display:none; border: 1.5px solid #2d3748; border-top:none"></div>
+  <div style="display:flex; align-items:center; gap:8px">
+    <span style="font-size:0.75rem">📶</span>
+    <span style="font-size:0.75rem">📶</span>
+    <div style="display:flex; align-items:center; gap:4px; background:rgba(255,255,255,0.12); padding:2px 5px; border-radius:4px; font-size:0.65rem">
+      <span id="mock-device-battery" style="font-weight:700">98%</span>
+      <span style="display:inline-block; width:12px; height:7px; background:#10b981; border-radius:1px; position:relative"></span>
+    </div>
+  </div>
 </div>
 
 <!-- LOGIN -->
@@ -363,6 +1575,18 @@ textarea{resize:vertical;min-height:70px}
       <h1>💼 Sistem Keuangan IJEF Corp</h1>
     </div>
     <div class="header-right">
+      <!-- Device Selector Switcher -->
+      <div class="header-device-switcher" style="display:flex;align-items:center;background:rgba(255,255,255,0.12);padding:2px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);margin-right:4px">
+         <button onclick="setPreviewMode('desktop')" id="hdr-btn-desktop" style="background:rgba(255,255,255,0.22);color:white;border:none;padding:5px 12px;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s" title="Tampilan Desktop">
+           <span>💻</span> <span class="switcher-lbl">Desktop</span>
+         </button>
+         <button onclick="setPreviewMode('tablet')" id="hdr-btn-tablet" style="background:transparent;color:rgba(255,255,255,0.75);border:none;padding:5px 12px;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s" title="Tampilan Tablet">
+           <span>📟</span> <span class="switcher-lbl">Tablet</span>
+         </button>
+         <button onclick="setPreviewMode('mobile')" id="hdr-btn-mobile" style="background:transparent;color:rgba(255,255,255,0.75);border:none;padding:5px 12px;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s" title="Tampilan Mobile">
+           <span>📱</span> <span class="switcher-lbl">Mobile</span>
+         </button>
+      </div>
       <span class="user-info" id="header-user">-</span>
       <span class="role-chip" id="header-role">-</span>
       <button onclick="showNotifPanel()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:0.9rem;position:relative">
@@ -372,14 +1596,41 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </div>
   <div class="app-body">
-    <div class="sidebar" id="sidebar">
+    <div class="sidebar collapsed" id="sidebar">
       <!-- Generated by JS -->
     </div>
     <div class="main-content" id="main-content">
       <!-- Generated by JS -->
     </div>
   </div>
+
+  <!-- HIGH FIDELITY MOBILE BOTTOM NAVIGATION BAR -->
+  <div id="app-bottom-nav">
+    <button class="b-nav-item active" data-nav-id="lap-dashboard" onclick="navigate('lap-dashboard')">
+      <span class="icon">🏠</span>
+      <span>Dashboard</span>
+    </button>
+    <button class="b-nav-item" data-nav-id="jurnal-umum" onclick="navigate('jurnal-umum')">
+      <span class="icon">📝</span>
+      <span>Jurnal</span>
+    </button>
+    <button class="b-nav-item" data-nav-id="kalk-inventori-atk" onclick="navigate('kalk-inventori-atk')">
+      <span class="icon">📦</span>
+      <span>IMS ATK</span>
+    </button>
+    <button class="b-nav-item" data-nav-id="lap-print-bundle" onclick="navigate('lap-print-bundle')">
+      <span class="icon">📄</span>
+      <span>Laporan</span>
+    </button>
+    <button class="b-nav-item" onclick="toggleSidebar()">
+      <span class="icon">☰</span>
+      <span>Menu</span>
+    </button>
+  </div>
 </div>
+</div> <!-- /#app-viewport -->
+</div> <!-- /#viewport-scaler -->
+</div> <!-- /#viewport-wrapper -->
 
 <!-- MODAL CONTAINER -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
@@ -399,6 +1650,377 @@ function togglePwd(inputId, btn) {
   if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
   else { inp.type = 'password'; btn.textContent = '👁'; }
 }
+
+// === PREVIEW SIMULATOR LOGIC ===
+function detectAndAdjustDevice() {
+  // Only hide the simulator when opened in actual standalone PWA mode (downloaded app)!
+  // This allows the user to see and use the 3 simulator buttons in the AI Studio web preview, 
+  // even if the preview window is small (e.g. width <= 1024).
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  
+  if (isStandalone) {
+    // Hide simulator controls completely
+    var bar = document.getElementById('preview-control-bar');
+    var floatBtn = document.getElementById('preview-floating-toggle');
+    if (bar) bar.style.setProperty('display', 'none', 'important');
+    if (floatBtn) floatBtn.style.setProperty('display', 'none', 'important');
+    
+    // Force 'desktop' mode (which is native responsive 100% full screen design)
+    localStorage.setItem('k_preview_mode', 'desktop');
+    localStorage.setItem('k_preview_bar_hidden', 'true');
+    
+    // Inject CSS to guarantee hiding
+    var style = document.createElement('style');
+    style.id = 'hide-simulator-styles';
+    style.innerHTML = '#preview-control-bar, #preview-floating-toggle { display: none !important; }';
+    document.head.appendChild(style);
+  }
+}
+
+var DEVICE_MODELS = {
+  mobile: [
+    { id: 'iphone14', name: 'iPhone 14 Pro', width: 393, height: 852, notch: true },
+    { id: 'iphonese', name: 'iPhone SE', width: 375, height: 667, notch: false },
+    { id: 'galaxys22', name: 'Samsung S22', width: 360, height: 800, notch: true },
+    { id: 'pixel7', name: 'Google Pixel 7', width: 412, height: 915, notch: true }
+  ],
+  tablet: [
+    { id: 'ipadair', name: 'iPad Air', width: 820, height: 1180, notch: false },
+    { id: 'ipadpro', name: 'iPad Pro 12.9"', width: 1024, height: 1366, notch: false },
+    { id: 'nexus9', name: 'Nexus 9', width: 768, height: 1024, notch: false }
+  ]
+};
+
+function changeDeviceModel(modelId) {
+  localStorage.setItem('k_preview_model_id', modelId);
+  updateDeviceScaling();
+  setTimeout(function() {
+    window.dispatchEvent(new Event('resize'));
+  }, 100);
+}
+
+function updateDeviceScaling() {
+  var viewport = document.getElementById('app-viewport');
+  var wrapper = document.getElementById('viewport-wrapper');
+  var scaler = document.getElementById('viewport-scaler');
+  var mockHeader = document.getElementById('mock-device-header');
+  var notch = document.getElementById('mock-device-notch');
+  
+  if (!viewport || !wrapper || !scaler) return;
+  
+  var mode = localStorage.getItem('k_preview_mode') || 'desktop';
+  var bar = document.getElementById('preview-control-bar');
+  var isBarVisible = bar && window.getComputedStyle(bar).display !== 'none';
+  var barHeight = isBarVisible ? 60 : 0;
+  
+  if (mode === 'desktop') {
+    viewport.style.transform = 'none';
+    viewport.style.transformOrigin = 'unset';
+    viewport.style.margin = '0';
+    viewport.style.width = '100%';
+    viewport.style.height = '100%';
+    
+    scaler.style.width = '100%';
+    scaler.style.height = 'calc(100vh - ' + (isBarVisible ? '60px' : '0px') + ')';
+    scaler.style.transform = 'none';
+    scaler.style.border = 'none';
+    scaler.style.borderRadius = '0';
+    scaler.style.boxShadow = 'none';
+    
+    wrapper.style.height = 'calc(100vh - ' + barHeight + 'px)';
+    wrapper.style.top = isBarVisible ? '60px' : '0px';
+    wrapper.className = ''; // remove grid dotted background
+    if (mockHeader) mockHeader.style.display = 'none';
+    return;
+  }
+  
+  // Set wrapper height to contain scaled content
+  wrapper.style.height = 'calc(100vh - ' + barHeight + 'px)';
+  wrapper.style.top = isBarVisible ? '60px' : '0px';
+  wrapper.className = 'simulation-canvas-bg'; // Enable fancy mesh dotted pattern
+  
+  if (mockHeader) {
+    mockHeader.style.display = 'flex';
+  }
+  
+  // Find current model specs
+  var models = DEVICE_MODELS[mode] || [];
+  var savedModelId = localStorage.getItem('k_preview_model_id');
+  var activeModel = models.find(function(m) { return m.id === savedModelId; }) || models[0];
+  
+  if (!activeModel) return;
+  
+  if (notch) {
+    notch.style.display = activeModel.notch ? 'block' : 'none';
+  }
+  
+  var targetW = activeModel.width;
+  var targetH = activeModel.height;
+  
+  var borderSize = 24; // 12px each side border
+  var availableH = window.innerHeight - barHeight - 48 - borderSize; // 48px safety padding
+  var availableW = window.innerWidth - 48 - borderSize; // 48px safety padding
+  
+  var scaleH = availableH / targetH;
+  var scaleW = availableW / targetW;
+  var scale = Math.min(1, scaleH, scaleW);
+  
+  // Configure scaler container
+  scaler.style.width = (targetW * scale) + 'px';
+  scaler.style.height = (targetH * scale) + 'px';
+  scaler.style.overflow = 'hidden';
+  scaler.style.borderRadius = (mode === 'mobile' ? 40 : 28) * scale + 'px';
+  scaler.style.border = (12 * scale) + 'px solid #1e293b';
+  scaler.style.boxShadow = '0 25px 60px -15px rgba(0, 0, 0, 0.75)';
+  
+  // Scale viewport from top-left (0, 0) inside scaler
+  viewport.style.width = targetW + 'px';
+  viewport.style.height = targetH + 'px';
+  viewport.style.transform = 'scale(' + scale + ')';
+  viewport.style.transformOrigin = '0 0';
+  viewport.style.margin = '0';
+}
+
+// Live Mock Status Bar Clock
+function updateMockTime() {
+  var el = document.getElementById('mock-device-time');
+  if (!el) return;
+  var now = new Date();
+  var hh = String(now.getHours()).padStart(2, '0');
+  var mm = String(now.getMinutes()).padStart(2, '0');
+  el.textContent = hh + ':' + mm;
+}
+
+window.addEventListener('resize', updateDeviceScaling);
+
+function setPreviewMode(mode) {
+  var viewport = document.getElementById('app-viewport');
+  var btnMobile = document.getElementById('btn-view-mobile');
+  var btnTablet = document.getElementById('btn-view-tablet');
+  var btnDesktop = document.getElementById('btn-view-desktop');
+  var modelSelectorWrap = document.getElementById('device-model-selector-wrap');
+  var modelSelect = document.getElementById('device-model-select');
+  var bar = document.getElementById('preview-control-bar');
+  var isBarVisible = bar && window.getComputedStyle(bar).display !== 'none';
+  
+  localStorage.setItem('k_preview_mode', mode);
+
+  // Update button highlights
+  [btnMobile, btnTablet, btnDesktop].forEach(function(btn) {
+    if (btn) {
+      btn.style.background = 'transparent';
+      btn.style.color = '#94a3b8';
+      btn.style.transform = 'scale(1)';
+    }
+  });
+
+  var activeBtn = mode === 'mobile' ? btnMobile : (mode === 'tablet' ? btnTablet : btnDesktop);
+  if (activeBtn) {
+    activeBtn.style.background = '#1a237e';
+    activeBtn.style.color = 'white';
+    activeBtn.style.transform = 'scale(1.05)';
+  }
+
+  // Update header device switcher button highlights
+  var hDesktop = document.getElementById('hdr-btn-desktop');
+  var hTablet = document.getElementById('hdr-btn-tablet');
+  var hMobile = document.getElementById('hdr-btn-mobile');
+  
+  [hDesktop, hTablet, hMobile].forEach(function(btn) {
+    if (btn) {
+      btn.style.background = 'transparent';
+      btn.style.color = 'rgba(255,255,255,0.75)';
+    }
+  });
+  
+  var hActive = mode === 'mobile' ? hMobile : (mode === 'tablet' ? hTablet : hDesktop);
+  if (hActive) {
+    hActive.style.background = 'rgba(255,255,255,0.22)';
+    hActive.style.color = '#ffffff';
+  }
+
+  // Handle Model Selector Dropdown
+  if (mode === 'desktop') {
+    if (modelSelectorWrap) modelSelectorWrap.style.display = 'none';
+  } else {
+    if (modelSelectorWrap && modelSelect) {
+      modelSelectorWrap.style.display = 'flex';
+      
+      // Populate select options
+      modelSelect.innerHTML = '';
+      var models = DEVICE_MODELS[mode] || [];
+      var savedModelId = localStorage.getItem('k_preview_model_id');
+      var hasSaved = models.some(function(m) { return m.id === savedModelId; });
+      var activeId = hasSaved ? savedModelId : models[0].id;
+      
+      models.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name + ' (' + m.width + 'x' + m.height + ')';
+        opt.style.background = '#0f172a';
+        opt.style.color = 'white';
+        if (m.id === activeId) opt.selected = true;
+        modelSelect.appendChild(opt);
+      });
+      
+      if (!hasSaved) {
+        localStorage.setItem('k_preview_model_id', activeId);
+      }
+    }
+  }
+
+  // Set classes on viewport wrapper
+  if (viewport) {
+    var suffix = isBarVisible ? '' : '-full';
+    viewport.className = 'preview-mode-' + mode + suffix;
+    
+    // Also synchronize classes on document.body for both CSS and JS (e.g. toggleSidebar checks)
+    document.body.classList.remove('preview-mode-desktop', 'preview-mode-tablet', 'preview-mode-mobile');
+    document.body.classList.add('preview-mode-' + mode);
+    
+    // Change body and root background dynamically for tablet/mobile representation
+    if (mode === 'desktop') {
+      document.documentElement.style.backgroundColor = '#f0f4f8';
+      document.body.style.background = '#f0f4f8';
+    } else {
+      document.documentElement.style.backgroundColor = '#0f172a';
+      document.body.style.background = '#0f172a';
+    }
+  }
+
+  updateDeviceScaling();
+
+  // Force trigger window resize to refresh charts/recharts instantly
+  setTimeout(function() {
+    window.dispatchEvent(new Event('resize'));
+  }, 100);
+}
+
+function togglePreviewBar(show) {
+  var bar = document.getElementById('preview-control-bar');
+  var floatBtn = document.getElementById('preview-floating-toggle');
+  
+  localStorage.setItem('k_preview_bar_hidden', !show);
+  
+  if (show) {
+    bar.style.display = 'flex';
+    floatBtn.style.display = 'none';
+  } else {
+    bar.style.display = 'none';
+    floatBtn.style.display = 'flex';
+  }
+  
+  // Re-apply preview mode to recalculate the height layout (with/without top bar)
+  var savedMode = localStorage.getItem('k_preview_mode') || 'desktop';
+  setPreviewMode(savedMode);
+}
+
+async function quickSwitchUser(username) {
+  if (!username) return;
+  var loader = document.getElementById('loading-overlay');
+  if (loader) loader.classList.add('show');
+  
+  try {
+    var users = [];
+    if (window.KDB && typeof window.KDB.getUsers === 'function') {
+      users = await window.KDB.getUsers();
+    }
+    
+    var u = users.find(function(x) { return x.username === username; });
+    if (!u) {
+      var systemUsers = [
+        { username: 'superadmin', password: 'admin2026', role: 'superadmin', nama: 'Super Admin' },
+        { username: 'nanda', password: 'nanda2026', role: 'nanda', nama: 'Nanda Yoga Maulana' },
+        { username: 'bod', password: 'bod2026', role: 'bod', nama: 'Board of Directors' }
+      ];
+      u = systemUsers.find(function(x) { return x.username === username; });
+    }
+    
+    if (u) {
+      window.KU = u;
+      localStorage.setItem('k_session', JSON.stringify({ username: u.username, password: u.password }));
+      
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      
+      if (typeof window.buildApp === 'function') {
+        await window.buildApp();
+      }
+      if (typeof window.showAlert === 'function') {
+        window.showAlert('Berhasil beralih pengguna ke: ' + u.nama + ' (' + u.role.toUpperCase() + ')', 'success');
+      }
+    } else {
+      if (typeof window.showAlert === 'function') {
+        window.showAlert('Pengguna tidak ditemukan!', 'danger');
+      }
+    }
+  } catch(e) {
+    console.error('quickSwitchUser error:', e);
+    if (typeof window.showAlert === 'function') {
+      window.showAlert('Gagal beralih pengguna', 'danger');
+    }
+  }
+  if (loader) loader.classList.remove('show');
+}
+
+async function populateQuickSwitchUsers() {
+  var select = document.getElementById('quick-user-select');
+  if (!select) return;
+  
+  var currentVal = select.value;
+  select.innerHTML = '<option value="" style="background:#0f172a; color:#cbd5e1">Pilih User...</option>';
+  
+  var systemUsers = [
+    { username: 'superadmin', nama: 'Super Admin', role: 'superadmin' },
+    { username: 'nanda', nama: 'Nanda Yoga Maulana', role: 'nanda' },
+    { username: 'bod', nama: 'Board of Directors', role: 'bod' }
+  ];
+  
+  var dbUsers = [];
+  try {
+    if (window.KDB && typeof window.KDB.getUsers === 'function') {
+      dbUsers = await window.KDB.getUsers();
+    }
+  } catch(e) {
+    console.warn('Failed to load DB users for switcher:', e);
+  }
+  
+  var allUsers = [...systemUsers];
+  dbUsers.forEach(function(u) {
+    if (!allUsers.find(function(x){ return x.username === u.username; })) {
+      allUsers.push(u);
+    }
+  });
+  
+  allUsers.forEach(function(u) {
+    var opt = document.createElement('option');
+    opt.value = u.username;
+    opt.textContent = u.nama + ' (' + u.role.toUpperCase() + ')';
+    opt.style.background = '#0f172a';
+    opt.style.color = 'white';
+    if (u.username === currentVal) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+// Initialize on page load
+window.addEventListener('load', function() {
+  detectAndAdjustDevice();
+
+  // Force show the preview bar on page load so the 3 layout modes are immediately available
+  localStorage.setItem('k_preview_bar_hidden', 'false');
+  togglePreviewBar(true);
+
+  var savedMode = localStorage.getItem('k_preview_mode') || 'desktop';
+  setPreviewMode(savedMode);
+  
+  // Real-time Status clock loop
+  updateMockTime();
+  setInterval(updateMockTime, 1000);
+  
+  setTimeout(populateQuickSwitchUsers, 1500);
+  setInterval(populateQuickSwitchUsers, 8000);
+});
 </script>
 </body>
 </html>

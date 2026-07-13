@@ -1,4 +1,4 @@
-﻿// ===== SISTEM KEUANGAN IJEF CORP =====
+// ===== SISTEM KEUANGAN IJEF CORP =====
 'use strict';
 
 // ===== CONSTANTS (must be at top) =====
@@ -88,6 +88,7 @@ const MENU = [
   ]},
   { group: 'Bantuan', icon: '❓', items: [
     { id: 'bantuan', label: 'Cara Penggunaan', icon: '📖', minRole: 'viewer' },
+    { id: 'portal-komunikasi', label: 'Portal Komunikasi', icon: '💬', minRole: 'viewer' },
     { id: 'ai-assistant', label: 'AI Assistant', icon: '🤖', minRole: 'viewer' },
   ]},
   { group: 'Admin', icon: '🔑', items: [
@@ -594,7 +595,7 @@ function printBankRecAnalysis() {
     showAlert('Popup print diblokir browser.', 'warning');
     return;
   }
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Analisa Rekonsiliasi ' + escapeHtml(data.kode) + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div><div class="ttl">Analisa Rekonsiliasi Bank</div><div class="sub">Akun: <b>' + escapeHtml(data.akunNama || data.kode) + '</b> (' + escapeHtml(data.kode) + ')<br>Dibuat: ' + escapeHtml(new Date(data.generatedAt).toLocaleString('id-ID')) + '</div></div><div class="sec-chip">' + data.findings.length + ' temuan</div></div><div class="grid"><div class="card"><div class="lbl">Saldo Sistem</div><div class="val">' + fmtRp(data.saldoSistem) + '</div></div><div class="card"><div class="lbl">Saldo Aktual</div><div class="val">' + fmtRp(data.saldoAktual) + '</div></div><div class="card"><div class="lbl">Selisih</div><div class="val">' + fmtRp(data.selisih) + '</div></div></div>' + sections.join('') + pendingHtml + '<div class="actions"><button onclick="window.print()" style="padding:10px 18px;border:none;border-radius:8px;background:#1a237e;color:#fff;cursor:pointer">Print</button></div></div></body></html>');
+  w.document.write('<!DOCTYPE html><html><head><title>Analisa Rekonsiliasi ' + escapeHtml(data.kode) + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div><div class="ttl">Analisa Rekonsiliasi Bank</div><div class="sub">Akun: <b>' + escapeHtml(data.akunNama || data.kode) + '</b> (' + escapeHtml(data.kode) + ')<br>Dibuat: ' + escapeHtml(new Date(data.generatedAt).toLocaleString('id-ID')) + '</div></div><div class="sec-chip">' + data.findings.length + ' temuan</div></div><div class="grid"><div class="card"><div class="lbl">Saldo Sistem</div><div class="val">' + fmtRp(data.saldoSistem) + '</div></div><div class="card"><div class="lbl">Saldo Aktual</div><div class="val">' + fmtRp(data.saldoAktual) + '</div></div><div class="card"><div class="lbl">Selisih</div><div class="val">' + fmtRp(data.selisih) + '</div></div></div>' + sections.join('') + pendingHtml + '<div class="actions"><button onclick="window.print()" style="padding:10px 18px;border:none;border-radius:8px;background:#1a237e;color:#fff;cursor:pointer">Print</button></div></div></body></html>');
   w.document.close();
 }
 
@@ -745,7 +746,50 @@ function doLogout() {
 }
 
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('mobile-open');
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+
+  const isMobileOrTablet = window.innerWidth <= 1024 || 
+                           document.body.classList.contains('preview-mode-mobile') || 
+                           document.body.classList.contains('preview-mode-tablet') ||
+                           document.getElementById('app-bottom-nav').style.display === 'flex' ||
+                           (document.getElementById('app-bottom-nav').getBoundingClientRect && document.getElementById('app-bottom-nav').getBoundingClientRect().height > 0);
+
+  if (isMobileOrTablet) {
+    sidebar.classList.remove('collapsed');
+    sidebar.classList.toggle('mobile-open');
+    
+    let overlay = document.getElementById('sidebar-mobile-backdrop');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'sidebar-mobile-backdrop';
+      overlay.style.cssText = 'position:absolute; inset:0; background:rgba(15,23,42,0.5); z-index:140; opacity:0; display:none; transition:opacity 0.25s ease; border-radius:inherit;';
+      overlay.onclick = function() {
+        sidebar.classList.remove('mobile-open');
+        overlay.style.opacity = '0';
+        setTimeout(() => { overlay.style.display = 'none'; }, 250);
+      };
+      const appContainer = document.getElementById('app');
+      if (appContainer) {
+        appContainer.appendChild(overlay);
+      } else {
+        document.body.appendChild(overlay);
+      }
+    }
+    
+    if (sidebar.classList.contains('mobile-open')) {
+      overlay.style.display = 'block';
+      setTimeout(() => { overlay.style.opacity = '1'; }, 10);
+    } else {
+      overlay.style.opacity = '0';
+      setTimeout(() => { overlay.style.display = 'none'; }, 250);
+    }
+  } else {
+    // Desktop collapsing
+    sidebar.classList.remove('mobile-open');
+    sidebar.classList.toggle('collapsed');
+    localStorage.setItem('k_sidebar_collapsed', sidebar.classList.contains('collapsed'));
+  }
 }
 
 // ===== BUILD APP =====
@@ -756,6 +800,17 @@ function buildApp() {
   const roleEl = document.getElementById('header-role');
   roleEl.textContent = KU.role.toUpperCase();
   roleEl.className = 'role-chip role-' + KU.role;
+  
+  // Apply saved collapsed state
+  if (localStorage.getItem('k_sidebar_collapsed') === null) {
+    localStorage.setItem('k_sidebar_collapsed', 'true');
+  }
+  if (localStorage.getItem('k_sidebar_collapsed') === 'true') {
+    document.getElementById('sidebar').classList.add('collapsed');
+  } else {
+    document.getElementById('sidebar').classList.remove('collapsed');
+  }
+
   buildSidebar();
   buildContent();
   // Init notifikasi
@@ -789,14 +844,16 @@ function buildSidebar() {
     let items;
 
     if (isNanda) {
-      // Nanda hanya lihat Portal Perlengkapan & Aset
+      // Nanda hanya lihat Portal Perlengkapan & Aset + Bantuan
       if (group.group === 'Transaksi') {
         items = visible.filter(function(i) { return i.id === 'portal-aset'; });
+      } else if (group.group === 'Bantuan') {
+        items = visible;
       } else {
         return;
       }
     } else if (isBOD) {
-      // BOD: read-only executive reports + monitor + approval center (layer 3 only)
+      // BOD: read-only executive reports + monitor + approval center (layer 3 only) + Bantuan
       if (group.group === 'Laporan') {
         items = visible.filter(function(i) {
           return i.id === 'lap-dashboard' || i.id === 'lap-labarugi' || i.id === 'lap-neraca' || i.id === 'lap-aruskas' || i.id === 'lap-print-bundle';
@@ -811,11 +868,13 @@ function buildSidebar() {
                  i.id === 'monitor-actual-terima' ||
                  i.id === 'monitor-forecast-vs-actual';
         });
+      } else if (group.group === 'Bantuan') {
+        items = visible;
       } else {
         return;
       }
     } else if (isLimited) {
-      // Leader/Viewer: Dashboard + Approval Center + Portal Aset + Monitor
+      // Leader/Viewer: Dashboard + Approval Center + Portal Aset + Monitor + Bantuan
       if (group.group === 'Laporan') {
         items = visible.filter(function(i) { return i.id === 'lap-dashboard' || i.id === 'lap-print-bundle'; });
       } else if (group.group === 'Transaksi') {
@@ -828,6 +887,8 @@ function buildSidebar() {
                  i.id === 'monitor-actual-terima' ||
                  i.id === 'monitor-forecast-vs-actual';
         });
+      } else if (group.group === 'Bantuan') {
+        items = visible;
       } else {
         return;
       }
@@ -908,8 +969,31 @@ function navigate(id) {
   secEl.classList.add('active');
   currentSection = id;
   renderSection(id);
-  if (window.innerWidth <= 768) {
-    document.getElementById('sidebar').classList.remove('mobile-open');
+  
+  // Sync bottom navigation items active class
+  document.querySelectorAll('.b-nav-item').forEach(function(btn) {
+    var bId = btn.getAttribute('data-nav-id');
+    if (bId) {
+      if (bId === id) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    }
+  });
+
+  // Auto-hide/collapse sidebar on navigation for ALL screens/devices
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    sidebar.classList.add('collapsed');
+    sidebar.classList.remove('mobile-open');
+    localStorage.setItem('k_sidebar_collapsed', 'true');
+    
+    const overlay = document.getElementById('sidebar-mobile-backdrop');
+    if (overlay) {
+      overlay.style.opacity = '0';
+      setTimeout(() => { overlay.style.display = 'none'; }, 250);
+    }
   }
 }
 
@@ -960,6 +1044,7 @@ async function renderSection(id) {
       case 'kalk-inventori-atk':  el.innerHTML = await renderInventoriATK(); break;
       case 'kalk-grafik-coa':     el.innerHTML = await renderGrafikCOA(); break;
       case 'bantuan':             el.innerHTML = renderBantuan(); break;
+      case 'portal-komunikasi':   el.innerHTML = await renderPortalKomunikasi(); break;
       case 'ai-assistant':        el.innerHTML = await renderAIAssistant(); setTimeout(function(){ var chatEl = document.getElementById('ai-chat-messages'); if(chatEl) chatEl.scrollTop = chatEl.scrollHeight; }, 100); break;
       case 'admin-users':         el.innerHTML = await renderAdminUsers(); break;
       case 'admin-import':        el.innerHTML = renderImport(); loadSavedApiKey(); break;
@@ -1351,15 +1436,15 @@ async function renderDashboard() {
     const cls = net > 0 ? 'text-green' : net < 0 ? 'text-red' : 'text-blue';
     return '<div style="background:' + bg + ';border-radius:12px;padding:16px;border-left:3px solid ' + border + ';box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
       + '<div style="font-size:0.75rem;color:#64748b">' + a.nama + '</div>'
-      + '<div class="fw-bold ' + cls + '" style="font-size:1.15rem;margin-top:3px">' + fmtRp(Math.abs(net)) + '</div>'
+      + '<div class="fw-bold ' + cls + ' saldo-card-val" style="margin-top:3px;word-break:break-word;line-height:1.2">' + fmtRp(Math.abs(net)) + '</div>'
       + '</div>';
   }).join('')
     + '<div style="background:#fff8f8;border-radius:12px;padding:16px;border-left:3px solid #f43f5e;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
     + '<div style="font-size:0.75rem;color:#64748b">Pengeluaran Hari Ini</div>'
-    + '<div class="fw-bold text-red" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pengeluaranHariIni) + '</div></div>'
+    + '<div class="fw-bold text-red saldo-card-val" style="margin-top:3px;word-break:break-word;line-height:1.2">' + fmtRp(pengeluaranHariIni) + '</div></div>'
     + '<div style="background:#f8fff8;border-radius:12px;padding:16px;border-left:3px solid #10b981;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
     + '<div style="font-size:0.75rem;color:#64748b">Pendapatan Hari Ini</div>'
-    + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni) + '</div></div>';
+    + '<div class="fw-bold text-green saldo-card-val" style="margin-top:3px;word-break:break-word;line-height:1.2">' + fmtRp(pendapatanHariIni) + '</div></div>';
   const totalKasBank = kasAkun.reduce(function(s,a){
     if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') return s + pcSaldoReal;
     return s + (((saldo[a.kode]||{}).net)||0);
@@ -1378,9 +1463,9 @@ async function renderDashboard() {
 
   return '<div class="page-title">🎯 Dashboard Keuangan</div>'
     + perusahaanBanner + pendingBanner
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
-    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalKasBank) + '</div><div class="lbl">Total Kas & Bank</div></div>'
-    + '<div class="stat-box ' + (labaRugi >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(labaRugi) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
+    + '<div class="responsive-grid-2">'
+    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val-large">' + fmtRp(totalKasBank) + '</div><div class="lbl">Total Kas & Bank</div></div>'
+    + '<div class="stat-box ' + (labaRugi >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val-large">' + fmtRp(labaRugi) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
     + '</div>'
     + '<div class="stats-row">'
     + '<div class="stat-box"><div class="val">' + jurnal.length + '</div><div class="lbl">Total Jurnal</div></div>'
@@ -1391,21 +1476,22 @@ async function renderDashboard() {
     // Saldo Hari Ini — langsung di dashboard
     + '<div class="card"><div class="card-header"><h2>💵 Posisi Saldo Hari Ini</h2>'
     + '<span class="text-muted" style="font-size:0.8rem">' + new Date().toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) + '</span></div>'
-    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">' + saldoCards + '</div>'
+    + '<div class="saldo-grid">' + saldoCards + '</div>'
     + '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
     + '<span class="text-muted" style="font-size:0.82rem">Total Kas & Bank</span>'
     + '<span class="fw-bold text-blue" style="font-size:1.1rem">' + fmtRp(totalKasBank) + '</span>'
     + '</div></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
+    + '<div class="responsive-grid-2">'
     + '<div class="card"><div class="card-header"><h2>📝 Transaksi Terbaru</h2>' + (KU.role !== 'bod' ? '<button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button>' : '') + '</div>'
-    + '<table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th></tr></thead><tbody>' + jurnalRows + '</tbody></table></div>'
+    + '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th></tr></thead><tbody>' + jurnalRows + '</tbody></table></div></div>'
     + '<div class="card"><div class="card-header"><h2>✅ Status Approval</h2><button class="btn btn-sm btn-outline" onclick="navigate(\'dana-approval\')">Buka</button></div>'
     + '<div class="stats-row" style="margin-bottom:0">'
     + '<div class="stat-box orange"><div class="val">' + pendingPD + '</div><div class="lbl">Permohonan Pending</div></div>'
     + '<div class="stat-box orange"><div class="val">' + pendingDM + '</div><div class="lbl">Dana Masuk Pending</div></div>'
     + '</div>' + (approvedPD ? '<div class="mt-8">' + approvedPD + '</div>' : '') + '</div>'
     + '</div>'
-    + buildDashboardExtras(jurnal, fd, allPD, allDM);
+    + buildDashboardExtras(jurnal, fd, allPD, allDM)
+    + (await renderPortalKomunikasiWidget());
 }
 
 // Auto-refresh dashboard setiap 30 detik
@@ -1483,15 +1569,15 @@ async function renderDashboardApprover() {
     const cls = net > 0 ? 'text-green' : net < 0 ? 'text-red' : 'text-blue';
     return '<div style="background:' + bg + ';border-radius:12px;padding:16px;border-left:3px solid ' + border + ';box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
       + '<div style="font-size:0.75rem;color:#64748b">' + a.nama + '</div>'
-      + '<div class="fw-bold ' + cls + '" style="font-size:1.15rem;margin-top:3px">' + fmtRp(Math.abs(net)) + '</div>'
+      + '<div class="fw-bold ' + cls + ' saldo-card-val" style="margin-top:3px;word-break:break-word;line-height:1.2">' + fmtRp(Math.abs(net)) + '</div>'
       + '</div>';
   }).join('')
     + '<div style="background:#fff8f8;border-radius:12px;padding:16px;border-left:3px solid #f43f5e;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
     + '<div style="font-size:0.75rem;color:#64748b">Pengeluaran Hari Ini</div>'
-    + '<div class="fw-bold text-red" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pengeluaranHariIni2) + '</div></div>'
+    + '<div class="fw-bold text-red saldo-card-val" style="margin-top:3px;word-break:break-word;line-height:1.2">' + fmtRp(pengeluaranHariIni2) + '</div></div>'
     + '<div style="background:#f8fff8;border-radius:12px;padding:16px;border-left:3px solid #10b981;box-shadow:0 1px 3px rgba(0,0,0,0.04)">'
     + '<div style="font-size:0.75rem;color:#64748b">Pendapatan Hari Ini</div>'
-    + '<div class="fw-bold text-green" style="font-size:1.15rem;margin-top:3px">' + fmtRp(pendapatanHariIni2) + '</div></div>';
+    + '<div class="fw-bold text-green saldo-card-val" style="margin-top:3px;word-break:break-word;line-height:1.2">' + fmtRp(pendapatanHariIni2) + '</div></div>';
   const totalKasBank2 = kasAkun.reduce(function(s,a){
     if ((a.nama||'').toLowerCase().includes('petty') || a.kode === '1-1101-3') return s + pcSaldoReal2;
     return s + (((saldo[a.kode]||{}).net)||0);
@@ -1523,9 +1609,9 @@ async function renderDashboardApprover() {
   return '<div class="page-title">🎯 Dashboard Keuangan</div>'
     + perusahaanBanner + pendingBanner
     // Primary KPI row
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
-    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(totalKasBank2) + '</div><div class="lbl">Total Kas & Bank</div></div>'
-    + '<div class="stat-box ' + (labaRugi2 >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val" style="font-size:2rem">' + fmtRp(labaRugi2) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
+    + '<div class="responsive-grid-2">'
+    + '<div class="stat-box green" style="padding:24px;border-left-width:5px"><div class="val-large">' + fmtRp(totalKasBank2) + '</div><div class="lbl">Total Kas & Bank</div></div>'
+    + '<div class="stat-box ' + (labaRugi2 >= 0 ? 'green' : 'red') + '" style="padding:24px;border-left-width:5px"><div class="val-large">' + fmtRp(labaRugi2) + '</div><div class="lbl">Laba/Rugi Berjalan</div></div>'
     + '</div>'
     + '<div class="stats-row">'
     + '<div class="stat-box"><div class="val">' + jurnal.length + '</div><div class="lbl">Total Jurnal</div></div>'
@@ -1536,15 +1622,15 @@ async function renderDashboardApprover() {
     // Posisi Saldo Hari Ini
     + '<div class="card"><div class="card-header"><h2>💵 Posisi Saldo Hari Ini</h2>'
     + '<span class="text-muted" style="font-size:0.8rem">' + new Date().toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) + '</span></div>'
-    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">' + saldoCards + '</div>'
+    + '<div class="saldo-grid">' + saldoCards + '</div>'
     + '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
     + '<span class="text-muted" style="font-size:0.82rem">Total Kas & Bank</span>'
     + '<span class="fw-bold text-blue" style="font-size:1.1rem">' + fmtRp(totalKasBank2) + '</span>'
     + '</div></div>'
     // Transaksi Terbaru + Status Approval
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
-    + '<div class="card"><div class="card-header"><h2>� Transaksi Terbaru</h2>' + (KU.role !== 'bod' ? '<button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button>' : '') + '</div>'
-    + '<table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th></tr></thead><tbody>' + jurnalRows + '</tbody></table></div>'
+    + '<div class="responsive-grid-2">'
+    + '<div class="card"><div class="card-header"><h2>📝 Transaksi Terbaru</h2>' + (KU.role !== 'bod' ? '<button class="btn btn-sm btn-outline" onclick="navigate(\'jurnal-umum\')">Lihat Semua</button>' : '') + '</div>'
+    + '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th></tr></thead><tbody>' + jurnalRows + '</tbody></table></div></div>'
     + '<div class="card"><div class="card-header"><h2>✅ Status Approval</h2><button class="btn btn-sm btn-outline" onclick="navigate(\'dana-approval\')">Buka</button></div>'
     + '<div class="stats-row" style="margin-bottom:0">'
     + '<div class="stat-box orange"><div class="val">' + pendingPD + '</div><div class="lbl">Permohonan Pending</div></div>'
@@ -1552,7 +1638,8 @@ async function renderDashboardApprover() {
     + '</div>' + (approvedPD ? '<div class="mt-8">' + approvedPD + '</div>' : '') + '</div>'
     + '</div>'
     // Ringkasan Keuangan + Forecast + Actual vs Budget
-    + buildDashboardExtras(jurnal, fd, allPD, allDM);
+    + buildDashboardExtras(jurnal, fd, allPD, allDM)
+    + (await renderPortalKomunikasiWidget());
 }
 
 // ===== SETUP PERUSAHAAN =====
@@ -8853,7 +8940,7 @@ async function printInvoice(id) {
   }).join('');
   const statusColor = inv.status === 'Lunas' ? '#27ae60' : inv.status === 'Terkirim' ? '#2980b9' : '#7f8c8d';
   const css = '*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;background:#f5f6fa;padding:20px;color:#2c3e50}.page{background:white;max-width:800px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}.hdr{background:linear-gradient(135deg,#1a237e,#1565c0);color:white;padding:28px;display:flex;justify-content:space-between;align-items:flex-start}.hdr-l h1{font-size:1.6rem;font-weight:800;margin-top:8px}.hdr-l p{opacity:.85;font-size:.82rem;line-height:1.5}.inv-badge{background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.4);border-radius:8px;padding:10px 18px;text-align:center}.inv-badge .lbl{font-size:.7rem;opacity:.8;text-transform:uppercase;letter-spacing:1px}.inv-badge .num{font-size:1.3rem;font-weight:800;margin-top:4px}.stamp{display:inline-block;border:3px solid ' + statusColor + ';color:' + statusColor + ';border-radius:6px;padding:3px 10px;font-weight:800;font-size:.85rem;margin-top:8px;transform:rotate(-5deg)}.body{padding:28px}.ig{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}.ib{background:#f8f9ff;border-radius:8px;padding:14px;border-left:4px solid #1a237e}.ib h3{font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:6px}.ib .nm{font-size:1rem;font-weight:700;color:#1a237e}table{width:100%;border-collapse:collapse;margin-bottom:16px}thead tr{background:#1a237e;color:white}thead th{padding:10px 12px;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px}tbody tr:nth-child(even){background:#f8f9ff}tbody td{padding:10px 12px;font-size:.85rem;border-bottom:1px solid #eee}.tots{margin-left:auto;width:260px}.tr{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee;font-size:.85rem}.tr.fin{font-size:1.05rem;font-weight:800;color:#1a237e;border-top:2px solid #1a237e;border-bottom:none;padding-top:10px;margin-top:4px}.ftr{background:#f8f9ff;padding:20px 28px;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #eee}.sl{border-top:1px solid #333;margin-top:50px;padding-top:5px;min-width:160px;font-size:.8rem;text-align:center}.note{font-size:.78rem;color:#888;max-width:280px;line-height:1.5}@media print{body{background:white;padding:0}.page{box-shadow:none;border-radius:0}button{display:none}}';
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice ' + inv.noInvoice + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="inv-badge"><div class="lbl">Invoice</div><div class="num">' + inv.noInvoice + '</div></div><div class="stamp">' + (inv.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Tagihan Kepada</h3><p class="nm">' + inv.customer + '</p></div><div class="ib"><h3>Detail Invoice</h3><p><b>Tanggal:</b> ' + fmtDate(inv.tanggal) + '</p><p><b>Jatuh Tempo:</b> ' + fmtDate(inv.jatuhTempo) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(inv.subtotal) + '</span></div>' + (inv.diskon?'<div class="tr"><span>Diskon ('+inv.diskon+'%)</span><span style="color:#e74c3c">('+fmtRp(inv.diskonAmt)+')</span></div>':'') + (inv.ppn?'<div class="tr"><span>PPN ('+inv.ppn+'%)</span><span>'+fmtRp(inv.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(inv.total) + '</span></div></div>' + (inv.catatan?'<div style="margin-top:14px;padding:10px;background:#fff8e1;border-radius:6px;border-left:4px solid #f39c12;font-size:.82rem"><b>Catatan:</b> '+inv.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Terima kasih atas kepercayaan Anda.<br>Invoice ini sah tanpa tanda tangan.</div><div><div class="sl">Hormat Kami,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#1a237e;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">🖨️ Print Invoice</button></div></body></html>');
+  w.document.write('<!DOCTYPE html><html><head><title>Invoice ' + inv.noInvoice + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="inv-badge"><div class="lbl">Invoice</div><div class="num">' + inv.noInvoice + '</div></div><div class="stamp">' + (inv.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Tagihan Kepada</h3><p class="nm">' + inv.customer + '</p></div><div class="ib"><h3>Detail Invoice</h3><p><b>Tanggal:</b> ' + fmtDate(inv.tanggal) + '</p><p><b>Jatuh Tempo:</b> ' + fmtDate(inv.jatuhTempo) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(inv.subtotal) + '</span></div>' + (inv.diskon?'<div class="tr"><span>Diskon ('+inv.diskon+'%)</span><span style="color:#e74c3c">('+fmtRp(inv.diskonAmt)+')</span></div>':'') + (inv.ppn?'<div class="tr"><span>PPN ('+inv.ppn+'%)</span><span>'+fmtRp(inv.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(inv.total) + '</span></div></div>' + (inv.catatan?'<div style="margin-top:14px;padding:10px;background:#fff8e1;border-radius:6px;border-left:4px solid #f39c12;font-size:.82rem"><b>Catatan:</b> '+inv.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Terima kasih atas kepercayaan Anda.<br>Invoice ini sah tanpa tanda tangan.</div><div><div class="sl">Hormat Kami,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#1a237e;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">🖨️ Print Invoice</button></div></body></html>');
   w.document.close();
 }
 
@@ -8972,7 +9059,7 @@ async function printPO(id) {
   }).join('');
   const statusColor = po.status === 'Diterima' ? '#27ae60' : po.status === 'Dibatalkan' ? '#e74c3c' : po.status === 'Terkirim' ? '#2980b9' : '#7f8c8d';
   const css = '*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;background:#f5f6fa;padding:20px;color:#2c3e50}.page{background:white;max-width:820px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}.hdr{background:linear-gradient(135deg,#1b5e20,#2e7d32);color:white;padding:28px;display:flex;justify-content:space-between;align-items:flex-start}.hdr-l h1{font-size:1.6rem;font-weight:800;margin-top:8px}.hdr-l p{opacity:.85;font-size:.82rem;line-height:1.5}.po-badge{background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.4);border-radius:8px;padding:10px 18px;text-align:center}.po-badge .lbl{font-size:.7rem;opacity:.8;text-transform:uppercase;letter-spacing:1px}.po-badge .num{font-size:1.3rem;font-weight:800;margin-top:4px}.stamp{display:inline-block;border:3px solid ' + statusColor + ';color:' + statusColor + ';border-radius:6px;padding:3px 10px;font-weight:800;font-size:.85rem;margin-top:8px;transform:rotate(-5deg)}.body{padding:28px}.ig{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}.ib{background:#f1f8e9;border-radius:8px;padding:14px;border-left:4px solid #2e7d32}.ib h3{font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:6px}.ib .nm{font-size:1rem;font-weight:700;color:#1b5e20}table{width:100%;border-collapse:collapse;margin-bottom:16px}thead tr{background:#2e7d32;color:white}thead th{padding:10px 12px;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px}tbody tr:nth-child(even){background:#f1f8e9}tbody td{padding:10px 12px;font-size:.85rem;border-bottom:1px solid #eee}.tots{margin-left:auto;width:260px}.tr{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee;font-size:.85rem}.tr.fin{font-size:1.05rem;font-weight:800;color:#1b5e20;border-top:2px solid #2e7d32;border-bottom:none;padding-top:10px;margin-top:4px}.ftr{background:#f1f8e9;padding:20px 28px;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #c8e6c9}.sl{border-top:1px solid #333;margin-top:50px;padding-top:5px;min-width:160px;font-size:.8rem;text-align:center}.note{font-size:.78rem;color:#888;max-width:280px;line-height:1.5}.terms{background:#fff8e1;border-radius:6px;padding:12px;border-left:4px solid #f9a825;font-size:.82rem;margin-top:14px}@media print{body{background:white;padding:0}.page{box-shadow:none;border-radius:0}button{display:none}}';
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PO ' + po.noPO + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="po-badge"><div class="lbl">Purchase Order</div><div class="num">' + po.noPO + '</div></div><div class="stamp">' + (po.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Kepada Supplier</h3><p class="nm">' + po.supplier + '</p></div><div class="ib"><h3>Detail PO</h3><p><b>Tanggal:</b> ' + fmtDate(po.tanggal) + '</p><p><b>Tgl Pengiriman:</b> ' + fmtDate(po.tanggalKirim) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:60px;text-align:center">Satuan</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(po.subtotal) + '</span></div>' + (po.ppn?'<div class="tr"><span>PPN ('+po.ppn+'%)</span><span>'+fmtRp(po.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(po.total) + '</span></div></div>' + (po.catatan?'<div class="terms"><b>Syarat & Ketentuan:</b> '+po.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Harap konfirmasi penerimaan PO ini.<br>Pengiriman sesuai spesifikasi yang tertera.</div><div style="display:flex;gap:40px"><div><div class="sl">Dibuat Oleh,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div><div><div class="sl">Disetujui Oleh,<br>&nbsp;</div></div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#2e7d32;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">🖨️ Print Purchase Order</button></div></body></html>');
+  w.document.write('<!DOCTYPE html><html><head><title>PO ' + po.noPO + '</title><style>' + css + '</style></head><body><div class="page"><div class="hdr"><div class="hdr-l">' + logoHtml + '<h1>' + (perusahaan.nama||'IJEF Corp') + '</h1><p>' + (perusahaan.alamat||'') + (perusahaan.kota?', '+perusahaan.kota:'') + '</p><p>' + (perusahaan.telp||'') + (perusahaan.email?' | '+perusahaan.email:'') + '</p>' + (perusahaan.npwp?'<p>NPWP: '+perusahaan.npwp+'</p>':'') + '</div><div style="text-align:right"><div class="po-badge"><div class="lbl">Purchase Order</div><div class="num">' + po.noPO + '</div></div><div class="stamp">' + (po.status||'Draft') + '</div></div></div><div class="body"><div class="ig"><div class="ib"><h3>Kepada Supplier</h3><p class="nm">' + po.supplier + '</p></div><div class="ib"><h3>Detail PO</h3><p><b>Tanggal:</b> ' + fmtDate(po.tanggal) + '</p><p><b>Tgl Pengiriman:</b> ' + fmtDate(po.tanggalKirim) + '</p></div></div><table><thead><tr><th style="width:36px">No</th><th>Deskripsi</th><th style="width:55px;text-align:center">Qty</th><th style="width:60px;text-align:center">Satuan</th><th style="width:110px;text-align:right">Harga</th><th style="width:120px;text-align:right">Total</th></tr></thead><tbody>' + itemRows + '</tbody></table><div class="tots"><div class="tr"><span>Subtotal</span><span>' + fmtRp(po.subtotal) + '</span></div>' + (po.ppn?'<div class="tr"><span>PPN ('+po.ppn+'%)</span><span>'+fmtRp(po.ppnAmt)+'</span></div>':'') + '<div class="tr fin"><span>TOTAL</span><span>' + fmtRp(po.total) + '</span></div></div>' + (po.catatan?'<div class="terms"><b>Syarat & Ketentuan:</b> '+po.catatan+'</div>':'') + '</div><div class="ftr"><div class="note">Harap konfirmasi penerimaan PO ini.<br>Pengiriman sesuai spesifikasi yang tertera.</div><div style="display:flex;gap:40px"><div><div class="sl">Dibuat Oleh,<br>' + (perusahaan.nama||'IJEF Corp') + '</div></div><div><div class="sl">Disetujui Oleh,<br>&nbsp;</div></div></div></div></div><div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:10px 24px;background:#2e7d32;color:white;border:none;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600">��️ Print Purchase Order</button></div></body></html>');
   w.document.close();
 }
 
@@ -9071,7 +9158,7 @@ async function printSlipGaji(id) {
   if (!g) return;
   const perusahaan = await KDB.getSetting('perusahaan', {});
   const w = window.open('', '_blank');
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Slip Gaji ' + g.nama + '</title>'
+  w.document.write('<!DOCTYPE html><html><head><title>Slip Gaji ' + g.nama + '</title>'
     + '<style>body{font-family:Arial,sans-serif;padding:30px;max-width:600px;margin:0 auto}h2{color:#1a237e;text-align:center}.header{text-align:center;border-bottom:2px solid #1a237e;padding-bottom:10px;margin-bottom:20px}table{width:100%;border-collapse:collapse}td{padding:7px 10px;border-bottom:1px solid #eee}.total{font-weight:700;font-size:1.1rem;background:#e8eaf6}.text-right{text-align:right}@media print{button{display:none}}</style></head><body>'
     + '<div class="header"><h2>SLIP GAJI</h2><p>' + (perusahaan.nama||'IJEF Corp') + '</p></div>'
     + '<table><tr><td>Nama</td><td>' + g.nama + '</td></tr><tr><td>Jabatan</td><td>' + (g.jabatan||'-') + '</td></tr><tr><td>Periode</td><td>' + g.periode + '</td></tr><tr><td>Tanggal Bayar</td><td>' + fmtDate(g.tanggal) + '</td></tr></table><br>'
@@ -13075,16 +13162,6 @@ async function renderPortalAset() {
   const allPD = await KDB.getAll('permohonan');
   const akunOpts = await getAkunOptions();
 
-  // Auto-generate missing inventory codes (migration)
-  for (const item of list) {
-    if (!item.kode) {
-      const prefix = item.tipeItem === 'Aset Tetap' ? 'AT' : 'PL';
-      const year = new Date().getFullYear().toString().slice(-2);
-      item.kode = prefix + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
-      await KDB.save('perlengkapan', item.id, item);
-    }
-  }
-
   const perlengkapan = list.filter(function(p){ return !p.tipeItem || p.tipeItem === 'Perlengkapan'; });
   const asetTetap = list.filter(function(p){ return p.tipeItem === 'Aset Tetap'; });
   const pdPortal = allPD.filter(function(p){ return p.sumberRef === 'perlengkapan'; });
@@ -13109,8 +13186,6 @@ async function renderPortalAset() {
     const stokMin = parseInt(p.stokMin) || 5;
     const stokAlert = sisa <= stokMin ? '<span class="badge badge-danger">Stok Rendah!</span>' : '';
     return '<tr>'
-      + '<td><input type="checkbox" class="pl-print-check" data-id="' + p.id + '"></td>'
-      + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (p.kode || '-') + '</td>'
       + '<td class="fw-bold">' + p.nama + '</td>'
       + '<td>' + (p.satuan||'-') + '</td>'
       + '<td class="text-center">' + (p.awal||0) + '</td>'
@@ -13131,8 +13206,6 @@ async function renderPortalAset() {
     const pdItem = allPD.filter(function(x){ return x.sumberRefId === p.id; });
     const pdBadge = pdItem.length > 0 ? statusBadge(pdItem[0].status) : '';
     return '<tr>'
-      + '<td><input type="checkbox" class="pl-print-check" data-id="' + p.id + '"></td>'
-      + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (p.kode || '-') + '</td>'
       + '<td class="fw-bold">' + p.nama + '</td>'
       + '<td><span class="chip">' + (p.kategoriAset||'Peralatan') + '</span></td>'
       + '<td>' + fmtDate(p.tanggalBeli||p.createdAt) + '</td>'
@@ -13207,11 +13280,9 @@ async function renderPortalAset() {
     + '<div class="fg full"><label>Keterangan</label><textarea id="pl-ket" placeholder="Keterangan tambahan..." style="padding:8px 11px;border:1.5px solid #ddd;border-radius:7px;font-size:0.88rem;width:100%;min-height:60px"></textarea></div>'
     + '</div>'
     + '<div class="alert alert-info" style="margin-top:12px">Jika ada pembelian (harga > 0), Draft Permohonan Dana akan dibuat otomatis untuk proses approval 3 layer.</div>'
-    + '<div class="mt-12 flex-row" style="gap:10px">'
+    + '<div class="mt-12 flex-row">'
     + '<button class="btn btn-primary" onclick="tambahPerlengkapanPortal(false)">Tambah & Buat Permohonan</button>'
     + '<button class="btn btn-outline" onclick="tambahPerlengkapanPortal(true)">Simpan Tanpa Permohonan</button>'
-    + '<button class="btn btn-info" onclick="printInventoryLabels(\'perlengkapan\', \'pl-print-check\')">🖨️ Cetak Label</button>'
-    + '<button class="btn btn-success" onclick="printInventoryChecklist(\'perlengkapan\', \'pl-print-check\')">📋 Cetak Daftar Cek</button>'
     + '</div></div>'
 
     // Tabs
@@ -13221,11 +13292,11 @@ async function renderPortalAset() {
     + '<button class="tab-btn" onclick="switchTab(this,\'tab-pengadaan\')">Riwayat Pengadaan (' + pdPortal.length + ')</button>'
     + '</div>'
     + '<div class="tab-content active" id="tab-perlengkapan">'
-    + (perlengkapan.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'pl-print-check\')"></th><th>Kode</th><th>Nama</th><th>Satuan</th><th>Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai Sisa</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + plRows + '</tbody></table></div>'
+    + (perlengkapan.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai Sisa</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + plRows + '</tbody></table></div>'
       : '<div class="empty-state"><span class="icon">🔧</span>Belum ada data perlengkapan</div>')
     + '</div>'
     + '<div class="tab-content" id="tab-aset-tetap">'
-    + (asetTetap.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'pl-print-check\')"></th><th>Kode</th><th>Nama</th><th>Kategori</th><th>Tgl Beli</th><th>Nilai</th><th>Kondisi</th><th>Lokasi</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + atRows + '</tbody></table></div>'
+    + (asetTetap.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Kategori</th><th>Tgl Beli</th><th>Nilai</th><th>Kondisi</th><th>Lokasi</th><th>Pengadaan</th><th>Aksi</th></tr></thead><tbody>' + atRows + '</tbody></table></div>'
       : '<div class="empty-state"><span class="icon">🏢</span>Belum ada data aset tetap</div>')
     + '</div>'
     + '<div class="tab-content" id="tab-pengadaan">'
@@ -13251,11 +13322,8 @@ async function tambahPerlengkapanPortal(noPermohonan) {
   const akunDebit = (document.getElementById('pl-akun-debit') || {}).value || '5-1400';
   const akunKredit = (document.getElementById('pl-akun-kredit') || {}).value || '1-1100';
   const id = genId('PL');
-  const prefix = tipeItem === 'Aset Tetap' ? 'AT' : 'PL';
-  const year = new Date().getFullYear().toString().slice(-2);
-  const kode = prefix + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
 
-  var itemData = { id: id, kode: kode, nama: nama.trim(), satuan: satuan, harga: harga, tipeItem: tipeItem, keterangan: ket, createdBy: KU.username, createdAt: new Date().toISOString() };
+  var itemData = { id: id, nama: nama.trim(), satuan: satuan, harga: harga, tipeItem: tipeItem, keterangan: ket, createdBy: KU.username, createdAt: new Date().toISOString() };
 
   if (tipeItem === 'Aset Tetap') {
     itemData.kategoriAset = (document.getElementById('pl-kat-aset') || {}).value || 'Peralatan Kantor';
@@ -13301,7 +13369,6 @@ async function editPerlengkapan(id) {
       + '<div class="fg"><label>Pembelian</label><input type="number" id="ep-beli" value="' + (p.beli||0) + '"></div>'
       + '<div class="fg"><label>Pemakaian</label><input type="number" id="ep-pakai" value="' + (p.pakai||0) + '"></div>';
   openModal('<div class="form-grid">'
-    + '<div class="fg"><label>Kode Inventaris</label><input value="' + (p.kode || p.id || '-') + '" disabled style="background:#f5f5f5"></div>'
     + '<div class="fg"><label>Nama</label><input id="ep-nama" value="' + (p.nama||'') + '"></div>'
     + '<div class="fg"><label>Satuan</label><input id="ep-satuan" value="' + (p.satuan||'') + '"></div>'
     + '<div class="fg"><label>Harga Satuan</label><input type="text" inputmode="decimal" id="ep-harga" value="' + (p.harga ? formatNominalValue(p.harga) : '0') + '" oninput="formatNominalInput(this)"></div>'
@@ -13786,7 +13853,7 @@ function printBundleLaporan() {
   var content = document.querySelector('.print-bundle-section');
   if (!content) { showAlert('Konten print tidak ditemukan!', 'danger'); return; }
   var w = window.open('', '_blank');
-  w.document.write('<html><head><meta charset="UTF-8"><title>Laporan Keuangan</title>');
+  w.document.write('<html><head><title>Laporan Keuangan</title>');
   w.document.write('<style>');
   w.document.write('*{box-sizing:border-box;margin:0;padding:0}');
   w.document.write('body{font-family:"Segoe UI",sans-serif;color:#333;font-size:12px;background:white}');
@@ -14908,15 +14975,6 @@ async function renderInventoriATK() {
   var jurnal = await KDB.getAll('jurnal');
   var filters = getATKFilterState();
 
-  // Auto-generate missing ATK codes (migration)
-  for (const item of (list || [])) {
-    if (!item.kode) {
-      const year = new Date().getFullYear().toString().slice(-2);
-      item.kode = 'ATK' + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
-      await KDB.save('inventori_atk', item.id, item);
-    }
-  }
-
   // Auto-detect ATK transactions from jurnal
   var atkFromJurnal = [];
   jurnal.forEach(function(j) {
@@ -14979,12 +15037,7 @@ async function renderInventoriATK() {
     var safeId = escapeJsSingleQuote(item.id);
     var safeNama = escapeHtml(item.nama || '-');
     var safeSatuan = escapeHtml(item.satuan || '-');
-    return '<tr>'
-      + '<td><input type="checkbox" class="atk-print-check" data-id="' + item.id + '"></td>'
-      + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (item.kode || '-') + '</td>'
-      + '<td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td>'
-      + '<td>' + safeSatuan + '</td>'
-      + '<td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewATKItem(\'' + safeId + '\')">View</button><button class="btn btn-xs btn-warning" onclick="editATK(\'' + safeId + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + safeId + '\')">Hapus</button></td></tr>';
+    return '<tr><td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td><td>' + safeSatuan + '</td><td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewATKItem(\'' + safeId + '\')">View</button><button class="btn btn-xs btn-warning" onclick="editATK(\'' + safeId + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + safeId + '\')">Hapus</button></td></tr>';
   }).join('');
 
   // Log rows
@@ -15023,13 +15076,76 @@ async function renderInventoriATK() {
   var stockItemVal = escapeHtml(filters.stockItem || '');
   var logItemVal = escapeHtml(filters.logItem || '');
 
-  return '<div class="page-title">📋 Inventori Stok ATK</div>'
-    + '<div class="stats-row">'
-    + '<div class="stat-box"><div class="val">' + (list||[]).length + '</div><div class="lbl">Jenis ATK</div></div>'
-    + '<div class="stat-box green"><div class="val">' + fmtRp(totalBeli) + '</div><div class="lbl">Total Pembelian</div></div>'
-    + '<div class="stat-box red"><div class="val">' + fmtRp(totalPakai) + '</div><div class="lbl">Total Pemakaian</div></div>'
-    + '<div class="stat-box"><div class="val">' + (logList||[]).length + '</div><div class="lbl">Log Transaksi</div></div>'
+  // Calculate IMS specific values
+  var totalNilaiAset = 0;
+  var itemsKritis = 0;
+  (list||[]).forEach(function(item) {
+    var sm = stockMap[item.id] || { stok: (parseInt(item.stok)||0), beli: (parseInt(item.beli)||0), pakai: (parseInt(item.pakai)||0) };
+    var sisa = sm.stok;
+    totalNilaiAset += sisa * (parseFloat(item.harga)||0);
+    if (sisa <= 2) {
+      itemsKritis++;
+    }
+  });
+
+  var statusAsetHtml = itemsKritis > 0 
+    ? '<div class="val" style="color:#ef4444">' + itemsKritis + ' <span style="font-size:0.9rem">⚠️</span></div>'
+    : '<div class="val" style="color:#10b981">Aman <span style="font-size:0.9rem">✅</span></div>';
+
+  var scannerStyleBlock = 
+    '<style>' +
+    '@keyframes fvaScannerLine { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }' +
+    '.scanner-view { position:relative; width:100%; max-width:280px; height:160px; background:#020617; border:3px solid #334155; border-radius:12px; overflow:hidden; margin:12px auto; display:flex; align-items:center; justify-content:center; box-shadow:inset 0 0 20px rgba(0,0,0,0.8); }' +
+    '.scanner-line { position:absolute; left:0; width:100%; height:3px; background:#10b981; box-shadow:0 0 10px #10b981, 0 0 20px #10b981; opacity:0.8; top:0; }' +
+    '.scanner-corner { position:absolute; width:16px; height:16px; border:3px solid #ffd700; }' +
+    '.sc-tl { top:8px; left:8px; border-right:none; border-bottom:none; }' +
+    '.sc-tr { top:8px; right:8px; border-left:none; border-bottom:none; }' +
+    '.sc-bl { bottom:8px; left:8px; border-right:none; border-top:none; }' +
+    '.sc-br { bottom:8px; right:8px; border-left:none; border-top:none; }' +
+    '</style>';
+
+  return scannerStyleBlock
+    + '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:12px">'
+    + '  <div>'
+    + '    <div class="page-title" style="margin-bottom:4px">📱 Android IMS — IJEF Corp</div>'
+    + '    <div style="font-size:0.82rem; color:#64748b; font-weight:500">Sistem Manajemen Stok & Inventori Real-time</div>'
+    + '  </div>'
+    + '  <span class="chip" style="background:#e0a800; color:#000; font-weight:700; padding:6px 14px; border-radius:20px; font-size:0.75rem">Android PWA Ready</span>'
     + '</div>'
+    
+    // PREMIUM ANDROID IMS DASHBOARD
+    + '<div class="stats-row">'
+    + '  <div class="stat-box"><div class="val">' + (list||[]).length + '</div><div class="lbl">📦 Total Jenis ATK</div></div>'
+    + '  <div class="stat-box green"><div class="val">' + fmtRp(totalNilaiAset) + '</div><div class="lbl">💵 Nilai Aset Stok</div></div>'
+    + '  <div class="stat-box red">' + statusAsetHtml + '<div class="lbl">⚠️ Stok Kritis (&le;2)</div></div>'
+    + '  <div class="stat-box purple"><div class="val">' + (logList||[]).length + '</div><div class="lbl">📊 Total Aktivitas</div></div>'
+    + '</div>'
+
+    // HIGH FIDELITY BARCODE SCANNER SIMULATION
+    + '<div class="card" style="border-left:4px solid #ffd700">'
+    + '  <div class="card-header"><h2>📷 Android Barcode / QR Scanner (Simulasi Kamera)</h2></div>'
+    + '  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:center" class="form-grid">'
+    + '    <div style="text-align:center">'
+    + '      <div class="scanner-view" id="sim-scanner-view">'
+    + '        <div class="scanner-line" id="sim-scanner-line"></div>'
+    + '        <div class="scanner-corner sc-tl"></div>'
+    + '        <div class="scanner-corner sc-tr"></div>'
+    + '        <div class="scanner-corner sc-bl"></div>'
+    + '        <div class="scanner-corner sc-br"></div>'
+    + '        <div style="color:rgba(255,255,255,0.4);font-size:2.5rem;z-index:5">📷</div>'
+    + '      </div>'
+    + '      <button class="btn btn-primary" id="sim-scanner-btn" onclick="window.runSimulatedScanner()" style="margin-top:10px; background:#ffd700; color:#1a237e; border:none; font-weight:700">📷 Mulai Pindai QR/Barcode</button>'
+    + '    </div>'
+    + '    <div>'
+    + '      <h3 style="color:#1a237e; font-size:0.95rem; margin-bottom:8px">Simulasi Scan Android IMS</h3>'
+    + '      <p style="color:#475569; font-size:0.82rem; line-height:1.5; margin-bottom:12px">Fitur ini mensimulasikan pemindaian kode produk melalui kamera handphone. Klik tombol untuk mengaktifkan pemindaian. Sistem akan melakukan "Beep" dan otomatis memproses data stok secara instan dari database.</p>'
+    + '      <div id="sim-scanner-text" style="padding:10px; background:#f1f5f9; border-radius:8px; font-size:0.82rem; min-height:45px; display:flex; align-items:center; border:1px solid #cbd5e1">'
+    + '        <span style="color:#64748b">Menunggu aktivitas pemindaian...</span>'
+    + '      </div>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>'
+
     // Input ATK Baru
     + '<div class="card"><div class="card-header"><h2>Input ATK Baru</h2></div><div class="form-grid">'
     + '<div class="fg"><label>Nama ATK</label><input id="atk-nama" placeholder="Kertas A4 / Tinta / Pulpen"></div>'
@@ -15039,6 +15155,7 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Pemakaian</label><input type="number" id="atk-pakai" placeholder="0" value="0"></div>'
     + '<div class="fg"><label>Harga Satuan (Rp)</label><input type="text" inputmode="decimal" id="atk-harga" placeholder="0" oninput="formatNominalInput(this)"></div>'
     + '</div><div class="mt-12"><button class="btn btn-primary" onclick="tambahATK()">Tambah ATK</button></div></div>'
+
     // Input Masuk / Keluar ATK
     + '<div class="card"><div class="card-header"><h2>📦 Input Barang Masuk / Keluar</h2></div>'
     + '<div class="form-grid">'
@@ -15050,6 +15167,7 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Keterangan</label><input id="atklog-ket" placeholder="Keperluan"></div>'
     + '<div class="fg"><label>Bukti (Link atau Foto)</label><input id="atklog-bukti" placeholder="https://drive.google.com/... atau URL foto"><div style="margin-top:6px"><input type="file" id="atklog-foto" accept="image/*" capture="environment" onchange="previewAdminATKFoto(this)" style="font-size:0.8rem"></div><div id="atklog-foto-preview" style="margin-top:4px"></div></div>'
     + '</div><div class="mt-12"><button class="btn btn-success" onclick="simpanATKLog()">Simpan Transaksi</button></div></div>'
+
     // Barcode / QR untuk form pengambilan
     + '<div class="card"><div class="card-header"><h2>📱 Form Pengambilan ATK (Scan Barcode)</h2></div>'
     + '<div class="alert alert-info">Bagikan link atau QR code berikut agar setiap orang yang mengambil ATK bisa mengisi formulir pengambilan langsung dari HP.</div>'
@@ -15058,6 +15176,22 @@ async function renderInventoriATK() {
     + '<button class="btn btn-info btn-sm" onclick="copyATKLink()">📋 Copy Link</button>'
     + '<button class="btn btn-outline btn-sm" onclick="generateATKQR()">📱 Generate QR</button>'
     + '</div><div id="atk-qr-result" class="mt-12" style="text-align:center"></div></div>'
+
+    // DOWNLOAD APP & PWA GUIDE
+    + '<div class="card" style="background:#f8fafc; border:1.5px solid #e2e8f0">'
+    + '  <div class="card-header"><h2>📥 Cara Install Aplikasi Android IMS / PWA Standalone</h2></div>'
+    + '  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap" class="form-grid">'
+    + '    <div style="font-size:2.5rem">📱</div>'
+    + '    <div style="flex:1">'
+    + '      <p style="font-size:0.82rem; color:#475569; line-height:1.5; margin-bottom:8px">Sistem ini mendukung penuh teknologi PWA (Progressive Web App). Ketika diinstall, aplikasi akan berjalan terpisah tanpa browser bar, lebih cepat, offline-ready, dan secara otomatis mendeteksi ukuran layar Handphone/Tablet Anda untuk menyajikan tampilan native yang rapi.</p>'
+    + '      <div style="display:flex; gap:12px; flex-wrap:wrap">'
+    + '        <div style="font-size:0.75rem; background:#e2e8f0; padding:4px 10px; border-radius:6px; color:#334155"><b>Di Android:</b> Klik ikon titik tiga di Chrome &rarr; pilih "Tambahkan ke Layar Utama" (Add to Home screen).</div>'
+    + '        <div style="font-size:0.75rem; background:#e2e8f0; padding:4px 10px; border-radius:6px; color:#334155"><b>Di iOS:</b> Klik tombol Share di Safari &rarr; pilih "Add to Home Screen".</div>'
+    + '      </div>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>'
+
     // Daftar Stok
     + '<div class="card"><div class="card-header"><h2>Daftar Stok ATK (' + filteredStockList.length + '/' + (list||[]).length + ')</h2></div>'
     + '<div class="form-grid cols3" style="margin-bottom:12px">'
@@ -15065,12 +15199,9 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.stockFrom||'') + '" onchange="setATKFilterValue(\'stockFrom\', this.value)"></div>'
     + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.stockTo||'') + '" onchange="setATKFilterValue(\'stockTo\', this.value)"></div>'
     + '</div>'
-    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'atk-print-check\')"></th><th>Kode</th><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
-    + '<div class="mt-12 flex-row" style="gap:10px">'
-    + '<button class="btn btn-info" onclick="printInventoryLabels(\'inventori_atk\', \'atk-print-check\')">🖨️ Cetak Label</button>'
-    + '<button class="btn btn-success" onclick="printInventoryChecklist(\'inventori_atk\', \'atk-print-check\')">📋 Cetak Daftar Cek</button>'
+    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
     + '</div>'
-    + '</div>'
+
     // Log Transaksi
     + '<div class="card"><div class="card-header"><h2>Log Transaksi ATK (' + filteredLogRaw.length + '/' + (logList||[]).length + ')</h2></div>'
     + '<div class="form-grid cols3" style="margin-bottom:12px">'
@@ -15081,6 +15212,7 @@ async function renderInventoriATK() {
     + (filteredLogRaw.length > ATK_LOG_MAX_ROWS ? '<div class="text-muted" style="margin-bottom:8px">Menampilkan ' + ATK_LOG_MAX_ROWS + ' transaksi terbaru dari hasil filter.</div>' : '')
     + (filteredLogList.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Item</th><th>Tipe</th><th>Qty</th><th>Pengambil</th><th>Keterangan</th><th>Bukti</th><th>Aksi</th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada log transaksi sesuai filter</div>')
     + '</div>'
+
     // Jurnal auto-detect
     + '<div class="card"><div class="card-header"><h2>Transaksi ATK dari Jurnal (Auto-detect)</h2></div>'
     + (atkFromJurnal.length ? '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Keterangan</th><th class="text-right">Jumlah</th></tr></thead><tbody>' + jurnalRows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada transaksi ATK terdeteksi</div>')
@@ -15109,6 +15241,115 @@ function previewAdminATKFoto(input) {
     img.src = e.target.result;
   };
   reader.readAsDataURL(input.files[0]);
+}
+
+window.playBeepSound = function() {
+  try {
+    var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var oscillator = audioCtx.createOscillator();
+    var gainNode = audioCtx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 1200; // Perfect barcode scanner beep frequency
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.15);
+    
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.15);
+  } catch(e) {
+    console.warn("AudioContext beep failed:", e);
+  }
+};
+
+window.runSimulatedScanner = function() {
+  var v = document.getElementById('sim-scanner-view');
+  var line = document.getElementById('sim-scanner-line');
+  var text = document.getElementById('sim-scanner-text');
+  var btn = document.getElementById('sim-scanner-btn');
+  
+  if (!v || !btn) return;
+  
+  btn.disabled = true;
+  btn.textContent = '🔄 Memindai / Scanning...';
+  text.innerHTML = '<span style="color:#ff9800;font-weight:bold">🔴 Kamera Android Aktif. Mencari QR/Barcode...</span>';
+  
+  if (line) {
+    line.style.animation = 'fvaScannerLine 0.8s infinite ease-in-out';
+  }
+  
+  setTimeout(async function() {
+    // Play beep sound!
+    window.playBeepSound();
+    
+    if (line) {
+      line.style.animation = 'none';
+    }
+    
+    var items = await KDB.getAll('inventori_atk');
+    if (!items || items.length === 0) {
+      text.innerHTML = '<span style="color:#f44336;font-weight:bold">❌ Gagal: Tidak ada item ATK di database!</span>';
+      btn.disabled = false;
+      btn.textContent = '📷 Mulai Pindai QR/Barcode';
+      return;
+    }
+    
+    // Choose a random item
+    var randomIdx = Math.floor(Math.random() * items.length);
+    var chosen = items[randomIdx];
+    
+    text.innerHTML = '<span style="color:#4caf50;font-weight:bold">✅ Barcode Terdeteksi: ' + escapeHtml(chosen.nama) + ' (' + escapeHtml(chosen.satuan||'pcs') + ')</span>';
+    
+    // Auto populate the select dropdown
+    var selectEl = document.getElementById('atklog-item');
+    if (selectEl) {
+      selectEl.value = chosen.id;
+    }
+    
+    var qtyEl = document.getElementById('atklog-qty');
+    if (qtyEl) {
+      qtyEl.value = 1;
+      qtyEl.focus();
+    }
+    
+    // Toast notification
+    showToastNotification('Barcode item "' + chosen.nama + '" berhasil dipindai!');
+    
+    btn.disabled = false;
+    btn.textContent = '📷 Mulai Pindai QR/Barcode';
+  }, 1800);
+};
+
+function showToastNotification(msg) {
+  var toast = document.createElement('div');
+  toast.style.position = 'fixed';
+  toast.style.bottom = '24px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.background = '#1e293b';
+  toast.style.color = '#fff';
+  toast.style.padding = '12px 24px';
+  toast.style.borderRadius = '30px';
+  toast.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)';
+  toast.style.zIndex = '99999';
+  toast.style.fontSize = '0.88rem';
+  toast.style.fontWeight = '600';
+  toast.style.display = 'flex';
+  toast.style.alignItems = 'center';
+  toast.style.gap = '8px';
+  toast.style.border = '1.5px solid #ffd700';
+  toast.innerHTML = '🤖 ' + msg;
+  
+  document.body.appendChild(toast);
+  setTimeout(function() {
+    toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(20px)';
+    setTimeout(function() { toast.remove(); }, 400);
+  }, 3000);
 }
 
 async function simpanATKLog() {
@@ -15395,9 +15636,7 @@ async function tambahATK() {
   var nama = (document.getElementById('atk-nama')||{}).value;
   if (!nama || !nama.trim()) { showAlert('Nama ATK wajib diisi!', 'danger'); return; }
   var id = genId('ATK');
-  const year = new Date().getFullYear().toString().slice(-2);
-  const kode = 'ATK' + year + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
-  await KDB.save('inventori_atk', id, { id: id, kode: kode, nama: nama.trim(), satuan: (document.getElementById('atk-satuan')||{}).value||'', stok: parseInt((document.getElementById('atk-stok')||{}).value)||0, beli: parseInt((document.getElementById('atk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('atk-pakai')||{}).value)||0, harga: parseNominal((document.getElementById('atk-harga')||{}).value), createdBy: KU.username, createdAt: new Date().toISOString() });
+  await KDB.save('inventori_atk', id, { id: id, nama: nama.trim(), satuan: (document.getElementById('atk-satuan')||{}).value||'', stok: parseInt((document.getElementById('atk-stok')||{}).value)||0, beli: parseInt((document.getElementById('atk-beli')||{}).value)||0, pakai: parseInt((document.getElementById('atk-pakai')||{}).value)||0, harga: parseNominal((document.getElementById('atk-harga')||{}).value), createdBy: KU.username, createdAt: new Date().toISOString() });
   showAlert('ATK ditambahkan!');
   navigate('kalk-inventori-atk');
 }
@@ -15407,7 +15646,6 @@ async function editATK(id) {
   var item = list.find(function(x){ return x.id === id; });
   if (!item) return;
   openModal('<div class="form-grid">'
-    + '<div class="fg"><label>Kode ATK</label><input value="' + (item.kode || item.id || '-') + '" disabled style="background:#f5f5f5"></div>'
     + '<div class="fg"><label>Nama</label><input id="eatk-nama" value="' + (item.nama||'') + '"></div>'
     + '<div class="fg"><label>Satuan</label><input id="eatk-satuan" value="' + (item.satuan||'') + '"></div>'
     + '<div class="fg"><label>Stok</label><input type="number" id="eatk-stok" value="' + (item.stok||0) + '"></div>'
@@ -15474,8 +15712,7 @@ async function viewATKItem(id) {
     + '<div class="stat-box"><div class="val">' + sisa + '</div><div class="lbl">Sisa</div></div>'
     + '</div>'
     + '<table style="width:100%;font-size:0.85rem;margin-bottom:12px"><tbody>'
-    + '<tr><td style="padding:4px 8px;color:#888;width:120px">Kode</td><td class="fw-bold" style="font-family:monospace">' + (item.kode || '-') + '</td></tr>'
-    + '<tr><td style="padding:4px 8px;color:#888">Nama</td><td class="fw-bold">' + escapeHtml(item.nama || '-') + '</td></tr>'
+    + '<tr><td style="padding:4px 8px;color:#888;width:120px">Nama</td><td class="fw-bold">' + escapeHtml(item.nama || '-') + '</td></tr>'
     + '<tr><td style="padding:4px 8px;color:#888">Satuan</td><td>' + escapeHtml(item.satuan || '-') + '</td></tr>'
     + '<tr><td style="padding:4px 8px;color:#888">Harga</td><td>' + fmtRp(item.harga || 0) + '</td></tr>'
     + '<tr><td style="padding:4px 8px;color:#888">Nilai Sisa</td><td class="fw-bold">' + fmtRp(nilai) + '</td></tr>'
@@ -15580,187 +15817,6 @@ async function updateNotifBadge() {
     badge.textContent = unread > 0 ? unread : '';
     badge.style.display = unread > 0 ? 'inline-block' : 'none';
   }
-}
-
-// ===== INVENTORY PRINT LABEL SYSTEM =====
-function toggleSelectAllLabels(el, className) {
-  const cbs = document.querySelectorAll('.' + className);
-  cbs.forEach(cb => cb.checked = el.checked);
-}
-
-async function printInventoryLabels(collectionName, checkboxClass) {
-  const checkboxes = document.querySelectorAll('.' + checkboxClass + ':checked');
-  if (checkboxes.length === 0) {
-    showAlert('Pilih item yang ingin dicetak labelnya!', 'warning');
-    return;
-  }
-
-  const copies = parseInt(prompt('Berapa jumlah label (copy) yang ingin dicetak untuk SETIAP item terpilih?', '1')) || 1;
-  const ids = Array.from(checkboxes).map(cb => cb.getAttribute('data-id'));
-  const allItems = await KDB.getAll(collectionName);
-  const selectedItems = allItems.filter(item => ids.includes(item.id));
-
-  const perusahaan = await KDB.getSetting('perusahaan', {});
-  const logoHtml = perusahaan.logoData ? '<img src="' + perusahaan.logoData + '" style="height:25px;margin-right:8px;vertical-align:middle">' : '';
-
-  const w = window.open('', '_blank');
-
-  let labelHtml = '';
-  selectedItems.forEach(item => {
-    const singleLabel = '<div class="label-card">'
-      + '<div class="label-header">' + logoHtml + '<span class="comp-name">' + (perusahaan.nama || 'IJEF CORP') + '</span></div>'
-      + '<div class="label-code">' + (item.kode || item.id) + '</div>'
-      + '<div class="label-name">' + (item.nama || '-') + '</div>'
-      + '</div>';
-    for (let i = 0; i < copies; i++) {
-      labelHtml += singleLabel;
-    }
-  });
-
-  const totalLabels = selectedItems.length * copies;
-
-  const css = `
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 10mm; background: #f0f2f5; }
-    .label-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 63mm);
-      gap: 4mm;
-      justify-content: center;
-    }
-    .label-card {
-      background: white;
-      border: 1px solid #1a237e;
-      border-radius: 5px;
-      padding: 3mm;
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      height: 34mm;
-      width: 63mm;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      page-break-inside: avoid;
-      overflow: hidden;
-    }
-    .label-header {
-      font-size: 8pt;
-      font-weight: 800;
-      color: #1a237e;
-      border-bottom: 0.5px solid #eee;
-      padding-bottom: 1mm;
-      margin-bottom: 1mm;
-      text-align: left;
-      display: flex;
-      align-items: center;
-      overflow: hidden;
-      white-space: nowrap;
-    }
-    .comp-name { overflow: hidden; text-overflow: ellipsis; }
-    .label-code {
-      font-family: 'Courier New', monospace;
-      font-size: 14pt;
-      font-weight: 900;
-      color: #000;
-      margin: 1mm 0;
-      letter-spacing: 1px;
-    }
-    .label-name {
-      font-size: 8pt;
-      color: #444;
-      font-weight: 600;
-      line-height: 1.2;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .no-print-btn { text-align: center; margin-bottom: 10mm; }
-    .btn { padding: 10px 20px; background: #1a237e; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
-    @media print {
-      body { background: white; padding: 0; margin: 0; }
-      .no-print-btn { display: none; }
-      .label-card { border: 1pt solid #000; box-shadow: none; }
-      .label-grid { gap: 2mm; }
-      @page { size: A4; margin: 5mm; }
-    }
-  `;
-
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Print Labels</title><style>' + css + '</style></head><body>'
-    + '<div class="no-print-btn"><button class="btn" onclick="window.print()">🖨️ Cetak ' + totalLabels + ' Label (A4)</button></div>'
-    + '<div class="label-grid">' + labelHtml + '</div>'
-    + '</body></html>');
-  w.document.close();
-}
-
-async function printInventoryChecklist(collectionName, checkboxClass) {
-  const checkboxes = document.querySelectorAll('.' + checkboxClass + ':checked');
-  if (checkboxes.length === 0) {
-    showAlert('Pilih item yang ingin dicetak daftarnya!', 'warning');
-    return;
-  }
-
-  const ids = Array.from(checkboxes).map(cb => cb.getAttribute('data-id'));
-  const allItems = await KDB.getAll(collectionName);
-  const selectedItems = allItems.filter(item => ids.includes(item.id));
-
-  const perusahaan = await KDB.getSetting('perusahaan', {});
-  const logoHtml = perusahaan.logoData ? '<img src="' + perusahaan.logoData + '" style="height:40px;margin-right:12px;vertical-align:middle">' : '';
-
-  const w = window.open('', '_blank');
-
-  const rows = selectedItems.map((item, index) => {
-    let sisa = 0;
-    if (collectionName === 'perlengkapan') {
-      sisa = (parseInt(item.awal)||0) + (parseInt(item.beli)||0) - (parseInt(item.pakai)||0);
-    } else {
-      // For ATK, we might need a more complex calculation if it's not pre-calculated,
-      // but for this report we'll show the base stock info.
-      sisa = (parseInt(item.stok)||0) + (parseInt(item.beli)||0) - (parseInt(item.pakai)||0);
-    }
-
-    return '<tr>'
-      + '<td style="text-align:center">' + (index + 1) + '</td>'
-      + '<td style="font-family:monospace">' + (item.kode || '-') + '</td>'
-      + '<td><b>' + (item.nama || '-') + '</b></td>'
-      + '<td>' + (item.satuan || '-') + '</td>'
-      + '<td style="text-align:center">' + sisa + '</td>'
-      + '<td style="width:100px;border-bottom:1px solid #000"></td>'
-      + '<td style="font-size:0.75rem">' + (item.lokasi || item.keterangan || '-') + '</td>'
-      + '</tr>';
-  }).join('');
-
-  const css = `
-    * { box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; }
-    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1a237e; padding-bottom: 10px; margin-bottom: 20px; }
-    .title { font-size: 1.4rem; font-weight: 700; color: #1a237e; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 0.9rem; }
-    th { background: #f5f5f5; font-weight: 700; text-transform: uppercase; font-size: 0.8rem; }
-    .footer { margin-top: 30px; display: flex; justify-content: space-between; }
-    .sig-box { text-align: center; width: 200px; }
-    .sig-line { margin-top: 60px; border-top: 1px solid #000; padding-top: 5px; }
-    @media print {
-      @page { size: A4; margin: 15mm; }
-      .no-print { display: none; }
-    }
-  `;
-
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daftar Cek Inventori</title><style>' + css + '</style></head><body>'
-    + '<div class="header"><div>' + logoHtml + '<span style="font-weight:700;font-size:1.2rem">' + (perusahaan.nama || 'IJEF CORP') + '</span></div>'
-    + '<div style="text-align:right"><div class="title">DAFTAR CEK INVENTORI</div>'
-    + '<div style="font-size:0.85rem">Tanggal: ' + new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'}) + '</div></div></div>'
-    + '<div class="no-print" style="text-align:center;margin-bottom:20px"><button onclick="window.print()" style="padding:10px 20px;background:#1a237e;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600">🖨️ Cetak Daftar Cek</button></div>'
-    + '<table><thead><tr>'
-    + '<th style="width:40px;text-align:center">No</th><th>Kode</th><th>Nama Barang</th><th>Satuan</th><th style="text-align:center">Sistem</th><th>Fisik (Isi)</th><th>Lokasi/Ket</th>'
-    + '</tr></thead><tbody>' + rows + '</tbody></table>'
-    + '<div class="footer"><div class="sig-box">Petugas Pemeriksa<div class="sig-line">Nama & Tanda Tangan</div></div>'
-    + '<div class="sig-box">Mengetahui,<div class="sig-line">Manager Sarpras</div></div></div>'
-    + '</body></html>';
-
-  w.document.write(html);
-  w.document.close();
 }
 
 async function showNotifPanel() {
@@ -16167,3 +16223,341 @@ if ('serviceWorker' in navigator) {
   });
   navigator.serviceWorker.register('/sw.js').catch(function() {});
 }
+
+// ── PORTAL KOMUNIKASI & COLLABORATION ──────────────────────────────────────────
+var _lastRenderedChatCount = 0;
+
+async function renderPortalKomunikasi() {
+  localStorage.setItem('k_last_viewed_chat', new Date().toISOString());
+  // Save/Reset unread count
+  localStorage.setItem('k_unread_chat_count', 0);
+  updateChatBadgeUI();
+
+  const users = await KDB.getUsers();
+  const rawMsgs = await KDB.getAll('chat_messages');
+  // Sort messages by timestamp ascending
+  const msgs = (rawMsgs || []).sort((a,b) => (a.timestamp||'').localeCompare(b.timestamp||''));
+  _lastRenderedChatCount = msgs.length;
+
+  // Render Sidebar (registered users list)
+  let usersHtml = '';
+  users.forEach(function(u) {
+    var initial = (u.nama || u.username || 'U').substring(0,2).toUpperCase();
+    var isMe = u.username === KU.username;
+    usersHtml += '<div class="chat-user-item ' + (isMe ? 'active' : '') + '">'
+      + '<div class="chat-avatar" style="background:' + getAvatarColor(u.username) + '">' + initial + '</div>'
+      + '<div>'
+      + '<div style="font-weight:600;font-size:0.85rem;color:#1e293b">' + (u.nama || u.username) + (isMe ? ' (Anda)' : '') + '</div>'
+      + '<div style="font-size:0.7rem;color:#64748b;text-transform:uppercase">' + u.role + '</div>'
+      + '</div>'
+      + '</div>';
+  });
+
+  // Render Message Bubble List
+  let msgsHtml = '';
+  if (msgs.length === 0) {
+    msgsHtml = '<div style="text-align:center;color:#64748b;margin-top:40px;"><span style="font-size:3rem;display:block;margin-bottom:12px;">💬</span>Belum ada percakapan. Mulai obrolan pertama!</div>';
+  } else {
+    msgs.forEach(function(m) {
+      var isMe = m.sender === KU.username;
+      var initial = (m.senderName || m.sender || 'U').substring(0,2).toUpperCase();
+      var timeStr = formatChatTime(m.timestamp);
+      var roleColor = m.senderRole === 'superadmin' ? '#f43f5e' : m.senderRole === 'admin' ? '#3b82f6' : '#10b981';
+
+      msgsHtml += '<div class="chat-bubble-wrap ' + (isMe ? 'me' : 'other') + '">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;font-size:0.75rem;">'
+        + '<span style="font-weight:700;color:#1e293b">' + (m.senderName || m.sender) + '</span>'
+        + '<span style="background:' + roleColor + ';color:white;padding:1px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;text-transform:uppercase">' + (m.senderRole || 'USER') + '</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;align-items:flex-end;' + (isMe ? 'flex-direction:row-reverse' : '') + '">'
+        + '<div class="chat-avatar" style="width:28px;height:28px;font-size:0.75rem;background:' + getAvatarColor(m.sender) + '">' + initial + '</div>'
+        + '<div class="chat-bubble">' + escapeHTML(m.text) + '</div>'
+        + '</div>'
+        + '<div class="chat-meta">' + timeStr + '</div>'
+        + '</div>';
+    });
+  }
+
+  // Quick Action Buttons
+  const quickTemplates = [
+    "Mohon segera direview 👍",
+    "Laporan keuangan sudah beres",
+    "Ada kendala input saldo awal",
+    "Done! ✅",
+    "Siap, laksanakan!"
+  ];
+  let quickHtml = quickTemplates.map(function(t) {
+    return '<button class="btn btn-sm" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;padding:4px 10px;border-radius:6px;font-size:0.75rem;cursor:pointer" onclick="useQuickChatTemplate(\'' + t.replace(/'/g, "\\'") + '\')">' + t + '</button>';
+  }).join('');
+
+  const html = '<div class="page-title">💬 Portal Komunikasi Antar User</div>'
+    + '<p class="text-muted" style="margin-top:-10px;margin-bottom:15px">Gunakan portal ini untuk berdiskusi, memberikan instruksi, atau berkoordinasi langsung dengan tim keuangan secara real-time.</p>'
+    + '<div class="chat-container">'
+    + '  <div class="chat-sidebar">'
+    + '    <div style="padding:16px;font-weight:700;border-bottom:1px solid #e2e8f0;background:white;font-size:0.85rem;color:#1a237e">👥 ANGGOTA AKTIF</div>'
+    + '    <div style="flex:1;overflow-y:auto">' + usersHtml + '</div>'
+    + '  </div>'
+    + '  <div class="chat-main">'
+    + '    <div id="chat-messages-container" class="chat-msg-list">' + msgsHtml + '</div>'
+    + '    <div style="padding:8px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    + '      <span style="font-size:0.72rem;color:#64748b;font-weight:600">Quick Reply:</span>' + quickHtml
+    + '    </div>'
+    + '    <div class="chat-input-area">'
+    + '      <input type="text" id="chat-input" placeholder="Tulis pesan obrolan di sini... (Tekan Enter untuk mengirim)" style="flex:1;padding:12px 16px;border:1.5px solid #cbd5e1;border-radius:12px;font-size:0.9rem" onkeydown="if(event.key===\'Enter\')sendPortalChatMessage()">'
+    + '      <button class="btn" style="background:#1a237e;color:white;border:none;padding:12px 24px;border-radius:12px;font-weight:600;cursor:pointer" onclick="sendPortalChatMessage()">Kirim 📤</button>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>';
+
+  setTimeout(function() {
+    var c = document.getElementById('chat-messages-container');
+    if (c) c.scrollTop = c.scrollHeight;
+  }, 100);
+
+  return html;
+}
+
+function useQuickChatTemplate(text) {
+  var el = document.getElementById('chat-input');
+  if (el) {
+    el.value = text;
+    el.focus();
+  }
+}
+
+async function sendPortalChatMessage() {
+  var input = document.getElementById('chat-input');
+  if (!input) return;
+  var txt = input.value.trim();
+  if (!txt) return;
+
+  var msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  var msg = {
+    id: msgId,
+    sender: KU.username,
+    senderName: KU.nama || KU.username,
+    senderRole: KU.role,
+    text: txt,
+    timestamp: new Date().toISOString()
+  };
+
+  input.value = '';
+  await KDB.save('chat_messages', msgId, msg);
+  
+  // Re-render local view
+  if (currentSection === 'portal-komunikasi') {
+    navigate('portal-komunikasi');
+  }
+}
+
+// ── PORTAL KOMUNIKASI WIDGET FOR DASHBOARD ──────────────────────────────────────────
+async function renderPortalKomunikasiWidget() {
+  const rawMsgs = await KDB.getAll('chat_messages');
+  const msgs = (rawMsgs || []).sort((a,b) => (a.timestamp||'').localeCompare(b.timestamp||'')).slice(-3);
+
+  let msgsHtml = '';
+  if (msgs.length === 0) {
+    msgsHtml = '<div style="text-align:center;color:#64748b;padding:20px 0;font-size:0.85rem">Belum ada obrolan terbaru. Mulai diskusi pertama Anda!</div>';
+  } else {
+    msgs.forEach(function(m) {
+      var isMe = m.sender === KU.username;
+      var initial = (m.senderName || m.sender || 'U').substring(0,2).toUpperCase();
+      var roleColor = m.senderRole === 'superadmin' ? '#f43f5e' : m.senderRole === 'admin' ? '#3b82f6' : '#10b981';
+      var timeStr = formatChatTime(m.timestamp);
+
+      msgsHtml += '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f1f5f9">'
+        + '  <div class="chat-avatar" style="width:28px;height:28px;font-size:0.7rem;background:' + getAvatarColor(m.sender) + '">' + initial + '</div>'
+        + '  <div style="flex:1;min-width:0">'
+        + '    <div style="display:flex;align-items:center;gap:6px;font-size:0.75rem;margin-bottom:1px">'
+        + '      <span style="font-weight:700;color:#1e293b">' + (m.senderName || m.sender) + '</span>'
+        + '      <span style="background:' + roleColor + ';color:white;padding:1px 4px;border-radius:3px;font-size:0.58rem;font-weight:700;text-transform:uppercase">' + (m.senderRole || 'USER') + '</span>'
+        + '      <span style="color:#94a3b8;font-size:0.65rem;margin-left:auto">' + timeStr + '</span>'
+        + '    </div>'
+        + '    <div style="font-size:0.8rem;color:#475569;word-break:break-word">' + escapeHTML(m.text) + '</div>'
+        + '  </div>'
+        + '</div>';
+    });
+  }
+
+  const widgetHtml = '  <div class="card" style="margin-top:16px">'
+    + '    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">'
+    + '      <h2 style="display:flex;align-items:center;gap:8px">💬 Portal Komunikasi Antar User</h2>'
+    + '      <button class="btn btn-sm btn-outline" onclick="navigate(\'portal-komunikasi\')">Buka Portal Obrolan</button>'
+    + '    </div>'
+    + '    <div style="display:flex;flex-direction:column;gap:8px">'
+    + '      <div style="background:#f8fafc;border-radius:12px;padding:12px;border:1px solid #e2e8f0;max-height:220px;overflow-y:auto">' + msgsHtml + '</div>'
+    + '      <div style="display:flex;gap:10px;align-items:center;margin-top:6px">'
+    + '        <input type="text" id="dash-chat-input" placeholder="Ketik pesan singkat ke beranda... (Tekan Enter untuk kirim)" style="flex:1;padding:10px 14px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:0.82rem" onkeydown="if(event.key===\'Enter\')sendDashChatMessage()">'
+    + '        <button class="btn" style="background:#1a237e;color:white;border:none;padding:10px 18px;border-radius:10px;font-weight:600;font-size:0.8rem;cursor:pointer" onclick="sendDashChatMessage()">Kirim 🚀</button>'
+    + '      </div>'
+    + '    </div>'
+    + '  </div>';
+  return widgetHtml;
+}
+
+async function sendDashChatMessage() {
+  var input = document.getElementById('dash-chat-input');
+  if (!input) return;
+  var txt = input.value.trim();
+  if (!txt) return;
+
+  var msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  var msg = {
+    id: msgId,
+    sender: KU.username,
+    senderName: KU.nama || KU.username,
+    senderRole: KU.role,
+    text: txt,
+    timestamp: new Date().toISOString()
+  };
+
+  input.value = '';
+  await KDB.save('chat_messages', msgId, msg);
+  
+  // Re-render dashboard
+  if (currentSection === 'lap-dashboard') {
+    navigate('lap-dashboard');
+  }
+}
+
+// ── TOAST NOTIFICATIONS TRIGGER ──────────────────────────────────────────
+function showChatToastNotification(messages) {
+  if (!messages || messages.length === 0) return;
+  // Sort descending to get latest
+  const sorted = messages.sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''));
+  const latest = sorted[0];
+
+  // Don't show toast if it is our own message
+  if (latest.sender === KU.username) return;
+
+  // Don't show toast if we are already in the portal-komunikasi section
+  if (currentSection === 'portal-komunikasi') return;
+
+  // Increment unread count
+  var count = parseInt(localStorage.getItem('k_unread_chat_count') || '0');
+  count++;
+  localStorage.setItem('k_unread_chat_count', count);
+  updateChatBadgeUI();
+
+  // Create Toast element
+  var container = document.getElementById('chat-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'chat-toast-container';
+    document.body.appendChild(container);
+  }
+
+  // Play a gentle notification beep
+  try {
+    var context = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = context.createOscillator();
+    var gain = context.createGain();
+    osc.connect(gain);
+    gain.connect(context.destination);
+    osc.frequency.setValueAtTime(587.33, context.currentTime); // D5
+    gain.gain.setValueAtTime(0.08, context.currentTime);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.00001, context.currentTime + 0.3);
+    osc.stop(context.currentTime + 0.3);
+  } catch(e) {}
+
+  var toast = document.createElement('div');
+  toast.className = 'chat-toast';
+  toast.onclick = function() {
+    navigate('portal-komunikasi');
+    toast.remove();
+  };
+
+  var initial = (latest.senderName || latest.sender || 'U').substring(0,2).toUpperCase();
+  toast.innerHTML = '  <div class="chat-avatar" style="background:' + getAvatarColor(latest.sender) + ';width:32px;height:32px;font-size:0.75rem">' + initial + '</div>'
+    + '  <div style="flex:1;min-width:0">'
+    + '    <div style="font-weight:700;font-size:0.78rem;color:#1a237e;display:flex;align-items:center;gap:6px">'
+    + '      Pesan Baru'
+    + '      <span style="background:#f43f5e;color:white;border-radius:10px;width:8px;height:8px;display:inline-block"></span>'
+    + '    </div>'
+    + '    <div style="font-weight:600;font-size:0.75rem;color:#334155;margin-top:2px">' + (latest.senderName || latest.sender) + '</div>'
+    + '    <div style="font-size:0.72rem;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">' + latest.text + '</div>'
+    + '  </div>'
+    + '  <div style="font-size:0.8rem;color:#94a3b8">✕</div>';
+
+  container.appendChild(toast);
+
+  // Auto remove after 5 seconds
+  setTimeout(function() {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(120%)';
+    setTimeout(function() { toast.remove(); }, 350);
+  }, 5000);
+}
+
+function updateChatBadgeUI() {
+  const count = parseInt(localStorage.getItem('k_unread_chat_count') || '0');
+  
+  // Update badge on sidebar nav item if exists
+  const chatNavItem = document.getElementById('nav-portal-komunikasi');
+  if (chatNavItem) {
+    let badge = chatNavItem.querySelector('.chat-unread-badge');
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'chat-unread-badge';
+        badge.style.cssText = 'background:#f43f5e;color:white;border-radius:10px;padding:2px 6px;font-size:0.65rem;font-weight:700;margin-left:auto';
+        chatNavItem.appendChild(badge);
+      }
+      badge.textContent = count;
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+
+  // Update header notifications count or badge
+  const headerNotifBadge = document.getElementById('notif-badge');
+  if (headerNotifBadge) {
+    if (count > 0) {
+      headerNotifBadge.style.display = 'flex';
+      headerNotifBadge.textContent = count;
+    } else {
+      headerNotifBadge.style.display = 'none';
+    }
+  }
+}
+
+// ── UTILS FOR PORTAL KOMUNIKASI ──────────────────────────────────────────
+function getAvatarColor(username) {
+  const colors = ['#1a237e', '#1565c0', '#2e7d32', '#c62828', '#e65100', '#6a1b9a', '#00838f', '#37474f'];
+  let hash = 0;
+  for (let i = 0; i < (username || '').length; i++) {
+    hash = (username || '').charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function formatChatTime(isoStr) {
+  if (!isoStr) return '';
+  var date = new Date(isoStr);
+  var now = new Date();
+  var diffMs = now - date;
+  var diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Baru saja';
+  if (diffMin < 60) return diffMin + ' m lalu';
+  
+  var diffHrs = Math.floor(diffMin / 60);
+  if (diffHrs < 24) {
+    return date.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'});
+  }
+  return date.toLocaleDateString('id-ID', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+}
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+// Global update hook registered on window
+window.onKDBUpdate = function(col, items) {
+  if (col === 'chat_messages') {
+    // If we are in active view of portal-komunikasi, navigate handles update.
+    // If not, we trigger the Toast notification!
+    showChatToastNotification(items);
+  }
+};

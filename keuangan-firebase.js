@@ -335,8 +335,13 @@ function _kSubscribeCollection(col, onChange) {
 function startRealtimeSync() {
   if (_kRealtimeSyncActive || !kfbReady) return;
   _kRealtimeSyncActive = true;
-  var collections = ['jurnal', 'permohonan', 'danamasuk', 'inventori_atk', 'atk_log', 'settings', 'utangpiutang'];
+  var collections = ['jurnal', 'permohonan', 'danamasuk', 'inventori_atk', 'atk_log', 'settings', 'utangpiutang', 'chat_messages'];
   var onCollectionUpdate = function(col, items) {
+    // Invoke app-level update hook if registered
+    if (typeof window.onKDBUpdate === 'function') {
+      window.onKDBUpdate(col, items);
+    }
+    
     // Re-render current section if it exists
     if (typeof currentSection !== 'undefined' && currentSection && typeof navigate === 'function') {
       // Check if a modal is currently open - defer navigate to avoid UI conflicts

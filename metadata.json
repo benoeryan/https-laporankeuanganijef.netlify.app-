@@ -1,0 +1,10 @@
+{
+  "name": "Sistem Keuangan IJEF Corp",
+  "description": "Sistem Manajemen Keuangan terintegrasi untuk IJEF Corp dengan analisis laporan keuangan naratif berbasis AI.",
+  "requestFramePermissions": [
+    "notifications"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
