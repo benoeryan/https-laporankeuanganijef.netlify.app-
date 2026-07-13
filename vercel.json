@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "outputDirectory": ".",
   "rewrites": [
     { "source": "/.netlify/functions/generateFinancialInsight", "destination": "/api/generateFinancialInsight" },
     { "source": "/.netlify/functions/gemini", "destination": "/api/gemini" },
