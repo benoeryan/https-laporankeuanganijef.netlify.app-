@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/.netlify/functions/generateFinancialInsight", "destination": "/api/generateFinancialInsight" },
+    { "source": "/.netlify/functions/gemini", "destination": "/api/gemini" },
+    { "source": "/netlify/functions/generateFinancialInsight", "destination": "/api/generateFinancialInsight" },
+    { "source": "/netlify/functions/gemini", "destination": "/api/gemini" },
+    { "source": "/((?!api|icons|netlify|.*\\..*)$)", "destination": "/index.html" }
+  ]
+}
