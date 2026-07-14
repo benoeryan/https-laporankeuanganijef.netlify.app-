@@ -16297,6 +16297,17 @@ async function renderPortalKomunikasi() {
       var timeStr = formatChatTime(m.timestamp);
       var roleColor = m.senderRole === 'superadmin' ? '#f43f5e' : m.senderRole === 'admin' ? '#3b82f6' : '#10b981';
 
+      var attachmentHtml = '';
+      if (m.fileData) {
+        if (m.fileType && m.fileType.startsWith('image/')) {
+          attachmentHtml = '<div style="margin-top:8px"><img src="' + m.fileData + '" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="window.open(\'' + m.fileData + '\')"></div>';
+        } else {
+          var fileName = m.fileName || 'Lampiran';
+          attachmentHtml = '<div style="margin-top:8px"><a href="' + m.fileData + '" download="' + fileName + '" style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(0,0,0,0.05);border-radius:8px;text-decoration:none;color:inherit;font-weight:600;font-size:0.8rem">'
+            + '<span>📎</span> ' + fileName + '</a></div>';
+        }
+      }
+
       msgsHtml += '<div class="chat-bubble-wrap ' + (isMe ? 'me' : 'other') + '">'
         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;font-size:0.75rem;">'
         + '<span style="font-weight:700;color:#1e293b">' + (m.senderName || m.sender) + '</span>'
@@ -16304,7 +16315,7 @@ async function renderPortalKomunikasi() {
         + '</div>'
         + '<div style="display:flex;gap:8px;align-items:flex-end;' + (isMe ? 'flex-direction:row-reverse' : '') + '">'
         + '<div class="chat-avatar" style="width:28px;height:28px;font-size:0.75rem;background:' + getAvatarColor(m.sender) + '">' + initial + '</div>'
-        + '<div class="chat-bubble">' + escapeHTML(m.text) + '</div>'
+        + '<div class="chat-bubble">' + (m.text ? escapeHTML(m.text) : '') + attachmentHtml + '</div>'
         + '</div>'
         + '<div class="chat-meta">' + timeStr + '</div>'
         + '</div>';
@@ -16335,8 +16346,10 @@ async function renderPortalKomunikasi() {
     + '    <div style="padding:8px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     + '      <span style="font-size:0.72rem;color:#64748b;font-weight:600">Quick Reply:</span>' + quickHtml
     + '    </div>'
-    + '    <div class="chat-input-area">'
-    + '      <input type="text" id="chat-input" placeholder="Tulis pesan obrolan di sini... (Tekan Enter untuk mengirim)" style="flex:1;padding:12px 16px;border:1.5px solid #cbd5e1;border-radius:12px;font-size:0.9rem" onkeydown="if(event.key===\'Enter\')sendPortalChatMessage()">'
+    + '    <div class="chat-input-area" style="position:relative">'
+    + '      <input type="file" id="chat-file-input" style="display:none" onchange="handleChatFileChange(this)">'
+    + '      <button class="btn btn-outline" style="padding:10px;border-radius:12px;border-color:#cbd5e1" onclick="triggerChatFileUpload()" title="Unggah File">📎</button>'
+    + '      <input type="text" id="chat-input" placeholder="Tulis pesan atau tempel (Paste) gambar di sini..." style="flex:1;padding:12px 16px;border:1.5px solid #cbd5e1;border-radius:12px;font-size:0.9rem" onkeydown="if(event.key===\'Enter\')sendPortalChatMessage()" onpaste="handleChatPaste(event)">'
     + '      <button class="btn" style="background:#1a237e;color:white;border:none;padding:12px 24px;border-radius:12px;font-weight:600;cursor:pointer" onclick="sendPortalChatMessage()">Kirim 📤</button>'
     + '    </div>'
     + '  </div>'
@@ -16358,12 +16371,57 @@ function useQuickChatTemplate(text) {
   }
 }
 
-async function sendPortalChatMessage() {
-  var input = document.getElementById('chat-input');
-  if (!input) return;
-  var txt = input.value.trim();
-  if (!txt) return;
+function triggerChatFileUpload() {
+  var el = document.getElementById('chat-file-input');
+  if (el) el.click();
+}
 
+function handleChatFileChange(input) {
+  if (input.files && input.files[0]) {
+    processChatFile(input.files[0]);
+    input.value = '';
+  }
+}
+
+function handleChatPaste(event) {
+  var items = (event.clipboardData || event.originalEvent.clipboardData).items;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].kind === 'file') {
+      var blob = items[i].getAsFile();
+      processChatFile(blob);
+    }
+  }
+}
+
+function processChatFile(file) {
+  if (file.size > 800000) {
+    showAlert('File terlalu besar! Maksimal 800KB untuk menjaga performa chat.', 'danger');
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var base64Data = e.target.result;
+    // Ask for optional caption
+    var caption = prompt('Tambahkan keterangan untuk file ini (opsional):', '');
+    if (caption === null) return; // User cancelled
+
+    sendPortalChatMessage(caption, {
+      data: base64Data,
+      name: file.name,
+      type: file.type
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
+async function sendPortalChatMessage(overrideText, fileObj) {
+  var input = document.getElementById('chat-input');
+  var txt = overrideText !== undefined ? overrideText : (input ? input.value.trim() : '');
+
+  if (!txt && !fileObj) return;
+
+  showLoading(true);
   var msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
   var msg = {
     id: msgId,
@@ -16374,9 +16432,17 @@ async function sendPortalChatMessage() {
     timestamp: new Date().toISOString()
   };
 
-  input.value = '';
+  if (fileObj) {
+    msg.fileData = fileObj.data;
+    msg.fileName = fileObj.name;
+    msg.fileType = fileObj.type;
+  }
+
+  if (input && overrideText === undefined) input.value = '';
+
   await KDB.save('chat_messages', msgId, msg);
-  
+  showLoading(false);
+
   // Re-render local view
   if (currentSection === 'portal-komunikasi') {
     navigate('portal-komunikasi');
@@ -16398,6 +16464,7 @@ async function renderPortalKomunikasiWidget() {
       var roleColor = m.senderRole === 'superadmin' ? '#f43f5e' : m.senderRole === 'admin' ? '#3b82f6' : '#10b981';
       var timeStr = formatChatTime(m.timestamp);
 
+      var attachmentText = m.fileData ? (m.fileType && m.fileType.startsWith('image/') ? ' [📷 Gambar]' : ' [📎 File]') : '';
       msgsHtml += '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f1f5f9">'
         + '  <div class="chat-avatar" style="width:28px;height:28px;font-size:0.7rem;background:' + getAvatarColor(m.sender) + '">' + initial + '</div>'
         + '  <div style="flex:1;min-width:0">'
@@ -16406,7 +16473,7 @@ async function renderPortalKomunikasiWidget() {
         + '      <span style="background:' + roleColor + ';color:white;padding:1px 4px;border-radius:3px;font-size:0.58rem;font-weight:700;text-transform:uppercase">' + (m.senderRole || 'USER') + '</span>'
         + '      <span style="color:#94a3b8;font-size:0.65rem;margin-left:auto">' + timeStr + '</span>'
         + '    </div>'
-        + '    <div style="font-size:0.8rem;color:#475569;word-break:break-word">' + escapeHTML(m.text) + '</div>'
+        + '    <div style="font-size:0.8rem;color:#475569;word-break:break-word">' + (m.text ? escapeHTML(m.text) : '') + '<i style="color:#94a3b8">' + attachmentText + '</i>' + '</div>'
         + '  </div>'
         + '</div>';
     });
