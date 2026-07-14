@@ -335,7 +335,7 @@ function _kSubscribeCollection(col, onChange) {
 function startRealtimeSync() {
   if (_kRealtimeSyncActive || !kfbReady) return;
   _kRealtimeSyncActive = true;
-  var collections = ['jurnal', 'permohonan', 'danamasuk', 'inventori_atk', 'atk_log', 'settings', 'utangpiutang', 'chat_messages'];
+  var collections = ['jurnal', 'permohonan', 'danamasuk', 'inventori_atk', 'atk_log', 'settings', 'utangpiutang', 'chat_messages', 'notifikasi'];
   var onCollectionUpdate = function(col, items) {
     // Invoke app-level update hook if registered
     if (typeof window.onKDBUpdate === 'function') {

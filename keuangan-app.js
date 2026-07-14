@@ -15786,6 +15786,36 @@ async function kirimEmailNotifikasi(subjek, pesan, notifType) {
   }
 }
 
+function playNotificationSound() {
+  try {
+    // Standard notification ping sound
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audio.volume = 0.5;
+    audio.play().catch(function(e) {
+      playBeepFallback();
+    });
+  } catch(e) {
+    playBeepFallback();
+  }
+}
+
+function playBeepFallback() {
+  try {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.connect(gain);
+    gain.connect(context.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, context.currentTime);
+    gain.gain.setValueAtTime(0, context.currentTime);
+    gain.gain.linearRampToValueAtTime(0.1, context.currentTime + 0.05);
+    osc.start(context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.5);
+    osc.stop(context.currentTime + 0.5);
+  } catch(e) {}
+}
+
 async function kirimNotifikasi(judul, pesan, icon) {
   // 1. Simpan ke Firebase sebagai in-app notification
   var notifId = genId('NOTIF');
@@ -15953,6 +15983,7 @@ async function renderNotifSettings() {
     + '<button class="btn btn-primary btn-sm" onclick="simpanEmailJSConfig()">💾 Simpan Konfigurasi EmailJS</button>'
     + '<button class="btn btn-outline btn-sm" onclick="testEmailNotifikasi()">📧 Test Kirim Email</button>'
     + '<button class="btn btn-outline btn-sm" onclick="testNotifikasi()">🔔 Test Push Notif</button>'
+    + '<button class="btn btn-outline btn-sm" onclick="playNotificationSound()">🔊 Test Suara</button>'
     + '</div>'
     + '<div id="notif-test-result" class="mt-8"></div>'
     + '</div></div>';
@@ -16449,19 +16480,8 @@ function showChatToastNotification(messages) {
     document.body.appendChild(container);
   }
 
-  // Play a gentle notification beep
-  try {
-    var context = new (window.AudioContext || window.webkitAudioContext)();
-    var osc = context.createOscillator();
-    var gain = context.createGain();
-    osc.connect(gain);
-    gain.connect(context.destination);
-    osc.frequency.setValueAtTime(587.33, context.currentTime); // D5
-    gain.gain.setValueAtTime(0.08, context.currentTime);
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.00001, context.currentTime + 0.3);
-    osc.stop(context.currentTime + 0.3);
-  } catch(e) {}
+  // Play notification sound
+  playNotificationSound();
 
   var toast = document.createElement('div');
   toast.className = 'chat-toast';
@@ -16555,11 +16575,31 @@ function escapeHTML(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+var _lastProcessedNotifId = null;
+function showNotifToast(notifikasi) {
+  if (!notifikasi || notifikasi.length === 0) return;
+  var sorted = notifikasi.slice().sort(function(a,b) { return (b.waktu||'').localeCompare(a.waktu||''); });
+  var latest = sorted[0];
+
+  if (!_lastProcessedNotifId) {
+    _lastProcessedNotifId = latest.id;
+    return;
+  }
+
+  if (latest.id === _lastProcessedNotifId) return;
+  _lastProcessedNotifId = latest.id;
+  if (KU && latest.createdBy === KU.username) return;
+
+  playNotificationSound();
+  showAlert('🔔 ' + (latest.judul || 'Notifikasi') + ': ' + (latest.pesan || ''), 'info', 5000);
+  updateNotifBadge();
+}
+
 // Global update hook registered on window
 window.onKDBUpdate = function(col, items) {
   if (col === 'chat_messages') {
-    // If we are in active view of portal-komunikasi, navigate handles update.
-    // If not, we trigger the Toast notification!
     showChatToastNotification(items);
+  } else if (col === 'notifikasi') {
+    showNotifToast(items);
   }
 };
