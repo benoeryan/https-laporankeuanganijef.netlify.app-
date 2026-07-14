@@ -374,8 +374,33 @@ function stopRealtimeSync() {
 }
 
 function _klget(key, def) {
-  try { return JSON.parse(localStorage.getItem(key)) ?? def; } catch(e) { return def; }
+  try {
+    var val = JSON.parse(localStorage.getItem(key));
+    return (val !== null && val !== undefined) ? val : def;
+  } catch(e) { return def; }
 }
 function _klset(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+  try {
+    var str = JSON.stringify(val);
+    localStorage.setItem(key, str);
+  } catch(e) {
+    console.warn('[KFirebase] LocalStorage Error:', e.message);
+    if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+      // Clear heavy caches and retry
+      console.warn('[KFirebase] Quota exceeded, clearing heavy caches...');
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('k_') === 0 && k.indexOf('_all') > 0) {
+          localStorage.removeItem(k);
+        }
+      }
+      try { localStorage.setItem(key, JSON.stringify(val)); } catch(e2) {
+        console.error('[KFirebase] Retry failed after clearing cache');
+      }
+    }
+  }
 }
+
+// Global safe storage helper
+window.kSetItem = _klset;
+window.kGetItem = _klget;

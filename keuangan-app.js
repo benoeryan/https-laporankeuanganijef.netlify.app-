@@ -88,8 +88,10 @@ const MENU = [
   ]},
   { group: 'Bantuan', icon: '❓', items: [
     { id: 'bantuan', label: 'Cara Penggunaan', icon: '📖', minRole: 'viewer' },
-    { id: 'portal-komunikasi', label: 'Portal Komunikasi', icon: '💬', minRole: 'viewer' },
     { id: 'ai-assistant', label: 'AI Assistant', icon: '🤖', minRole: 'viewer' },
+  ]},
+  { group: 'Komunikasi', icon: '💬', items: [
+    { id: 'portal-komunikasi', label: 'Portal Komunikasi', icon: '💬', minRole: 'viewer' },
   ]},
   { group: 'Admin', icon: '🔑', items: [
     { id: 'admin-users',  label: 'Manajemen User',    icon: '👤', minRole: 'superadmin' },
@@ -941,7 +943,7 @@ function buildContent() {
 
 let currentSection = '';
 function navigate(id) {
-  const allItems = MENU.flatMap(function(g) { return g.items; });
+  const allItems = MENU.reduce(function(acc, g) { return acc.concat(g.items); }, []);
   const menuItem = allItems.find(function(i) { return i.id === id; });
   if (!hasRole(menuItem ? menuItem.minRole : 'viewer')) return;
   document.querySelectorAll('.sidebar-item').forEach(function(el) { el.classList.remove('active'); });
@@ -16228,9 +16230,9 @@ if ('serviceWorker' in navigator) {
 var _lastRenderedChatCount = 0;
 
 async function renderPortalKomunikasi() {
-  localStorage.setItem('k_last_viewed_chat', new Date().toISOString());
+  _klset('k_last_viewed_chat', new Date().toISOString());
   // Save/Reset unread count
-  localStorage.setItem('k_unread_chat_count', 0);
+  _klset('k_unread_chat_count', 0);
   updateChatBadgeUI();
 
   const users = await KDB.getUsers();
@@ -16434,9 +16436,9 @@ function showChatToastNotification(messages) {
   if (currentSection === 'portal-komunikasi') return;
 
   // Increment unread count
-  var count = parseInt(localStorage.getItem('k_unread_chat_count') || '0');
+  var count = parseInt(_klget('k_unread_chat_count', '0')) || 0;
   count++;
-  localStorage.setItem('k_unread_chat_count', count);
+  _klset('k_unread_chat_count', count);
   updateChatBadgeUI();
 
   // Create Toast element
@@ -16491,7 +16493,7 @@ function showChatToastNotification(messages) {
 }
 
 function updateChatBadgeUI() {
-  const count = parseInt(localStorage.getItem('k_unread_chat_count') || '0');
+  const count = parseInt(_klget('k_unread_chat_count', '0')) || 0;
   
   // Update badge on sidebar nav item if exists
   const chatNavItem = document.getElementById('nav-portal-komunikasi');
