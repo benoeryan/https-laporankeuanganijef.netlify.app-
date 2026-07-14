@@ -1003,7 +1003,7 @@ async function renderSection(id) {
   showLoading(true);
   try {
     switch(id) {
-      case 'lap-dashboard':       el.innerHTML = await renderDashboard(); startDashAutoRefresh(); setTimeout(function(){ renderAIInsightSection(); }, 100); break;
+      case 'lap-dashboard':       el.innerHTML = await renderDashboard(); startDashAutoRefresh(); setTimeout(function(){ renderAIInsightSection(); window.scrollTo(0,0); }, 100); break;
       case 'setup-perusahaan':    el.innerHTML = await renderSetupPerusahaan(); break;
       case 'setup-akun':          el.innerHTML = await renderSetupAkun(); break;
       case 'setup-mitra':         el.innerHTML = await renderSetupMitra(); break;
