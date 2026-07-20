@@ -344,6 +344,10 @@ function startRealtimeSync() {
     
     // Re-render current section if it exists
     if (typeof currentSection !== 'undefined' && currentSection && typeof navigate === 'function') {
+      // PENTING: Jangan refresh halaman (navigate) jika yang update adalah chat_messages
+      // agar input chat user tidak hilang. UI chat diupdate secara parsial via onKDBUpdate.
+      if (col === 'chat_messages') return;
+
       // Check if a modal is currently open - defer navigate to avoid UI conflicts
       var modalOverlay = document.getElementById('modal-overlay');
       if (modalOverlay && modalOverlay.classList.contains('open')) {

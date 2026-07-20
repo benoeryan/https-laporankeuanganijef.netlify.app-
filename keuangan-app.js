@@ -23,6 +23,7 @@ const DEFAULT_APPROVERS = [
 
 // ===== STATE =====
 let KU = null;
+var _lastProcessedChatId = null;
 
 function hasRole(minRole) {
   if (!KU) return false;
@@ -942,7 +943,25 @@ function buildContent() {
 }
 
 let currentSection = '';
+let navHistory = [];
+
 function navigate(id) {
+  // Simpan history jika id berbeda dengan yang terakhir
+  if (navHistory.length === 0 || navHistory[navHistory.length - 1] !== id) {
+    // Jangan tumpuk dashboard terus menerus
+    if (id === 'lap-dashboard') {
+      navHistory = ['lap-dashboard'];
+    } else {
+      navHistory.push(id);
+    }
+  }
+
+  // Kontrol tombol back
+  const btnBack = document.getElementById('btn-back');
+  if (btnBack) {
+    btnBack.style.display = (id === 'lap-dashboard') ? 'none' : 'inline-block';
+  }
+
   const allItems = MENU.reduce(function(acc, g) { return acc.concat(g.items); }, []);
   const menuItem = allItems.find(function(i) { return i.id === id; });
   if (!hasRole(menuItem ? menuItem.minRole : 'viewer')) return;
@@ -4587,7 +4606,7 @@ async function renderBukuBesar() {
       + '<div class="fw-bold ' + saldoCls + '">Saldo: ' + fmtRp(Math.abs(entry.saldo)) + '</div></div>'
       + '<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Ref</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Saldo</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }).join('');
-  return '<div class="page-title">📚 Buku Besar</div>'
+  return renderPageHeader('📚 Buku Besar')
     + '<div class="card"><div class="card-header"><h2>Filter Akun</h2></div>'
     + '<select onchange="filterBukuBesar(this.value)" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:0.85rem;min-width:250px"><option value="">-- Semua Akun --</option>' + akunSelect + '</select></div>'
     + '<div id="bb-content">' + (akunWithData.length ? cards : '<div class="empty-state"><span class="icon">📚</span>Belum ada data jurnal</div>') + '</div>';
@@ -5591,7 +5610,7 @@ async function renderForecastVsActual() {
     + '<button id="fva-tab-yearly" style="' + tabBtnStyle + ';background:#e0e0e0;color:#333" onclick="switchForecastVsActualPeriod(\'yearly\')">Tahunan</button>'
     + '</div>';
 
-  return '<div class="page-title">\u2696\uFE0F Forecast vs Actual</div>'
+  return renderPageHeader('⚖️ Forecast vs Actual')
     + '<div style="font-size:0.82rem;color:#555;margin:-8px 0 12px 0">Periode perbandingan: <b>' + windowLabel + '</b> (6 bulan ke depan)</div>'
     + proyeksiSaldoHtml
     + '<div class="stats-row">'
@@ -5898,7 +5917,7 @@ async function renderLabaRugi() {
       return '<tr><td style="padding-left:24px">' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp(getBalance(a)) + '</td></tr>';
     }).join('');
   }
-  return '<div class="page-title">📊 Laporan Laba Rugi</div>'
+  return renderPageHeader('📊 Laporan Laba Rugi')
     + narrative
     + '<div class="card"><div class="card-header"><h2>Laporan Laba Rugi — ' + (perusahaan.nama||'IJEF Corp') + '</h2>'
     + '<button class="btn btn-sm btn-info no-print" onclick="window.print()">🖨️ Print</button></div>'
@@ -6063,7 +6082,7 @@ async function renderNeraca() {
     + '<div><div class="fw-bold" style="margin-bottom:4px;font-size:0.85rem">Analisis Solvabilitas:</div><p style="font-size:0.85rem;line-height:1.6;color:#333">' + solvabilitasText + '</p></div>'
     + '</div></div>';
 
-  return '<div class="page-title">⚖️ Neraca</div>'
+  return renderPageHeader('⚖️ Neraca')
     + neracaNarrative
     + '<div class="card"><div class="card-header"><h2>Neraca — ' + (perusahaan.nama||'IJEF Corp') + '</h2>'
     + '<button class="btn btn-sm btn-info no-print" onclick="window.print()">🖨️ Print</button></div>'
@@ -6115,7 +6134,7 @@ async function renderArusKas() {
   const totalKas = operasi + investasi + pendanaan;
   const perusahaan = await KDB.getSetting('perusahaan', {});
   const printHeader = await buildPrintHeader(perusahaan, 'ARUS KAS', perusahaan.periode||new Date().getFullYear());
-  return '<div class="page-title">🌊 Laporan Arus Kas</div>'
+  return renderPageHeader('🌊 Laporan Arus Kas')
     + '<div class="card">' + printHeader + '<div class="card-header"><h2>Arus Kas — ' + (perusahaan.nama||'IJEF Corp') + '</h2>'
     + '<button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
     + '<div class="table-wrap"><table><tbody>'
@@ -6167,7 +6186,7 @@ async function renderNeracaLajur() {
     + '<td class="text-right">' + fmtRp(totAdjD) + '</td><td class="text-right">' + fmtRp(totAdjK) + '</td>'
     + '<td class="text-right">' + fmtRp(totND) + '</td><td class="text-right">' + fmtRp(totNK) + '</td>'
     + '<td class="text-right">' + fmtRp(totPendapatan) + '</td><td class="text-right">' + fmtRp(totBeban) + '</td></tr>';
-  return '<div class="page-title">📐 Neraca Lajur</div>'
+  return renderPageHeader('📐 Neraca Lajur')
     + '<div class="card"><div class="card-header"><h2>Neraca Lajur — ' + (perusahaan.nama||'IJEF Corp') + '</h2>'
     + '<button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
     + '<div class="table-wrap" style="overflow-x:auto"><table style="min-width:900px"><thead>'
@@ -6195,7 +6214,7 @@ async function renderEkuitas() {
     return '<tr><td>' + a.kode + ' - ' + a.nama + '</td><td class="text-right">' + fmtRp(sal.kredit - sal.debit) + '</td></tr>';
   }).join('');
   const printHeaderEk = await buildPrintHeader(perusahaan, 'LAPORAN EKUITAS', perusahaan.periode||new Date().getFullYear());
-  return '<div class="page-title">🏦 Laporan Ekuitas</div>'
+  return renderPageHeader('🏦 Laporan Ekuitas')
     + '<div class="card">' + printHeaderEk
     + '<div class="card-header"><h2>Laporan Perubahan Ekuitas — ' + (perusahaan.nama||'IJEF Corp') + '</h2>'
     + '<button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button></div>'
@@ -6251,7 +6270,7 @@ async function renderSaldoHariIni() {
       + '<td class="text-right fw-bold ' + (net>=0?'text-green':'text-red') + '">' + fmtRp(net) + '</td>'
       + '<td><span class="badge ' + badgeCls + '">' + badgeText + '</span></td></tr>';
   }).join('');
-  return '<div class="page-title">💵 Posisi Saldo Hari Ini</div>'
+  return renderPageHeader('💵 Posisi Saldo Hari Ini')
     + '<div class="alert alert-info">📅 ' + today_str + '</div>'
     + '<div class="card"><div class="card-header"><h2>Saldo Akun</h2><div style="display:flex;gap:8px"><button class="btn btn-sm btn-info no-print" onclick="window.print()">Print</button>' + (KU.role === 'bod' ? '' : '<button class="btn btn-sm btn-warning no-print" onclick="analisaSelisihSaldo()">🔍 Analisa Selisih</button>') + '</div></div>'
     + '<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Nama Akun</th><th class="text-right">Saldo</th><th>Status</th></tr></thead><tbody>' + rows
@@ -13091,7 +13110,7 @@ async function renderAnalisisNaratif() {
   const kondisiLabaRugi = labaBersih > 0 ? 'LABA' : 'RUGI';
   const kondisiCls = labaBersih > 0 ? 'text-green' : 'text-red';
 
-  const html = '<div class="page-title">📝 Analisis Naratif Keuangan</div>'
+  const html = renderPageHeader('📝 Analisis Naratif Keuangan')
     + '<div class="card no-print"><div class="card-header"><h2>Analisis Naratif Lengkap</h2>'
     + '<button class="btn btn-sm btn-info" onclick="window.print()">🖨️ Print Laporan</button></div>'
     + '<div class="alert alert-info">Laporan ini disusun berdasarkan data jurnal yang telah diinput. Analisis menggunakan metode Umum dan Analisis Rasio Keuangan.</div></div>'
@@ -16522,16 +16541,18 @@ async function sendDashChatMessage() {
 
 // ── TOAST NOTIFICATIONS TRIGGER ──────────────────────────────────────────
 function showChatToastNotification(messages) {
+  if (currentSection === 'portal-komunikasi') return;
   if (!messages || messages.length === 0) return;
+
   // Sort descending to get latest
   const sorted = messages.sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''));
   const latest = sorted[0];
 
+  if (_lastProcessedChatId === latest.id) return;
+  _lastProcessedChatId = latest.id;
+
   // Don't show toast if it is our own message
   if (latest.sender === KU.username) return;
-
-  // Don't show toast if we are already in the portal-komunikasi section
-  if (currentSection === 'portal-komunikasi') return;
 
   // Increment unread count
   var count = parseInt(_klget('k_unread_chat_count', '0')) || 0;
@@ -16662,11 +16683,94 @@ function showNotifToast(notifikasi) {
   updateNotifBadge();
 }
 
+function renderPageHeader(title) {
+  return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">'
+    + '<button class="btn btn-outline btn-sm" onclick="goBack()" style="padding:6px 10px;border-radius:8px">Back</button>'
+    + '<div class="page-title" style="margin-bottom:0">' + title + '</div>'
+    + '</div>';
+}
+
+function goBack() {
+  if (navHistory.length > 1) {
+    navHistory.pop(); // Hapus halaman saat ini
+    const prev = navHistory.pop(); // Ambil halaman sebelumnya
+    navigate(prev);
+  } else {
+    navigate('lap-dashboard');
+  }
+}
+
 // Global update hook registered on window
 window.onKDBUpdate = function(col, items) {
   if (col === 'chat_messages') {
     showChatToastNotification(items);
+    // Jika sedang di halaman chat, update secara parsial
+    if (currentSection === 'portal-komunikasi') {
+      updateChatMessageList(items);
+    }
   } else if (col === 'notifikasi') {
     showNotifToast(items);
   }
 };
+
+/**
+ * Update daftar pesan chat secara parsial tanpa me-render ulang seluruh section.
+ * Ini mencegah input chat yang sedang diketik user hilang.
+ */
+function updateChatMessageList(rawMsgs) {
+  const container = document.getElementById('chat-messages-container');
+  if (!container) return;
+
+  const msgs = (rawMsgs || []).sort((a,b) => (a.timestamp||'').localeCompare(b.timestamp||''));
+
+  // Jika jumlah pesan sama, kemungkinan besar tidak ada pesan baru yang perlu di-render
+  // Tapi untuk keamanan (misal ada edit pesan), kita cek perbandingan sederhana
+  if (msgs.length === _lastRenderedChatCount) return;
+
+  _lastRenderedChatCount = msgs.length;
+
+  let msgsHtml = '';
+  if (msgs.length === 0) {
+    msgsHtml = '<div style="text-align:center;color:#64748b;margin-top:40px;"><span style="font-size:3rem;display:block;margin-bottom:12px;">💬</span>Belum ada percakapan. Mulai obrolan pertama!</div>';
+  } else {
+    msgs.forEach(function(m) {
+      var isMe = m.sender === KU.username;
+      var initial = (m.senderName || m.sender || 'U').substring(0,2).toUpperCase();
+      var timeStr = formatChatTime(m.timestamp);
+      var roleColor = m.senderRole === 'superadmin' ? '#f43f5e' : m.senderRole === 'admin' ? '#3b82f6' : '#10b981';
+
+      var attachmentHtml = '';
+      if (m.fileData) {
+        if (m.fileType && m.fileType.startsWith('image/')) {
+          attachmentHtml = '<div style="margin-top:8px"><img src="' + m.fileData + '" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="window.open(\'' + m.fileData + '\')"></div>';
+        } else {
+          var fileName = m.fileName || 'Lampiran';
+          attachmentHtml = '<div style="margin-top:8px"><a href="' + m.fileData + '" download="' + fileName + '" style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(0,0,0,0.05);border-radius:8px;text-decoration:none;color:inherit;font-weight:600;font-size:0.8rem">'
+            + '<span>📎</span> ' + fileName + '</a></div>';
+        }
+      }
+
+      msgsHtml += '<div class="chat-bubble-wrap ' + (isMe ? 'me' : 'other') + '">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;font-size:0.75rem;">'
+        + '<span style="font-weight:700;color:#1e293b">' + (m.senderName || m.sender) + '</span>'
+        + '<span style="background:' + roleColor + ';color:white;padding:1px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;text-transform:uppercase">' + (m.senderRole || 'USER') + '</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;align-items:flex-end;' + (isMe ? 'flex-direction:row-reverse' : '') + '">'
+        + '<div class="chat-avatar" style="width:28px;height:28px;font-size:0.75rem;background:' + getAvatarColor(m.sender) + '">' + initial + '</div>'
+        + '<div class="chat-bubble">' + (m.text ? escapeHTML(m.text) : '') + attachmentHtml + '</div>'
+        + '</div>'
+        + '<div class="chat-meta">' + timeStr + '</div>'
+        + '</div>';
+    });
+  }
+
+  // Simpan posisi scroll sebelum update
+  const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+
+  container.innerHTML = msgsHtml;
+
+  // Scroll ke bawah hanya jika user memang sedang di bawah (atau pesan dari diri sendiri)
+  if (isAtBottom) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
