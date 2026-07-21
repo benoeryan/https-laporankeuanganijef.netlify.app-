@@ -112,6 +112,11 @@ function fmtRp(n) {
   return 'Rp ' + num.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function toggleSelectAllLabels(el, className) {
+  const cbs = document.querySelectorAll('.' + className);
+  cbs.forEach(function(cb) { cb.checked = el.checked; });
+}
+
 function togglePwd(inputId, btn) {
   var inp = document.getElementById(inputId);
   if (!inp) return;
@@ -15219,17 +15224,17 @@ async function renderInventoriATK() {
     + '</div>'
 
     // Daftar Stok
-    + '<div class="card"><div class="card-header"><h2>Daftar Stok ATK (' + filteredStockList.length + '/' + (list||[]).length + ')</h2></div>'
+    + '<div class="card"><div class="card-header"><h2>Daftar Stok ATK (' + filteredStockList.length + '/' + (list||[]).length + ')</h2>'
+    + '<div class="actions">'
+    + '<button class="btn btn-xs btn-info" onclick="printInventoryLabels(\'inventori_atk\', \'atk-print-check\')">🖨️ Cetak Label</button>'
+    + '<button class="btn btn-xs btn-success" onclick="printInventoryChecklist(\'inventori_atk\', \'atk-print-check\')">📋 Cetak Daftar Cek</button>'
+    + '</div></div>'
     + '<div class="form-grid cols3" style="margin-bottom:12px">'
     + '<div class="fg"><label>Filter Item</label><input value="' + stockItemVal + '" placeholder="Cari nama item..." oninput="setATKFilterValue(\'stockItem\', this.value)"></div>'
     + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.stockFrom||'') + '" onchange="setATKFilterValue(\'stockFrom\', this.value)"></div>'
     + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.stockTo||'') + '" onchange="setATKFilterValue(\'stockTo\', this.value)"></div>'
     + '</div>'
     + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'atk-print-check\')"></th><th>Kode</th><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
-    + '<div class="mt-12 flex-row" style="gap:10px">'
-    + '<button class="btn btn-info" onclick="printInventoryLabels(\'inventori_atk\', \'atk-print-check\')">🖨️ Cetak Label</button>'
-    + '<button class="btn btn-success" onclick="printInventoryChecklist(\'inventori_atk\', \'atk-print-check\')">📋 Cetak Daftar Cek</button>'
-    + '</div>'
     + '</div>'
 
     // Log Transaksi
