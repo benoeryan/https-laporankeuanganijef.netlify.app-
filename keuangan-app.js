@@ -802,6 +802,17 @@ function toggleSidebar() {
 
 // ===== BUILD APP =====
 function buildApp() {
+  // Update logos based on company data
+  KDB.getSetting('perusahaan', {}).then(function(p) {
+    if (p.logoData) {
+      const appLogoContainer = document.getElementById('app-logo-container');
+      const loginLogoContainer = document.getElementById('login-logo-container');
+      const logoImg = '<img src="' + p.logoData + '" style="max-height:100%;max-width:100%;object-fit:contain">';
+      if (appLogoContainer) appLogoContainer.innerHTML = logoImg;
+      if (loginLogoContainer) loginLogoContainer.innerHTML = logoImg;
+    }
+  });
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('header-user').textContent = KU.nama || KU.username;
