@@ -15058,7 +15058,12 @@ async function renderInventoriATK() {
     var safeId = escapeJsSingleQuote(item.id);
     var safeNama = escapeHtml(item.nama || '-');
     var safeSatuan = escapeHtml(item.satuan || '-');
-    return '<tr><td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td><td>' + safeSatuan + '</td><td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewATKItem(\'' + safeId + '\')">View</button><button class="btn btn-xs btn-warning" onclick="editATK(\'' + safeId + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + safeId + '\')">Hapus</button></td></tr>';
+    return '<tr>'
+      + '<td><input type="checkbox" class="atk-print-check" data-id="' + item.id + '"></td>'
+      + '<td style="font-family:monospace;font-size:0.8rem;color:#1a237e">' + (item.kode || '-') + '</td>'
+      + '<td class="fw-bold"><a href="javascript:void(0)" onclick="viewATKItem(\'' + safeId + '\')" style="color:#1a237e;text-decoration:underline">' + safeNama + '</a></td>'
+      + '<td>' + safeSatuan + '</td>'
+      + '<td class="text-center">' + (item.stok||0) + '</td><td class="text-center text-green">+' + sm.beli + '</td><td class="text-center text-red">-' + sm.pakai + '</td><td class="text-center fw-bold ' + (lowStock?'text-red':'text-green') + '">' + sisa + (lowStock?' ⚠️':'') + '</td><td>' + fmtRp(item.harga||0) + '</td><td class="fw-bold">' + fmtRp(sisa*(parseFloat(item.harga)||0)) + '</td><td class="tbl-actions"><button class="btn btn-xs btn-outline" onclick="viewATKItem(\'' + safeId + '\')">View</button><button class="btn btn-xs btn-warning" onclick="editATK(\'' + safeId + '\')">Edit</button><button class="btn btn-xs btn-danger" onclick="hapusATK(\'' + safeId + '\')">Hapus</button></td></tr>';
   }).join('');
 
   // Log rows
@@ -15220,7 +15225,11 @@ async function renderInventoriATK() {
     + '<div class="fg"><label>Dari Tanggal</label><input type="date" value="' + (filters.stockFrom||'') + '" onchange="setATKFilterValue(\'stockFrom\', this.value)"></div>'
     + '<div class="fg"><label>Sampai Tanggal</label><input type="date" value="' + (filters.stockTo||'') + '" onchange="setATKFilterValue(\'stockTo\', this.value)"></div>'
     + '</div>'
-    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
+    + (filteredStockList.length ? '<div class="table-wrap"><table><thead><tr><th style="width:30px"><input type="checkbox" onclick="toggleSelectAllLabels(this, \'atk-print-check\')"></th><th>Kode</th><th>Nama</th><th>Satuan</th><th>Stok Awal</th><th>Beli</th><th>Pakai</th><th>Sisa</th><th>Harga</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state"><span class="icon">📋</span>Tidak ada data stok sesuai filter</div>')
+    + '<div class="mt-12 flex-row" style="gap:10px">'
+    + '<button class="btn btn-info" onclick="printInventoryLabels(\'inventori_atk\', \'atk-print-check\')">🖨️ Cetak Label</button>'
+    + '<button class="btn btn-success" onclick="printInventoryChecklist(\'inventori_atk\', \'atk-print-check\')">📋 Cetak Daftar Cek</button>'
+    + '</div>'
     + '</div>'
 
     // Log Transaksi
