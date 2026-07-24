@@ -408,3 +408,23 @@ function _klset(key, val) {
 // Global safe storage helper
 window.kSetItem = _klset;
 window.kGetItem = _klget;
+    console.warn('[KFirebase] LocalStorage Error:', e.message);
+    if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+      // Clear heavy caches and retry
+      console.warn('[KFirebase] Quota exceeded, clearing heavy caches...');
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('k_') === 0 && k.indexOf('_all') > 0) {
+          localStorage.removeItem(k);
+        }
+      }
+      try { localStorage.setItem(key, JSON.stringify(val)); } catch(e2) {
+        console.error('[KFirebase] Retry failed after clearing cache');
+      }
+    }
+  }
+}
+
+// Global safe storage helper
+window.kSetItem = _klset;
+window.kGetItem = _klget;
